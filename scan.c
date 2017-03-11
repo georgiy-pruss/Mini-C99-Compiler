@@ -1,4 +1,4 @@
-#include "D:\Cygwin32\home\Geo\cclib.c"
+#include "D:\Cygwin32\home\Geo\cc\cclib.c"
 
 enum { Nul, Eof, Num, Chr, Str, Op, Sep, Id, Kw, Err };
 enum { Void, Char, Int, Enum, If, Else, While, For, Return, Sizeof };
