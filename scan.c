@@ -1,17 +1,18 @@
-#include "D:\Cygwin32\home\Geo\cc\cclib.c"
+#include "cclib.c"
 
 enum { Nul, Eof, Num, Chr, Str, Op, Sep, Id, Kw, Err };
-enum { Void, Char, Int, Enum, If, Else, While, For, Return, Sizeof };
+enum { Void, Char, Int, Enum, If, Else, While, For, Break, Return, Sizeof };
+char* KWS[] = {"void","char","int","enum","if","else","while","for","break","return","sizeof"};
 enum { Asg, Inc, Dec, Not, LNot, Eq, Ne, Lt, Gt, Le, Ge, // = ++ -- ~ ! == != < > <= >=
        Add, Sub, Mul, Div, Mod, Shl, Shr, And, Or, Xor, LAnd, LOr, // + - * / % << >> & | ^ && ||
        AAdd, ASub, AMul, ADiv, AMod, AShl, AShr, AAnd, AOr, AXor }; // += -= *= /= %= &= |= <<= ...
-char ops[] = "=  ++ -- !  ~  == != <  >  <= >= "
+char OPS[] = "=  ++ -- !  ~  == != <  >  <= >= "
              "+  -  *  /  %  << >> &  |  ^  && || "
              "+= -= *= /= %= <<=>>=&= |= ^= ";
 
 
-char inbuf[1000];
-int inbuflen=0;
+char inbuf[10000];
+int inbuflen = 0;
 int curchar = -1;
 int curcharpos = sizeof(inbuf);
 int srcfile; // file
@@ -29,32 +30,17 @@ int getchar()
 }
 
 
-int strcmp( char* s, char* t )
-{
-  while( *s )
-  {
-    if( *t==0 || *s>*t ) return 1;
-    if( *s<*t ) return -1;
-    ++s;
-    ++t;
-  }
-  if( *t ) return -1;
-  return 0;
-}
-
 
 char tokentext[400];
 char separator[2] = ".";
-char* tt;
 int kw;
 int radix;
 int opkind;
 int numvalue; // for Num and Chr; separator itself for Sep
 
-char* xxx = "abc\ndef\rghi\tklm";
-
-int get_token()
+int gettoken()
 {
+  char* tt;
   if( curchar < 0 ) { curchar = getchar(); lineno = 1; }
   while( curchar==' ' || curchar=='\n' || curchar=='\r' || curchar=='\t' )
   {
@@ -67,6 +53,7 @@ int get_token()
     tt = tokentext;
     *tt++ = curchar;
     curchar = getchar();
+    *tt = '\0';
     if( tokentext[0]=='0' && (curchar=='b' || curchar=='x' || curchar=='B' || curchar=='X') )
     {
       *tt++ = curchar;
@@ -104,16 +91,9 @@ int get_token()
       curchar = getchar();
     }
     *tt = '\0';
-    if( strcmp( tokentext, "if" )==0 ) { kw = If; return Kw; }
-    if( strcmp( tokentext, "else" )==0 ) { kw = Else; return Kw; }
-    if( strcmp( tokentext, "while" )==0 ) { kw = While; return Kw; }
-    if( strcmp( tokentext, "for" )==0 ) { kw = For; return Kw; }
-    if( strcmp( tokentext, "return" )==0 ) { kw = Return; return Kw; }
-    if( strcmp( tokentext, "void" )==0 ) { kw = Void; return Kw; }
-    if( strcmp( tokentext, "char" )==0 ) { kw = Char; return Kw; }
-    if( strcmp( tokentext, "int" )==0 ) { kw = Int; return Kw; }
-    if( strcmp( tokentext, "enum" )==0 ) { kw = Enum; return Kw; }
-    if( strcmp( tokentext, "sizeof" )==0 ) { kw = Sizeof; return Kw; }
+    int i;
+    for( i=0; i<11; ++i )
+      if( strcmp( tokentext, KWS[i] )==0 ) { kw = i; return Kw; }
     return Id;
   }
   else if( curchar=='"' )
@@ -237,12 +217,27 @@ int get_token()
       curchar = getchar();
       while( curchar!='\n' && curchar>0 )
         curchar = getchar();
-      return get_token();
+      if(curchar>0) curchar = getchar();
+      return gettoken();
     }
     else if( curchar == '=' ) // /=
     {
       curchar = getchar();
       opkind = ADiv;
+    }
+    else if( curchar == '*' ) // /* comment */
+    {
+      curchar = getchar();
+      while(1)
+      {
+        while( curchar!='*' && curchar>0 )
+          curchar = getchar();
+        if(curchar>0) curchar = getchar();
+        if( curchar == '/' )
+          break;
+      }
+      if(curchar>0) curchar = getchar();
+      return gettoken();
     }
     else
     {
@@ -301,7 +296,7 @@ int main( int ac, char** av )
   if( srcfile<=0 ) return 1;
 
   int t;
-  while( (t = get_token()) != Eof )
+  while( (t = gettoken()) != Eof )
   {
     // print t
     if( t==Num )
@@ -321,12 +316,12 @@ int main( int ac, char** av )
     else if( t==Kw )
     {
       write( 1, " $", 2 );
-      write( 1, tokentext, strlen(tokentext) );
+      write( 1, KWS[kw], strlen(KWS[kw]) ); // tokentext has it too
     }
     else if( t==Op )
     {
       write( 1, " `", 2 );
-      write( 1, &ops[3*opkind], 3 );
+      write( 1, &OPS[3*opkind], 3 );
     }
     else if( t==Sep )
     {

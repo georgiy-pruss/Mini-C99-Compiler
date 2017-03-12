@@ -32,6 +32,19 @@ int strlen( char* s ) { int n=0; while( *s++ ) ++n; return n; }
 
 void strupr( char* s ) { while( *s ) { if( *s>='a' && *s<='z' ) *s = *s-'a'+'A'; ++s; } }
 
+int strcmp( char* s, char* t )
+{
+  while( *s )
+  {
+    if( *t==0 || *s>*t ) return 1;
+    if( *s<*t ) return -1;
+    ++s;
+    ++t;
+  }
+  if( *t ) return -1;
+  return 0;
+}
+
 int errno = 0;
 
 char* itoa( int value, char* str, int base )
