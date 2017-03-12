@@ -5,10 +5,11 @@ enum { Void, Char, Int, Enum, If, Else, While, For, Break, Return, Sizeof, Inclu
 char* KWS[] = {"void","char","int","enum","if","else","while","for","break","return",
        "sizeof","include"};
 enum { Asg, Inc, Dec, Not, LNot, Eq, Ne, Lt, Gt, Le, Ge, // = ++ -- ~ ! == != < > <= >=
-       Add, Sub, Mul, Div, Mod, Shl, Shr, And, Or, Xor, LAnd, LOr, // + - * / % << >> & | ^ && ||
+       Add, Sub, Mul, Div, Mod, Shl, Shr, And, Or, Xor,
+       LAnd, LOr, Qstn, Cln, // + - * / % << >> & | ^ && || ? :
        AAdd, ASub, AMul, ADiv, AMod, AShl, AShr, AAnd, AOr, AXor }; // += -= *= /= %= &= |= <<= ...
 char OPS[] = "=  ++ -- !  ~  == != <  >  <= >= "
-             "+  -  *  /  %  << >> &  |  ^  && || "
+             "+  -  *  /  %  << >> &  |  ^  && || ?  :  "
              "+= -= *= /= %= <<=>>=&= |= ^= ";
 
 
@@ -301,10 +302,10 @@ int gettoken()
     }
     return Op;
   }
-  else if( curchar=='~' )
+  else if( curchar=='~' || curchar=='?' || curchar==':' )
   {
+    opkind = Not; if( curchar=='?' ) opkind = Qstn; else opkind = Cln;
     curchar = getchar();
-    opkind = Not;
     return Op;
   }
   else if( curchar=='#' )
@@ -411,9 +412,11 @@ int scanfile( char* fn )
   return 0;
 }
 
+
 int main( int ac, char** av )
 {
   scanfile( av[1] );
+  int x = 3>5 ? 2 : 1;
   return 0;
 }
 
