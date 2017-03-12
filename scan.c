@@ -1,8 +1,9 @@
 #include "cclib.c"
 
-enum { Nul, Eof, Num, Chr, Str, Op, Sep, Id, Kw, Err };
-enum { Void, Char, Int, Enum, If, Else, While, For, Break, Return, Sizeof };
-char* KWS[] = {"void","char","int","enum","if","else","while","for","break","return","sizeof"};
+enum { Nul, Eof, Num, Chr, Str, Op, Sep, Id, Kw, Pre, Err };
+enum { Void, Char, Int, Enum, If, Else, While, For, Break, Return, Sizeof, Include };
+char* KWS[] = {"void","char","int","enum","if","else","while","for","break","return",
+       "sizeof","include"};
 enum { Asg, Inc, Dec, Not, LNot, Eq, Ne, Lt, Gt, Le, Ge, // = ++ -- ~ ! == != < > <= >=
        Add, Sub, Mul, Div, Mod, Shl, Shr, And, Or, Xor, LAnd, LOr, // + - * / % << >> & | ^ && ||
        AAdd, ASub, AMul, ADiv, AMod, AShl, AShr, AAnd, AOr, AXor }; // += -= *= /= %= &= |= <<= ...
@@ -22,13 +23,39 @@ int getchar()
 {
   if( curcharpos>=inbuflen )
   {
-    inbuflen = read( srcfile, inbuf, sizeof(inbuf) );
-    if( inbuflen<=0 ) return -1;
+    inbuflen = read( srcfile, inbuf, sizeof(inbuf)-1 );
+    if( inbuflen<=0 ) return -1; // eof
+    inbuf[inbuflen] = '\0';
     curcharpos = 0;
   }
   return inbuf[curcharpos++];
 }
 
+int* saveiostate()
+{
+  char* bf = (char*)malloc(inbuflen+1);
+  strcpy( bf, inbuf );
+  int* sv = (int*)malloc(sizeof(int)*6);
+  sv[0] = (int)bf;
+  sv[1] = inbuflen;
+  sv[2] = curchar;
+  sv[3] = curcharpos;
+  sv[4] = srcfile;
+  sv[5] = lineno;
+  return sv;
+}
+
+void restorestate( int* sv )
+{
+  strcpy( inbuf, (char*)sv[0] );
+  free((void*)sv[0]);
+  inbuflen = sv[1];
+  curchar = sv[2];
+  curcharpos = sv[3];
+  srcfile = sv[4];
+  lineno = sv[5];
+  free(sv);
+}
 
 
 char tokentext[400];
@@ -92,7 +119,7 @@ int gettoken()
     }
     *tt = '\0';
     int i;
-    for( i=0; i<11; ++i )
+    for( i=0; i<sizeof(KWS)/sizeof(KWS[0]); ++i )
       if( strcmp( tokentext, KWS[i] )==0 ) { kw = i; return Kw; }
     return Id;
   }
@@ -280,6 +307,11 @@ int gettoken()
     opkind = Not;
     return Op;
   }
+  else if( curchar=='#' )
+  {
+    curchar = getchar();
+    return Pre;
+  }
   else
   {
     tokentext[0] = curchar;
@@ -289,13 +321,12 @@ int gettoken()
   }
 }
 
-int main( int ac, char** av )
+int scanfile( char* fn )
 {
-  char* fn = av[1];
   srcfile = open( fn, O_RDONLY );
   if( srcfile<=0 ) return 1;
 
-  int t;
+  int t,t1=Err,t2=Err;
   while( (t = gettoken()) != Eof )
   {
     // print t
@@ -332,6 +363,29 @@ int main( int ac, char** av )
     {
       write( 1, " \"", 2 );
       write( 1, tokentext, strlen(tokentext) );
+
+      if( t2==Pre && t1==Kw && kw==Include )
+      {
+        char fni[400];
+        strcpy( fni, fn );
+        char* dir = strrchr( fni, '/' );
+        if( dir != 0 ) ++dir; else dir = strrchr( fni, '\\' );
+        if( dir != 0 ) ++dir; else dir = fni;
+        strcpy( dir, tokentext );
+        write( 1, "\n>>>>>> ", 8 );
+        write( 1, fni, strlen(fni) );
+        write( 1, "\n", 1 );
+
+        int* sv = saveiostate();
+        inbuflen = 0;
+        curchar = -1;
+        curcharpos = sizeof(inbuf);
+        srcfile = -1;
+        lineno = 0;
+        int rc = scanfile( fni );
+        restorestate( sv );
+        write( 1, "\n<<<<<<\n", 8 );
+      }
     }
     else if( t==Chr )
     {
@@ -340,14 +394,26 @@ int main( int ac, char** av )
       itoa( numvalue, chr, 10 );
       write( 1, chr, strlen(chr) );
     }
+    else if( t==Pre )
+    {
+      write( 1, " #", 2 );
+    }
     else
     {
       write( 1, " ?", 2 );
       write( 1, tokentext, 1 );
     }
+    t2 = t1;
+    t1 = t;
   }
 
   close(srcfile);
+  return 0;
+}
+
+int main( int ac, char** av )
+{
+  scanfile( av[1] );
   return 0;
 }
 

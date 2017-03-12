@@ -29,6 +29,7 @@ void free( void* ptr );
 void exit(int status);
 
 int strlen( char* s ) { int n=0; while( *s++ ) ++n; return n; }
+char* strcpy( char* d, char* s ) { char* r=d; while( *s ) *d++ = *s++; *d = '\0'; return r; }
 
 void strupr( char* s ) { while( *s ) { if( *s>='a' && *s<='z' ) *s = *s-'a'+'A'; ++s; } }
 
@@ -42,6 +43,17 @@ int strcmp( char* s, char* t )
     ++t;
   }
   if( *t ) return -1;
+  return 0;
+}
+
+char* strrchr( char* s, int c )
+{
+  int n = strlen(s);
+  while( n>0 )
+  {
+    if( s[n-1] == c ) return &s[n-1];
+    --n;
+  }
   return 0;
 }
 
