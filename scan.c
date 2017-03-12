@@ -2,18 +2,26 @@
 
 enum { Nul, Eof, Num, Chr, Str, Op, Sep, Id, Kw, Err };
 enum { Void, Char, Int, Enum, If, Else, While, For, Return, Sizeof };
+enum { Asg, Inc, Dec, Not, LNot, Eq, Ne, Lt, Gt, Le, Ge, // = ++ -- ~ ! == != < > <= >=
+       Add, Sub, Mul, Div, Mod, Shl, Shr, And, Or, Xor, LAnd, LOr, // + - * / % << >> & | ^ && ||
+       AAdd, ASub, AMul, ADiv, AMod, AShl, AShr, AAnd, AOr, AXor }; // += -= *= /= %= &= |= <<= ...
+char ops[] = "=  ++ -- !  ~  == != <  >  <= >= "
+             "+  -  *  /  %  << >> &  |  ^  && || "
+             "+= -= *= /= %= <<=>>=&= |= ^= ";
+
 
 char inbuf[1000];
 int inbuflen=0;
 int curchar = -1;
 int curcharpos = sizeof(inbuf);
-int f; // file
+int srcfile; // file
+int lineno;
 
 int getchar()
 {
   if( curcharpos>=inbuflen )
   {
-    inbuflen = read( f, inbuf, sizeof(inbuf) );
+    inbuflen = read( srcfile, inbuf, sizeof(inbuf) );
     if( inbuflen<=0 ) return -1;
     curcharpos = 0;
   }
@@ -35,16 +43,22 @@ int strcmp( char* s, char* t )
 }
 
 
-char tokentext[200];
+char tokentext[400];
+char separator[2] = ".";
 char* tt;
 int kw;
+int radix;
+int opkind;
+int numvalue; // for Num and Chr; separator itself for Sep
+
+char* xxx = "abc\ndef\rghi\tklm";
 
 int get_token()
 {
-  if( curchar < 0 ) curchar = getchar();
+  if( curchar < 0 ) { curchar = getchar(); lineno = 1; }
   while( curchar==' ' || curchar=='\n' || curchar=='\r' || curchar=='\t' )
   {
-    if( curchar=='\n' ) write( 1, "\n", 1 );
+    if( curchar=='\n' ) { write( 1, "\n", 1 ); ++lineno; }
     curchar = getchar();
   }
   if( curchar<0 ) return Eof;
@@ -53,12 +67,29 @@ int get_token()
     tt = tokentext;
     *tt++ = curchar;
     curchar = getchar();
-    while( curchar>='0' && curchar<='9' )
+    if( tokentext[0]=='0' && (curchar=='b' || curchar=='x' || curchar=='B' || curchar=='X') )
+    {
+      *tt++ = curchar;
+      curchar = getchar();
+    }
+    radix = 10;
+    if( tokentext[1]=='b' || tokentext[1]=='B' )
+      radix = 2;
+    else if( tokentext[1]=='x' || tokentext[1]=='X' )
+      radix = 16;
+    else if( tokentext[0]=='0' && tokentext[1]>='0' && tokentext[1]<='8' )
+      radix = 8;
+    while( curchar>='0' && (radix==2 && curchar<='1' || radix==8 && curchar<='7' ||
+          curchar<='9' || curchar>='a' && curchar<='f' || curchar>='A' && curchar<='F') )
     {
       *tt++ = curchar;
       curchar = getchar();
     }
     *tt = '\0';
+    if( radix==10 ) numvalue = atoi( tokentext, 10 );
+    else if( radix==16 ) numvalue = atoi( tokentext+2, 16 );
+    else if( radix==2 ) numvalue = atoi( tokentext+2, 2 );
+    else numvalue = atoi( tokentext, 8 );
     return Num;
   }
   else if( curchar>='a' && curchar<='z' || curchar>='A' && curchar<='Z' || curchar=='_' )
@@ -92,7 +123,14 @@ int get_token()
     while( curchar!='"' )
     {
       if( curchar == '\\' )
+      {
         curchar = getchar();
+        if( curchar=='n' ) curchar = '\n';
+        else if( curchar=='r' ) curchar = '\r';
+        else if( curchar=='t' ) curchar = '\t';
+        else if( curchar=='b' ) curchar = '\b';
+        else if( curchar=='0' ) curchar = '\0';
+      }
       *tt++ = curchar;
       curchar = getchar();
     }
@@ -103,36 +141,68 @@ int get_token()
   else if( curchar=='\'' )
   {
     curchar = getchar();
-    tokentext[0] = curchar;
-    tokentext[1] = '\0';
+    if( curchar == '\\' )
+    {
+      curchar = getchar();
+      if( curchar=='n' ) curchar = '\n';
+      else if( curchar=='r' ) curchar = '\r';
+      else if( curchar=='t' ) curchar = '\t';
+      else if( curchar=='b' ) curchar = '\b';
+      else if( curchar=='0' ) curchar = '\0';
+    }
+    numvalue = curchar;
     curchar = getchar();
-    if( curchar!='\'' ) return -1;
+    if( curchar!='\'' ) return Err;
     curchar = getchar();
     return Chr;
   }
   else if( curchar=='{' || curchar=='}' || curchar=='(' || curchar==')' ||
-           curchar=='[' || curchar==']' || curchar==',' || curchar==';' ) // || curchar==':' )
+           curchar=='[' || curchar==']' || curchar==',' || curchar==';' )
   {
-    tokentext[0] = curchar;
-    tokentext[1] = 0;
+    separator[0] = (char)curchar;
     curchar = getchar();
     return Sep;
   }
-  else if( curchar=='<' || curchar=='>' || curchar=='=' || curchar=='*' )
+  else if( curchar=='<' || curchar=='>' )
   {
     char ccc = curchar;
     curchar = getchar();
-    if( curchar == '=' ) // <= >= == *=
+    if( curchar == '=' ) // <= >=
     {
-      tokentext[0] = ccc;
-      tokentext[1] = curchar;
-      tokentext[2] = 0;
       curchar = getchar();
+      opkind = Le; if( ccc=='>' ) opkind = Ge;
+    }
+    else if( ccc==curchar ) // << >>
+    {
+      curchar = getchar();
+      if( curchar == '=' ) // <<= >>=
+      {
+        curchar = getchar();
+        opkind = AShl; if( ccc=='>' ) opkind = AShr;
+      }
+      else
+      {
+        opkind = Shl; if( ccc=='>' ) opkind = Shr;
+      }
     }
     else
     {
-      tokentext[0] = ccc;
-      tokentext[1] = 0;
+      opkind = Lt; if( ccc=='>' ) opkind = Gt;
+    }
+    return Op;
+  }
+  else if( curchar=='=' || curchar=='*' )
+  {
+    char ccc = curchar;
+    curchar = getchar();
+    if( curchar == '=' ) // == *=
+    {
+      curchar = getchar();
+      opkind = Eq; if( ccc=='*' ) opkind = AMul;
+    }
+    else
+    {
+      opkind = Asg; if( ccc=='*' ) opkind = Mul;
     }
     return Op;
   }
@@ -140,24 +210,22 @@ int get_token()
   {
     char ccc = curchar;
     curchar = getchar();
-    if( curchar == '=' ) // += -=
+    if( curchar == '=' ) // += -= &= |=
     {
-      tokentext[0] = ccc;
-      tokentext[1] = curchar;
-      tokentext[2] = 0;
       curchar = getchar();
+      opkind = AAdd; if( ccc=='-' ) opkind = ASub;
+      else if( ccc=='&' ) opkind = AAnd; else if( ccc=='|' ) opkind = AOr;
     }
     else if( curchar == ccc ) // ++ -- && ||
     {
-      tokentext[0] = ccc;
-      tokentext[1] = ccc;
-      tokentext[2] = 0;
       curchar = getchar();
+      opkind = Inc; if( ccc=='-' ) opkind = Dec;
+      else if( ccc=='&' ) opkind = LAnd; else if( ccc=='|' ) opkind = LOr;
     }
     else
     {
-      tokentext[0] = ccc;
-      tokentext[1] = 0;
+      opkind = Add; if( ccc=='-' ) opkind = Sub;
+      else if( ccc=='&' ) opkind = And; else if( ccc=='|' ) opkind = Or;
     }
     return Op;
   }
@@ -173,33 +241,48 @@ int get_token()
     }
     else if( curchar == '=' ) // /=
     {
-      tokentext[0] = '/';
-      tokentext[1] = '=';
-      tokentext[2] = 0;
       curchar = getchar();
+      opkind = ADiv;
     }
     else
     {
-      tokentext[0] = '/';
-      tokentext[1] = 0;
+      opkind = Div;
     }
     return Op;
   }
   else if( curchar=='%' || curchar=='^' )
   {
     char ccc = curchar;
+    curchar = getchar();
     if( curchar == '=' ) // %= ^=
     {
-      tokentext[0] = ccc;
-      tokentext[1] = curchar;
-      tokentext[2] = 0;
       curchar = getchar();
+      opkind = AMod; if( ccc=='^' ) opkind = AXor;
     }
     else
     {
-      tokentext[0] = ccc;
-      tokentext[1] = 0;
+      opkind = Mod; if( ccc=='-' ) opkind = Xor;
     }
+    return Op;
+  }
+  else if( curchar=='!' )
+  {
+    curchar = getchar();
+    if( curchar == '=' )
+    {
+      curchar = getchar();
+      opkind = Ne;
+    }
+    else
+    {
+      opkind = LNot;
+    }
+    return Op;
+  }
+  else if( curchar=='~' )
+  {
+    curchar = getchar();
+    opkind = Not;
     return Op;
   }
   else
@@ -214,8 +297,8 @@ int get_token()
 int main( int ac, char** av )
 {
   char* fn = av[1];
-  f = open( fn, O_RDONLY );
-  if( f<=0 ) return 1;
+  srcfile = open( fn, O_RDONLY );
+  if( srcfile<=0 ) return 1;
 
   int t;
   while( (t = get_token()) != Eof )
@@ -223,7 +306,11 @@ int main( int ac, char** av )
     // print t
     if( t==Num )
     {
-      write( 1, " #", 2 );
+      char rdx[8];
+      write( 1, " ", 1 );
+      itoa( radix, rdx, 10 );
+      write( 1, rdx, strlen(rdx) );
+      write( 1, "#", 1 );
       write( 1, tokentext, strlen(tokentext) );
     }
     else if( t==Id )
@@ -239,12 +326,12 @@ int main( int ac, char** av )
     else if( t==Op )
     {
       write( 1, " `", 2 );
-      write( 1, tokentext, strlen(tokentext) );
+      write( 1, &ops[3*opkind], 3 );
     }
     else if( t==Sep )
     {
       write( 1, " ", 1 );
-      write( 1, tokentext, strlen(tokentext) );
+      write( 1, separator, 1 );
     }
     else if( t==Str )
     {
@@ -254,7 +341,9 @@ int main( int ac, char** av )
     else if( t==Chr )
     {
       write( 1, " \'", 2 );
-      write( 1, tokentext, 1 );
+      char chr[8];
+      itoa( numvalue, chr, 10 );
+      write( 1, chr, strlen(chr) );
     }
     else
     {
@@ -263,7 +352,7 @@ int main( int ac, char** av )
     }
   }
 
-  close(f);
+  close(srcfile);
   return 0;
 }
 
