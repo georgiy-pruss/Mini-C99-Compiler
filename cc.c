@@ -11,6 +11,8 @@ void exit( int status );
 
 enum { O_RDONLY, O_WRONLY, O_RDWR, O_APPEND=8, O_CREAT=512, O_TRUNC=1024, O_EXCL=2048 };
 
+int is_abc( int c ) { return c>='a' && c<='z' || c>='A' && c<='Z' || c=='_'; }
+
 int strlen( char* s ) { int n=0; while( *s ) { ++s; ++n; } return n; }
 char* strcpy( char* d, char* s ) { char* r=d; while( *s ) { *d = *s; ++d; ++s; } *d = 0; return r; }
 char* strrev( char* s )
@@ -82,246 +84,235 @@ void p2( char* s, char* s2 ) { p1( s ); p1( s2 ); }
 void p3( char* s, char* s2, char* s3 ) { p1( s ); p1( s2 ); p1( s3 ); }
 void p4( char* s, char* s2, char* s3, char* s4 ) { p1( s ); p1( s2 ); p1( s3 ); p1( s4 ); }
 
+// Compiler Definitions --------------------------------------------------------
 
+enum { Eof, Num, Chr, Str, Op, Sep, Id, Kw, Err }; // tokens
+enum { Void, Char, Int, Enum, If, Else, While, Break, Return, Sizeof }; // keywords
+enum { Asg, Inc, Dec, Eq, Ne, Lt, Gt, Le, Ge, Add, Sub, Mul, Div, Mod, LAnd, LOr }; // ops
 
-enum { Nul, Eof, Num, Chr, Str, Op, Sep, Id, Kw, Err };
-enum { Void, Char, Int, Enum, If, Else, While, Break, Return, Sizeof };
-enum { Asg, Inc, Dec, Eq, Ne, Lt, Gt, Le, Ge, Add, Sub, Mul, Div, Mod, LAnd, LOr };
+// File reader -----------------------------------------------------------------
 
+char rd_buf[10000];
+int  rd_buf_len = 0;
+int  rd_char = -1;                 // current/last char
+int  rd_char_pos = sizeof(rd_buf); // position in buffer
+int  rd_file = -1;                 // file descriptor
+int  rd_line = -1;                 // line number
 
-char inbuf[10000];
-int inbuflen = 0;
-int curchar = -1;
-int curcharpos = sizeof(inbuf);
-int srcfile; // file
-int lineno = 1;
-
-int getchar()
+void rd_next() // read next character, save it in rd_char; <0 if eof
 {
-  if( curcharpos>=inbuflen )
+  if( rd_char_pos >= rd_buf_len )
   {
-    inbuflen = read( srcfile, inbuf, sizeof(inbuf)-1 );
-    if( inbuflen<=0 ) return -1; // eof
-    inbuf[inbuflen] = 0;
-    curcharpos = 0;
+    rd_buf_len = read( rd_file, rd_buf, sizeof(rd_buf)-1 );
+    if( rd_buf_len <= 0 ) { rd_char = -1; return; } // eof
+    rd_buf[ rd_buf_len ] = 0;
+    rd_char_pos = 0;
   }
-  return inbuf[curcharpos++];
+  rd_char = rd_buf[ rd_char_pos ]; ++rd_char_pos;
 }
 
-char tokentext[400];
-char separator[2] = ".";
-int kw;
-int radix;
-int opkind;
-int numvalue; // for Num and Chr; separator itself for Sep
+// Scanner ---------------------------------------------------------------------
 
-int isabc( int c ) { return c>='a' && c<='z' || c>='A' && c<='Z' || c=='_'; }
+char sc_text[200]; // for Id and Sep
+int  sc_kw;      // for Kw
+int  sc_op;     // for Op
+int  sc_num; // for Num and Chr
 
-int gettoken()
+int sc_next() // scan for next token,
 {
   char* tt;
-  if( curchar < 0 ) { curchar = getchar(); lineno = 1; p1( i2s(lineno,0) ); }
-  while( curchar==' ' || curchar==10 || curchar==13 )
+  if( rd_char < 0 ) { rd_next(); rd_line = 1; p1( i2s(rd_line,0) ); }
+  while( rd_char==' ' || rd_char==10 || rd_char==13 )
   {
-    if( curchar==10 ) { ++lineno; p2( "\n", i2s(lineno,0) ); }
-    curchar = getchar();
+    if( rd_char==10 ) { ++rd_line; p2( "\n", i2s(rd_line,0) ); }
+    rd_next();
   }
-  if( curchar<0 ) return Eof;
-  if( curchar>='0' && curchar<='9' )
+  if( rd_char<0 ) return Eof;
+  if( rd_char>='0' && rd_char<='9' )
   {
-    tt = tokentext;
-    while( curchar>='0' && curchar<='9' )
-    {
-      *tt = curchar; ++tt;
-      curchar = getchar();
-    }
+    tt = sc_text;
+    while( rd_char>='0' && rd_char<='9' ) { *tt = rd_char; ++tt; rd_next(); }
     *tt = 0;
-    numvalue = s2i( tokentext );
+    sc_num = s2i( sc_text );
     return Num;
   }
-  else if( isabc(curchar) )
+  else if( is_abc(rd_char) )
   {
-    tt = tokentext;
-    while( isabc(curchar) || curchar>='0' && curchar<='9' )
-    {
-      *tt++ = curchar;
-      curchar = getchar();
-    }
+    tt = sc_text;
+    while( is_abc(rd_char) || rd_char>='0' && rd_char<='9' ) { *tt = rd_char; ++tt; rd_next(); }
     *tt = 0;
-    if(      strcmp( tokentext, "int"    )==0 ) { kw = Int; return Kw; }
-    else if( strcmp( tokentext, "char"   )==0 ) { kw = Char; return Kw; }
-    else if( strcmp( tokentext, "void"   )==0 ) { kw = Void; return Kw; }
-    else if( strcmp( tokentext, "enum"   )==0 ) { kw = Enum; return Kw; }
-    else if( strcmp( tokentext, "if"     )==0 ) { kw = If; return Kw; }
-    else if( strcmp( tokentext, "else"   )==0 ) { kw = Else; return Kw; }
-    else if( strcmp( tokentext, "while"  )==0 ) { kw = While; return Kw; }
-    else if( strcmp( tokentext, "break"  )==0 ) { kw = Break; return Kw; }
-    else if( strcmp( tokentext, "return" )==0 ) { kw = Return; return Kw; }
-    else if( strcmp( tokentext, "sizeof" )==0 ) { kw = Sizeof; return Kw; }
+    if(      strcmp( sc_text, "int"    )==0 ) { sc_kw = Int; return Kw; }
+    else if( strcmp( sc_text, "char"   )==0 ) { sc_kw = Char; return Kw; }
+    else if( strcmp( sc_text, "void"   )==0 ) { sc_kw = Void; return Kw; }
+    else if( strcmp( sc_text, "enum"   )==0 ) { sc_kw = Enum; return Kw; }
+    else if( strcmp( sc_text, "if"     )==0 ) { sc_kw = If; return Kw; }
+    else if( strcmp( sc_text, "else"   )==0 ) { sc_kw = Else; return Kw; }
+    else if( strcmp( sc_text, "while"  )==0 ) { sc_kw = While; return Kw; }
+    else if( strcmp( sc_text, "break"  )==0 ) { sc_kw = Break; return Kw; }
+    else if( strcmp( sc_text, "return" )==0 ) { sc_kw = Return; return Kw; }
+    else if( strcmp( sc_text, "sizeof" )==0 ) { sc_kw = Sizeof; return Kw; }
     return Id;
   }
-  else if( curchar=='"' )
+  else if( rd_char=='"' )
   {
-    tt = tokentext;
-    curchar = getchar();
-    while( curchar!='"' )
+    tt = sc_text;
+    rd_next();
+    while( rd_char!='"' )
     {
-      if( curchar == 92 ) // \ - backslash in strings (only; not in chars!)
+      if( rd_char == 92 ) // \ - backslash in strings (only; not in chars!)
       {
-        curchar = getchar();
-        if( curchar=='n' ) curchar = 10;
-        else if( curchar=='r' ) curchar = 13;
-        else if( curchar=='b' ) curchar = 8;
-        else if( curchar=='0' ) curchar = 0;
+        rd_next();
+        if( rd_char=='n' ) rd_char = 10;
+        else if( rd_char=='r' ) rd_char = 13;
+        else if( rd_char=='b' ) rd_char = 8;
+        else if( rd_char=='0' ) rd_char = 0;
       }
-      *tt++ = curchar;
-      curchar = getchar();
+      *tt = rd_char; ++tt; rd_next();
     }
     *tt = 0;
-    curchar = getchar();
+    rd_next();
     return Str;
   }
-  else if( curchar==39 ) // '  apostrophe - char like 'x'
+  else if( rd_char==39 ) // '  apostrophe - char like 'x'
   {
-    curchar = getchar();
-    numvalue = curchar;  // we take anything from inside, w/o '\'
-    curchar = getchar();
-    if( curchar!=39 ) return Err; // must end with 'x'
-    curchar = getchar();
+    rd_next();
+    sc_num = rd_char;  // we take anything from inside, w/o '\'
+    rd_next();
+    if( rd_char!=39 ) return Err; // must end with 'x'
+    rd_next();
     return Chr;
   }
-  else if( curchar=='{' || curchar=='}' || curchar=='(' || curchar==')' ||
-           curchar=='[' || curchar==']' || curchar==',' || curchar==';' )
+  else if( rd_char=='{' || rd_char=='}' || rd_char=='(' || rd_char==')' ||
+           rd_char=='[' || rd_char==']' || rd_char==',' || rd_char==';' )
   {
-    separator[0] = (char)curchar;
-    curchar = getchar();
+    sc_text[0] = (char)rd_char; sc_text[1] = 0; rd_next();
     return Sep;
   }
-  else if( curchar=='=' || curchar=='<' || curchar=='>' )
+  else if( rd_char=='=' || rd_char=='<' || rd_char=='>' )
   {
-    char ccc = curchar;
-    curchar = getchar();
-    if( curchar == '=' ) // <= >=
+    char ccc = rd_char;
+    rd_next();
+    if( rd_char == '=' ) // <= >=
     {
-      curchar = getchar();
-      opkind = Eq; if( ccc=='<' ) opkind = Le; else if( ccc=='>' ) opkind = Ge;
+      rd_next();
+      sc_op = Eq; if( ccc=='<' ) sc_op = Le; else if( ccc=='>' ) sc_op = Ge;
     }
     else
     {
-      opkind = Asg; if( ccc=='<' ) opkind = Lt; else if( ccc=='>' ) opkind = Gt;
+      sc_op = Asg; if( ccc=='<' ) sc_op = Lt; else if( ccc=='>' ) sc_op = Gt;
     }
     return Op;
   }
-  else if( curchar=='*' )
+  else if( rd_char=='*' )
   {
-    curchar = getchar();
-    opkind = Mul;
+    rd_next();
+    sc_op = Mul;
     return Op;
   }
-  else if( curchar=='+' || curchar=='-' || curchar=='&' || curchar=='|' )
+  else if( rd_char=='+' || rd_char=='-' || rd_char=='&' || rd_char=='|' )
   {
-    char ccc = curchar;
-    curchar = getchar();
-    if( curchar == ccc ) // ++ -- && ||
+    char ccc = rd_char;
+    rd_next();
+    if( rd_char == ccc ) // ++ -- && ||
     {
-      curchar = getchar();
-      opkind = Inc; if( ccc=='-' ) opkind = Dec;
-      else if( ccc=='&' ) opkind = LAnd; else if( ccc=='|' ) opkind = LOr;
+      rd_next();
+      sc_op = Inc; if( ccc=='-' ) sc_op = Dec;
+      else if( ccc=='&' ) sc_op = LAnd; else if( ccc=='|' ) sc_op = LOr;
     }
     else
     {
-      opkind = Add; if( ccc=='-' ) opkind = Sub;
+      sc_op = Add; if( ccc=='-' ) sc_op = Sub;
       else if( ccc=='&' || ccc=='|' ) return Err; // no & or |
     }
     return Op;
   }
-  else if( curchar=='/' )
+  else if( rd_char=='/' )
   {
-    curchar = getchar();
-    if( curchar == '/' ) // comment
+    rd_next();
+    if( rd_char == '/' ) // comment
     {
-      curchar = getchar();
-      while( curchar!=10 && curchar>0 )
-        curchar = getchar();
-      if( curchar==10 ) { ++lineno; p2( "\n", i2s(lineno,0) ); }
-      if(curchar>0) curchar = getchar();
-      return gettoken();
+      rd_next();
+      while( rd_char!=10 && rd_char>0 )
+        rd_next();
+      if( rd_char==10 ) { ++rd_line; p2( "\n", i2s(rd_line,0) ); }
+      if(rd_char>0) rd_next();
+      return sc_next();
     }
-    else if( curchar == '*' ) // /* comment */
+    else if( rd_char == '*' ) // /* comment */
     {
-      curchar = getchar();
-      if( curchar==10 ) { ++lineno; p2( "\n", i2s(lineno,0) ); }
+      rd_next();
+      if( rd_char==10 ) { ++rd_line; p2( "\n", i2s(rd_line,0) ); }
       while(1)
       {
-        while( curchar!='*' && curchar>0 )
+        while( rd_char!='*' && rd_char>0 )
         {
-          curchar = getchar();
-          if( curchar==10 ) { ++lineno; p2( "\n", i2s(lineno,0) ); }
+          rd_next();
+          if( rd_char==10 ) { ++rd_line; p2( "\n", i2s(rd_line,0) ); }
         }
-        if(curchar>0) curchar = getchar();
-        if( curchar == '/' )
+        if(rd_char>0) rd_next();
+        if( rd_char == '/' )
           break;
       }
-      if(curchar>0) curchar = getchar();
-      return gettoken();
+      if(rd_char>0) rd_next();
+      return sc_next();
     }
     else
     {
-      opkind = Div;
+      sc_op = Div;
     }
     return Op;
   }
-  else if( curchar=='%' )
+  else if( rd_char=='%' )
   {
-    curchar = getchar();
-    opkind = Mod;
+    rd_next();
+    sc_op = Mod;
     return Op;
   }
-  else if( curchar=='!' )
+  else if( rd_char=='!' )
   {
-    curchar = getchar();
-    if( curchar != '=' ) return Err; // no unary !
-    curchar = getchar();
-    opkind = Ne;
+    rd_next();
+    if( rd_char != '=' ) return Err; // no unary '!'
+    rd_next();
+    sc_op = Ne;
     return Op;
   }
   else
   {
-    tokentext[0] = curchar; tokentext[1] = 0;
-    curchar = getchar();
+    sc_text[0] = rd_char; sc_text[1] = 0;
+    rd_next();
     return Err;
   }
 }
 
+// Parser ----------------------------------------------------------------------
+
+// Main compiler function ------------------------------------------------------
 
 char* OPS = "=\0\0++\0--\0==\0!=\0<\0\0>\0\0<=\0>=\0+\0\0-\0\0*\0\0/\0\0%\0\0&&\0||\0";
 
-int scanfile( char* fn )
+int scanfile( char* fn ) // scan file; return 0 if OK
 {
-  srcfile = open( fn, O_RDONLY, 0 );
-  if( srcfile<=0 ) return 1;
+  rd_file = open( fn, O_RDONLY, 0 );
+  if( rd_file<=0 ) return 1;
 
-  int t,t1=Err,t2=Err;
-  while( (t = gettoken()) != Eof )
+  int t;
+  while( (t = sc_next()) != Eof ) // let's not stop at Err
   {
-    if( t==Num )      { p2( " #", i2s( numvalue, 0 ) ); }
-    else if( t==Id )  { p2( " ", tokentext ); }
-    else if( t==Kw )  { p4( " ", i2s( kw, 0 ), "|", tokentext ); }
-    else if( t==Op )  { p2( " `", OPS + (3*opkind) ); }
-    else if( t==Sep ) { p2( " ", separator ); }
-    else if( t==Str ) { p3( " \"", tokentext, "\"" ); }
-    else if( t==Chr ) { p2( " \'", i2s( numvalue, 0 ) ); }
-    else /* error */  { p3( "\n\n??????", tokentext, "\n" ); }
+    if( t==Num )      { p2( " #", i2s( sc_num, 0 ) ); }
+    else if( t==Id )  { p2( " ", sc_text ); }
+    else if( t==Sep ) { p2( " ", sc_text ); }
+    else if( t==Kw )  { p4( " ", i2s( sc_kw, 0 ), "~", sc_text ); }
+    else if( t==Op )  { p2( " `", OPS + (3*sc_op) ); }
+    else if( t==Str ) { p3( " \"", sc_text, "\"" ); }
+    else if( t==Chr ) { p2( " \'", i2s( sc_num, 0 ) ); }
+    else /* error */  { p3( "\n\n??????", sc_text, "\n" ); }
   }
 
-  close(srcfile);
+  close( rd_file );
   return 0;
 }
-
 
 int main( int ac, char** av )
 {
-  scanfile( av[1] );
-  return 0;
+  return scanfile( av[1] );
 }
-
