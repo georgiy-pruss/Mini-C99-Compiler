@@ -1,5 +1,5 @@
-int ERR( char* s, int n )
+void f()
 {
-  return s+(n-1); --n;
+  dst = (char)(10);
 }
-int END;
+
