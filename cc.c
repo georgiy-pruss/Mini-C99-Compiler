@@ -259,31 +259,18 @@ int sc_read_next() // scan for next token
   }
 }
 
-char* _kwd( int tkn )
-{
-  if( sc_tkn == Kw + Int ) return "int";
-  if( sc_tkn == Kw + Char ) return "char";
-  if( sc_tkn == Kw + Void ) return "void";
-  if( sc_tkn == Kw + Enum ) return "enum";
-  if( sc_tkn == Kw + If ) return "if";
-  if( sc_tkn == Kw + Else ) return "else";
-  if( sc_tkn == Kw + While ) return "while";
-  if( sc_tkn == Kw + Break ) return "break";
-  if( sc_tkn == Kw + Return ) return "return";
-  if( sc_tkn == Kw + Sizeof ) return "sizeof";
-  return "??";
-}
+char* KWDS[10] = { "void","char","int","enum","if","else","while","break","return","sizeof" };
 
 void sc_next() // put token into sc_tkn
 {
   sc_tkn = sc_read_next();
   p3( " ", i2s( sc_tkn, 0 ), " - " );
-  if (sc_tkn >= Kw)        p2( "kw ", _kwd(sc_tkn) );
+  if (sc_tkn >= Kw)        p2( "kw ", KWDS[ sc_tkn - Kw ] );
   else if( sc_tkn == Id )  p2( "id ", sc_text );
   else if( sc_tkn == Str ) p2( "str ", sc_text );
-  else if( sc_tkn == Num ) p2( "num ", i2s(sc_num,0) );
+  else if( sc_tkn == Num ) p2( "num ", i2s( sc_num, 0 ) );
   else if( sc_tkn == Chr ) p2( "chr ", i2s( sc_num, 0 ) );
-  else if (sc_tkn == Eof)  p1( "eof" );
+  else if( sc_tkn == Eof ) p1( "eof" );
   else if( sc_tkn == Err ) p2( "err", sc_text );
   else if( sc_tkn < Kw ) { char o[2] = "."; o[0]=sc_tkn; p2( "op/sep ", o ); }
   else p2( "?", sc_text );
@@ -292,19 +279,19 @@ void sc_next() // put token into sc_tkn
 
 // Parser ----------------------------------------------------------------------
 
-char pa_value[200];
+//char pa_value[200];
 
 enum { F, T }; // False, True
 
-int pa_block(); int pa_type(); int pa_stars(); int pa_intexpr(); // have to be declared
-int pa_enumdef(); int pa_vars(int k); int pa_expr();
+// Due to recursive nature and difficult syntax, some fns have to be pre-declared
+int pa_expr(); int pa_term(); int pa_type(); int pa_stars(); int pa_exprtail();
+int pa_block(); int pa_enumdef(); int pa_vars(int k); int pa_intexpr();
 
 int pa_primary()
 {
   p1("pa_primary\n");
-  if( sc_tkn==Num || sc_tkn==Chr || sc_tkn==Str || sc_tkn==Id )
-    { sc_next(); return T; }
-  if( sc_tkn!='(' ) return F; // must be '('expr')'
+  if( sc_tkn==Num || sc_tkn==Chr || sc_tkn==Str || sc_tkn==Id ) { sc_next(); return T; }
+  if( sc_tkn!='(' ) return F;
   sc_next(); if( !pa_expr() ) return F;
   if( sc_tkn!=')' ) return F;
   sc_next(); return T;
@@ -338,85 +325,92 @@ int pa_call_or_index()
   return F; // not error but to indicate nothing happened here
 }
 
-int pa_base()
+int pa_postfix()
 {
-  p1("pa_base\n");
-  if( sc_tkn==Kw+Sizeof )
-  {
-    sc_next();
-    if( sc_tkn!='(' ) return F;
-    sc_next();
-    if( !pa_type() || !pa_stars() ) return F;
-    if( sc_tkn!=')' ) return F;
-    sc_next(); return T;
-  }
+  p1("pa_postfix\n");
   if( !pa_primary() ) return F;
   while( pa_call_or_index() )
     ;
   return T;
 }
 
-int pa_unop()
+int pa_unexpr()
 {
-  p1("pa_unop\n");
-  if( sc_tkn=='-' || sc_tkn=='!' || sc_tkn=='*' || sc_tkn=='i' || sc_tkn=='d' )
-    { sc_next(); return T; }
-  if( sc_tkn==Kw+Sizeof ) { sc_next(); return T; }
-  if( sc_tkn=='(' )
+  p1("pa_unexpr\n");
+  if( sc_tkn=='i' || sc_tkn=='d' ) { sc_next(); return pa_unexpr(); }
+  if( sc_tkn=='-' || sc_tkn=='!' || sc_tkn=='*' ) { sc_next(); return pa_term(); }
+  if( sc_tkn==Kw+Sizeof )
   {
     sc_next();
-    if( !pa_type() || !pa_stars() ) return F;
-    if( sc_tkn==')' ) { sc_next(); return T; }
+    if( sc_tkn=='(' )
+    {
+      sc_next();
+      if( pa_type() )
+      {
+        if( !pa_stars() ) return F;
+        if( sc_tkn==')' ) { sc_next(); return T; }
+        return F;
+      }
+      return pa_exprtail();
+    }
+    return pa_unexpr();
   }
-  return F;
+  return pa_postfix();
 }
 
-int pa_binop()
-/* : '*' | '/' | '%'              // pri. 3
-   | '+' | '-'                    // pri. 4   5: << >>
-   | '<' | '>' | '<''=' | '>''='  // pri. 6
-   | '=''=' | '!''='              // pri. 7
-   | '&'                          // pri. 8   9: ^
-   | '|'                          // pri. 10
-   | '&''&'                       // pri. 11
-   | '|''|'                       // pri. 12  13: ?:
-   | '='                          // pri. 14  and op=
-*/
+int pa_exprtail()
 {
-  p1("pa_binop\n");
-  if( sc_tkn=='*' || sc_tkn=='/' || sc_tkn=='%' || sc_tkn=='+' || sc_tkn=='-' ||
-      sc_tkn=='<' || sc_tkn=='>' || sc_tkn=='l' || sc_tkn=='g' ||
-      sc_tkn=='e' || sc_tkn=='n' || sc_tkn=='&' || sc_tkn=='|' ||
-      sc_tkn=='a' || sc_tkn=='o' || sc_tkn=='=' )
-    { sc_next(); return T; }
-  return F;
+  p1("pa_exprtail\n");
+  if( !pa_exprs() ) return F;
+  if( sc_tkn!=')' ) return F;
+  sc_next();
+  while( pa_call_or_index() )
+    ;
+  return T;
 }
 
 int pa_term()
 {
   p1("pa_term\n");
-  while( pa_unop() )
-    ;
-  if( !pa_base() ) return F;
-  return T;
+  if( sc_tkn=='(' )
+  {
+    sc_next();
+    if( pa_type() )
+    {
+      if( !pa_stars() ) return F;
+      if( sc_tkn==')' ) { sc_next(); return T; }
+      return pa_term();
+    }
+    return pa_exprtail();
+  }
+  return pa_unexpr();
+}
+
+int pa_binop()
+{
+  p1("pa_binop\n");
+  if( sc_tkn=='*' || sc_tkn=='/' || sc_tkn=='%' ||                // 3
+      sc_tkn=='+' || sc_tkn=='-' ||                               // 4
+      sc_tkn=='<' || sc_tkn=='>' || sc_tkn=='l' || sc_tkn=='g' || // 6
+      sc_tkn=='e' || sc_tkn=='n' ||                               // 7
+      sc_tkn=='&' || sc_tkn=='|' ||                               // 8 10
+      sc_tkn=='a' || sc_tkn=='o' || sc_tkn=='=' )                 // 11 12 14
+    { sc_next(); return T; }
+  return F;
 }
 
 int pa_expr()
 {
   p1("pa_expr\n");
-  if( !pa_term() )
-    return F;
-  while( pa_binop() )
-  {
-    if( !pa_term() ) return F;
-  }
+  if( !pa_term() ) return F;
+  while( pa_binop() ) if( !pa_term() ) return F;
   return T;
 }
 
 int pa_stmt()
 {
   p1("pa_stmt\n");
-  if( sc_tkn==';' ) { sc_next(); return T; } // ';'
+  if( sc_tkn==';' ) { sc_next(); return T; } // empty stmt ';'
   if( sc_tkn=='{' ) { sc_next(); return pa_block(); }
   if( sc_tkn==Kw+Break )
   {

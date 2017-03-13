@@ -49,14 +49,24 @@ stmt : ';'
 
 expr : term { binop term }
 
-term : { unop } base       // ????????????????
-     | "sizeof" expr
-     | '(' type stars ')' expr
+term : '(' type stars ')' term
+     | '(' exprtail
+     | unexpr
 
-base : "sizeof" '(' type stars ')'   // maybe omit this if too difficult
-     | primary { call_or_index }
+exprtail : expr ')' { call_or_index }
 
-call_or_index : '(' [ exprs ] ')' | '[' expr ']' // on postfix ++ and --
+unexpr : '+''+' unexpr
+       | '-''-' unexpr
+       | unop term
+       | "sizeof" '(' type stars ')'
+       | "sizeof" '(' exprtail
+       | "sizeof" unexpr
+       | postfix
+
+
+postfix : primary { call_or_index }     // not done: postfix ++|--
+
+call_or_index : '(' [ exprs ] ')' | '[' expr ']'
 
 exprs : expr { ',' expr }
 
@@ -72,7 +82,7 @@ binop : '*' | '/' | '%'                         // pri. 3
       | '|''|'                                  // pri. 12  13: ?:
       | '='                                     // pri. 14  and op=
 
-unop : '-' | '!' | '*' | '+''+' | '-''-'        // no &x ~x
+unop : '-' | '!' | '*'        // no &x ~x
 
 
 # vim: set syntax=ANTLR :
