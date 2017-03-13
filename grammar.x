@@ -3,17 +3,19 @@
 // parse: https://en.wikipedia.org/wiki/Recursive_descent_parser
 // {...} can be 0 or more times  [...] can be 0 or 1 time   x|y alternative
 
-pgm : declordef { declordef } @Eof                 // definition/declaration
+pgm : decl_or_def { decl_or_def } @Eof             // definition/declaration
 
-declordef : type stars @Name fnorvars | enumdef
+decl_or_def : type stars @Name fn_or_vars | "enum" enumdef
 
-type : "int" | "void" | "char"
+type : "int" | "char" | "void"
 
 stars : [ '*' [ '*' ] ]
 
-fnorvars : '(' args ')' fntail | vars
+fn_or_vars : '(' args ')' fntail | vars
 
-fntail : ';' | '{' { stmt } '}'
+fntail : ';' | block // can do check '{' here
+
+block : '{' { stmt } '}' // checks for '{' done before
 
 vars : vartail { ',' stars @Name vartail } ';'
 
@@ -30,35 +32,39 @@ number : @Number | @Char
 
 args : [ argdef { ',' argdef } ]
 
-argdef : type stars Name
+argdef : type stars @Name
 
-enumdef : "enum" '{' enumname { ',' enumname } '}' ';'
+enumdef : '{' enumerator { ',' enumerator } '}' ';'
 
-enumname : @Name [ '=' intexpr ]
+enumerator : @Name [ '=' intexpr ]
 
-stmt : ';'                      | expr ';'       | '{' { stmt } '}'
+stmt : ';'                      | expr ';'       | block // check '{' before
      | "break" ';'                               | "return" [ expr ] ';'
      | "if" '(' expr ')' stmt [ "else" stmt ]    | "while" '(' expr ')' stmt
-     | enumdef                                   | type stars @Name vars
+     | "enum" enumdef                            | type stars @Name vars
 
-expr : lvar '=' expr             | expr binop expr
-     | '+''+' lvar               | "sizeof" expr
-     | '-''-' lvar               | "sizeof" '(' type stars ')'
-     | unop expr                 | '(' type stars ')' expr
-     | expr '(' [ exprs ] ')'    | '(' expr ')'
-     | expr '[' expr ']'
-     | @Number | @Char | @String | @Name
+expr : term { binop term }
 
-lvar : expr         // well, it's hard to tell that the value should be assignable
+binop : '*' | '/' | '%'                       // pri. 5
+      | '+' | '-'                             // pri. 6
+      | '<' | '>' | '<''=' | '>''='           // pri. 8
+      | '=''=' | '!''='                       // pri. 9
+      | '&''&'                                // pri. 13
+      | '|''|'                                // pri. 14
+      | '='                                   // pri. 16
+
+term : { unop } base
+
+unop : '-' | '!' | '*' | '+''+' | '-''-' | "sizeof" | '(' type stars ')'
+
+base : "sizeof" '(' type stars ')'   // maybe omit this if too difficult
+     | primary { call_or_index }
+
+call_or_index : '(' [ exprs ] ')' | '[' expr ']'
 
 exprs : expr { ',' expr }
 
-binop : '+' | '-' | '*' | '/' | '%' | '<' | '>' | '&''&' | '|''|' | '=''=' | '!''='| '<''=' | '>''='
+primary : @Number | @Char | @String | @Name | '(' expr ')'
 
-unop : '-' | '!' | '*'
-
-// priorities:  2: x(...) x[x]                       6: + -         13: &&
-//              3: ++x --x -x !x *x (cast)x sizeof   8: < <= > >=   14: ||
-//              5: * / %                             9: == !=       16: =
 
 # vim: set syntax=ANTLR :

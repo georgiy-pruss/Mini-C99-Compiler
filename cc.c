@@ -127,10 +127,11 @@ void rd_next() // read next character, save it in rd_char; <0 if eof
 
 // Scanner ---------------------------------------------------------------------
 
-char sc_text[200]; // for Id and Sep
-int  sc_kw;      // for Kw
-int  sc_op;     // for Op
-int  sc_num; // for Num and Chr
+char sc_text[200]; // for Id
+int  sc_kw;        // for Kw
+int  sc_op;        // for Op
+int  sc_sep;       // for Sep
+int  sc_num;       // for Num and Chr
 
 int sc_next();
 int sc_next1() // scan for next token,
@@ -192,8 +193,7 @@ int sc_next1() // scan for next token,
   else if( rd_char=='{' || rd_char=='}' || rd_char=='(' || rd_char==')' ||
            rd_char=='[' || rd_char==']' || rd_char==',' || rd_char==';' )
   {
-    sc_text[0] = (char)rd_char; sc_text[1] = 0; rd_next();
-    return Sep;
+    sc_sep = rd_char; return Sep;
   }
   else if( rd_char=='=' || rd_char=='<' || rd_char=='>' || rd_char=='!' )
   {
@@ -281,48 +281,289 @@ int sc_next() { int t=sc_next1(); /* p4( i2s(t,0), " - ", sc_text, "\n" ); */ re
 int t; // token
 char pa_value[200];
 
-enum { F, T };
+enum { F, T }; // False, True
 
-int pa_funcdecl()
+int pa_block(); int pa_type(); int pa_stars(); int pa_intexpr(); // have to be declared
+int pa_enumdef(); int pa_vars(); int pa_expr();
+
+int pa_primary()
 {
-
+  if( t==Num || t==Char || t==Str || t==Id ) { t = sc_next(); return T; }
+  if( t==Sep && sc_sep=='(' )
+  {
+    t = sc_next(); if( !pa_expr() ) return F;
+    if( t==Sep && sc_sep==')' ) { t = sc_next(); return T; }
+  }
   return F;
 }
-int pa_funcdef() { return F; }
 
-int pa_constexpr()
+int pa_exprs()
 {
-  if( t==Op && sc_op==Sub )
+  if( !pa_expr() ) return F;
+  while( t==Sep && sc_sep==',' ) { t = sc_next(); if( !pa_expr() ) return F; }
+  return T;
+}
+
+int pa_call_or_index()
+{
+  if( t==Sep && sc_sep=='(' )
   {
-    strcpy( pa_value, "-" );
     t = sc_next();
+    if( t==Sep && sc_sep==')' ) { t = sc_next(); return T; }
+    if( !pa_exprs() ) return F;
+    if( t==Sep && sc_sep==')' ) { t = sc_next(); return T; }
+    return F;
   }
-  else
+  if( t==Sep && sc_sep=='[' )
   {
-    strcpy( pa_value, "" );
+    t = sc_next();
+    if( !pa_expr() ) return F;
+    if( t==Sep && sc_sep==']' ) { t = sc_next(); return T; }
   }
-  if( t!=Num ) return F;
-  char tmp[20];
-  i2s( sc_num, tmp );
-  strcat( pa_value, tmp );
+  return F;
+}
+
+int pa_base()
+// "sizeof" '(' type stars ')' | primary { call_or_index }
+{ return T; }
+
+int pa_unop()
+{
+  if( t==Op && (sc_op==Sub || sc_op==LNot || sc_op==Mul || sc_op==Inc || sc_op==Dec) )
+    { t = sc_next(); return T; }
+  if( t==Kw && sc_kw==Sizeof ) { t = sc_next(); return T; }
+  if( t==Sep && sc_sep=='(' )
+  {
+    t = sc_next();
+    if( !pa_type() || !pa_stars() ) return F;
+    if( t==Sep && sc_sep==')' ) { t = sc_next(); return T; }
+  }
+  return F;
+}
+
+int pa_binop()
+// : '*' | '/' | '%'                       // pri. 5
+// | '+' | '-'                             // pri. 6
+// | '<' | '>' | '<''=' | '>''='           // pri. 8
+// | '=''=' | '!''='                       // pri. 9
+// | '&''&'                                // pri. 13
+// | '|''|'                                // pri. 14
+// | '='                                   // pri. 16
+{ return T; }
+
+int pa_term()
+// { unop } base
+{ return T; }
+
+int pa_expr()
+// term { binop term }
+{ return T; }
+
+int pa_stmt()
+// | type stars @Name vars
+{
+  if( t==Sep && sc_sep==';' ) { t = sc_next(); return T; } // ';'
+  if( t==Sep && sc_sep=='{' )
+    return pa_block();
+  if( t==Kw )
+  {
+    if( sc_kw==Break )
+    {
+      t = sc_next(); if( t!=Sep || sc_sep!=';' ) return F; t = sc_next(); return T;
+    }
+    if( sc_kw==Return )
+    {
+      t = sc_next();
+      if( t==Sep && sc_sep==';' ) { t = sc_next(); return T; }
+      if( !pa_expr() ) return F;
+      if( t!=Sep || sc_sep!=';' ) return F;
+      t = sc_next(); return T;
+    }
+    if( sc_kw==While )
+    {
+      t = sc_next(); if( t!=Sep || sc_sep!='(' ) return F; t = sc_next();
+      if( !pa_expr() ) return F;
+      if( t!=Sep || sc_sep!=')' ) return F;
+      t = sc_next();
+      return pa_stmt();
+    }
+    if( sc_kw==If )
+    {
+      t = sc_next(); if( t!=Sep || sc_sep!='(' ) return F; t = sc_next();
+      if( !pa_expr() ) return F;
+      if( t!=Sep || sc_sep!=')' ) return F;
+      t = sc_next();
+      if( !pa_stmt() ) return F;
+      if( t==Kw && sc_kw==Else )
+      {
+        t = sc_next();
+        if( !pa_stmt() ) return F;
+      }
+      return T;
+    }
+    if( sc_kw==Enum )
+    {
+      t = sc_next();
+      return pa_enumdef();
+    }
+    if( sc_kw==Int || sc_kw==Char || sc_kw==Void ) // type stars @Name vars
+    {
+      if( !pa_type() || !pa_stars() ) return F;
+      if( t != Id ) return F;
+      t = sc_next();
+      return pa_vars();
+    }
+    return F;
+  }
+  if( !pa_expr() ) return F;
+  if( t!=Sep || sc_sep!=';' ) return F;
+  t = sc_next(); return T;
+}
+
+int pa_enumerator()
+{
+  if( t != Id ) return F;
+  t = sc_next();
+  if( t==Op && sc_op==Asg )
+  {
+    t = sc_next();
+    if( !pa_intexpr() ) return F;
+  }
+  return T;
+}
+
+int pa_enumdef()
+{
+  if( t!=Sep || sc_sep!='{' ) return F;
+  t = sc_next();
+  if( !pa_enumerator() ) return F;
+  while( t==Sep && sc_sep==',' )
+  {
+    t = sc_next();
+    if( !pa_enumerator() ) return F;
+  }
+  if( t!=Sep || sc_sep!='}' ) return F;
+  t = sc_next();
+  if( t!=Sep || sc_sep!=';' ) return F;
   t = sc_next();
   return T;
 }
 
-int pa_vd()
+int pa_argdef()
 {
+  if( !pa_type() || !pa_stars() ) return F;
   if( t != Id ) return F;
-  char id[100]; strcpy( id, sc_text );
   t = sc_next();
-  if( t == Op && sc_op==Asg )
+  return T;
+}
+
+int pa_args()
+{
+  if( !pa_argdef() ) return T;
+  while( t==Sep && sc_sep==',' )
+  {
+    t = sc_next();
+    if( !pa_argdef() ) return F;
+  }
+  return T;
+}
+
+int pa_number()
+{
+  if( t!=Num && t!=Char ) return F;
+  // i2s( sc_num, tmp );
+  t = sc_next();
+  return T;
+}
+
+int pa_intexpr()
+{
+  if( t==Op && sc_op==Sub ) // '-'
+    t = sc_next();
+  return pa_number();
+}
+
+int pa_constexpr()
+{
+  if( t==Id ) { t = sc_next(); return T; }  // array variable as address
+  if( t==Str ) { t = sc_next(); return T; } // string as array of char
+  if( t!=Sep || sc_sep!='{' ) return pa_intexpr();
+  t = sc_next();
+  if( !pa_constexpr() ) return F;
+  while( t==Sep && sc_sep==',' )
   {
     t = sc_next();
     if( !pa_constexpr() ) return F;
-    // set value
-    p4( " var ", id, " = ", pa_value ); p1("\n");
   }
-  else
-    p3( " var ", id, " no value\n" );
+  if( t!=Sep || sc_sep!='}' ) return F;
+  t = sc_next();
+  return T;
+}
+
+int pa_vartail()
+{
+  if( t==Sep && sc_sep=='[' )
+  {
+    t = sc_next();
+    if( !pa_number() ) return F;
+    if( t!=Sep || sc_sep!=']' ) return F;
+    t=sc_next();
+  }
+  if( t==Op && sc_op==Asg )
+  {
+    t = sc_next();
+    if( !pa_constexpr() ) return F;
+  }
+  return T;
+}
+
+int pa_vars()
+{
+  if( !pa_vartail() ) return F;
+  while( t==Sep && sc_sep==',' )
+  {
+    t = sc_next();
+    if( !pa_stars() ) return F;
+    if( t != Id ) return F;
+    t = sc_next();
+    if( !pa_vartail() ) return F;
+  }
+  if( t!=Sep || sc_sep!=';' ) return F;
+  t=sc_next();
+  return T;
+}
+
+int pa_block() // no check, checks done outside; next token right away
+{
+  t = sc_next();
+  while( t!=Sep || sc_sep!='}' )
+    if( !pa_stmt() ) return F;     // error
+  t = sc_next();
+  return T;
+}
+
+int pa_fntail()
+{
+  if( t==Sep && sc_sep==';' ) return T; // declaration
+  if( t==Sep && sc_sep=='{' )
+    return pa_block();
+  return F;
+}
+
+int pa_fn_or_vars()
+{
+  if( t != Sep || sc_sep != '(' ) return pa_vars();
+  t = sc_next();
+  if( ! pa_args() ) return F;
+  if( t != Sep || sc_sep != ')' ) return F;
+  t = sc_next();
+  return pa_fntail();
+}
+
+int pa_stars()
+{
+  if( t==Op && sc_op==Mul ) t = sc_next();
+  if( t==Op && sc_op==Mul ) t = sc_next();
   return T;
 }
 
@@ -332,34 +573,22 @@ int pa_type()
   return F;
 }
 
-int pa_vardef()
+int pa_decl_or_def()
 {
-  if( !pa_type() ) return F;
-  if( !pa_vd() ) return F;
-  while( t==Sep && sc_text[0]==',' )
-  {
-    t = sc_next();
-    pa_vd();
-  }
-  if( t==Sep && sc_text[0]==';' ) { t=sc_next(); return T; }
-  return F;
+  if( t==Kw && sc_kw==Enum ) { t = sc_next(); return pa_enumdef(); }
+  if( !pa_type() || !pa_stars() ) return F;
+  if( t != Id ) return F;
+  t = sc_next();
+  return pa_fn_or_vars();
 }
 
-int pa_dd()
-{
-  if( pa_vardef() ) return T;
-  if( pa_funcdecl() ) return T;
-  if( pa_funcdef() ) return T;
-  return F;
-}
-
-int parse_file( char* fn )
+int pa_file( char* fn )
 {
   rd_file = open( fn, O_RDONLY, 0 );
   if( rd_file<=0 ) return T;
 
   t = sc_next();
-  while( t!=Eof && pa_dd() )
+  while( t!=Eof && pa_decl_or_def() )
     ;
 
   close( rd_file );
@@ -378,7 +607,7 @@ int scanfile( char* fn ) // scan file; return 0 if OK
   {
     if( t==Num )      { p2( " #", i2s( sc_num, 0 ) ); }
     else if( t==Id )  { p2( " ", sc_text ); }
-    else if( t==Sep ) { p2( " ", sc_text ); }
+    else if( t==Sep ) { char s[3]=" ?"; s[1]=sc_sep; p1( s ); }
     else if( t==Kw )  { p4( " ", i2s( sc_kw, 0 ), "~", sc_text ); }
     else if( t==Op )  { p2( " `", OPS + (3*sc_op) ); }
     else if( t==Str ) { p3( " \"", sc_text, "\"" ); }
@@ -395,6 +624,6 @@ int scanfile( char* fn ) // scan file; return 0 if OK
 int main( int ac, char** av )
 {
   // return scanfile( av[1] );
-  int rc = parse_file( av[1] );
+  int rc = pa_file( av[1] );
   return rc;
 }
