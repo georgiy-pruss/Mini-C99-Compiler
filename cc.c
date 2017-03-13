@@ -279,8 +279,6 @@ void sc_next() // put token into sc_tkn
 
 // Parser ----------------------------------------------------------------------
 
-//char pa_value[200];
-
 enum { F, T }; // False, True
 
 // Due to recursive nature and difficult syntax, some fns have to be pre-declared
@@ -361,7 +359,7 @@ int pa_unexpr()
 int pa_exprtail()
 {
   p1("pa_exprtail\n");
-  if( !pa_exprs() ) return F;
+  if( !pa_expr() ) return F;
   if( sc_tkn!=')' ) return F;
   sc_next();
   while( pa_call_or_index() )
@@ -378,7 +376,8 @@ int pa_term()
     if( pa_type() )
     {
       if( !pa_stars() ) return F;
-      if( sc_tkn==')' ) { sc_next(); return T; }
+      if( sc_tkn!=')' ) return F;
+      sc_next();
       return pa_term();
     }
     return pa_exprtail();
@@ -642,43 +641,20 @@ int pa_file( char* fn )
   rd_file = open( fn, O_RDONLY, 0 );
   if( rd_file<=0 ) return T;
 
+  int rc = T;
   sc_next();
-  while( sc_tkn!=Eof && pa_decl_or_def() )
-    ;
+  while( sc_tkn!=Eof )
+    if( !pa_decl_or_def() )
+      { rc = F; break; }
 
   close( rd_file );
-  return F;
-}
-
-char* OPS = "=\0\0++\0--\0==\0!=\0<\0\0>\0\0<=\0>=\0+\0\0-\0\0*\0\0/\0\0%\0\0&&\0||\0";
-
-int scanfile( char* fn ) // scan file; return 0 if OK
-{
-  rd_file = open( fn, O_RDONLY, 0 );
-  if( rd_file<=0 ) return 1;
-
-  while(1)
-  {
-    sc_next();
-    if( sc_tkn == Eof ) break;
-    // let's not stop at Err
-    if( sc_tkn==Num )      p2( " #", i2s( sc_num, 0 ) );
-    else if( sc_tkn==Id )  p2( " ", sc_text );
-    else if( sc_tkn==Chr ) p2( " '", i2s( sc_num, 0 ) );
-    else if( sc_tkn==Str ) p3( " \"", sc_text, "\"" );
-    else if( sc_tkn>=Kw )  p4( " ", i2s( sc_tkn, 0 ), "`", sc_text );
-    else { char s[4]=" ?_"; s[1]=sc_tkn; p4( s, i2s( sc_tkn, 0 ), "_", sc_text ); }
-  }
-
-  close( rd_file );
-  return 0;
+  return rc;
 }
 
 // Main compiler function ------------------------------------------------------
 
 int main( int ac, char** av )
 {
-  // return scanfile( av[1] );
-  int rc = pa_file( av[1] );
-  return rc;
+  if( !pa_file( av[1] ) ) { p2( "Error in ", av[1] ); return 1; }
+  return 0;
 }

@@ -1,5 +1,5 @@
 void f()
 {
-  dst = (char)(10);
+  (char)(10);
 }
 
