@@ -53,7 +53,7 @@ term : '(' type stars ')' term
      | '(' exprtail
      | unexpr
 
-exprtail : expr ')' { call_or_index }
+exprtail : expr ')' call_or_index
 
 unexpr : '+''+' unexpr
        | '-''-' unexpr
@@ -64,9 +64,9 @@ unexpr : '+''+' unexpr
        | postfix
 
 
-postfix : primary { call_or_index }     // not done: postfix ++|--
+postfix : primary call_or_index     // not done: postfix ++|--
 
-call_or_index : '(' [ exprs ] ')' | '[' expr ']'
+call_or_index : { '[' expr ']' | '(' [ exprs ] ')' }
 
 exprs : expr { ',' expr }
 
