@@ -5,9 +5,9 @@
 // stdlib ----------------------------------------------------------------------
 
 int open( char* path, int oflag, int cmode ); // >0 if ok; mode: rwx(u)rwx(g)rwx(others)
-int close( int fd ); // 0 if ok
-int read( int fd, char* buf, int count );  // fd=0 - stdin
-int write( int fd, char* buf, int count ); // fd=1 - stdout, fd=2 - stderr
+int close( int fd );                          // 0 if ok
+int read( int fd, char* buf, int count );     // fd=0 - stdin
+int write( int fd, char* buf, int count );    // fd=1 - stdout, fd=2 - stderr
 char* malloc( int size );
 void free( char* ptr );
 void exit( int status );
@@ -23,7 +23,8 @@ char* strcat( char* s, char* t ) { int n = strlen( s ); strcpy( s+n, t ); return
 
 char* strrev( char* s )
 {
-  char* b = s; char* e = s + strlen(s) - 1;
+  int n = strlen(s); if( n<=1 ) return s;
+  char* b = s; char* e = s + n - 1;
   while( b<e ) { char t = *e; *e = *b; *b = t; ++b; --e; }
   return s;
 }
@@ -71,12 +72,9 @@ char* i2s( int value, char* str )
 
 int s2i( char* str )
 {
-  while( *str == ' ' ) ++str; // skip leading blanks
-  int minus = 0;
-  if( *str == '-' ) { minus = 1; ++str; }
+  if( *str == '-' ) return -s2i( str+1 );
   int v = 0;
   while( *str >= '0' && *str <= '9' ) { v = 10*v + *str - '0'; ++str; }
-  if( minus ) v = -v;
   return v;
 }
 
@@ -139,7 +137,7 @@ int  sc_num;       // for Num and Chr
 
 int sc_read_next() // scan for next token
 {
-  if( rd_char < 0 ) { rd_next(); rd_line = 1; p1( i2s(rd_line,0) ); }
+  if( rd_char < 0 ) { rd_next(); rd_line = 1; p3( "[", i2s(rd_line,0), "]" ); }
   while( rd_char==' ' || rd_char==10 || rd_char==13 )
   {
     if( rd_char==10 ) { ++rd_line; p3( "\n[", i2s(rd_line,0), "]" ); } // line no
@@ -165,8 +163,8 @@ int sc_read_next() // scan for next token
   }
   else if( rd_char=='"' ) // String
   {
-    char* p = sc_text;
     rd_next();
+    char* p = sc_text;
     while( rd_char!='"' )
     {
       if( rd_char == 92 ) // \ - backslash in strings (only; not in chars!)
@@ -186,7 +184,7 @@ int sc_read_next() // scan for next token
   else if( rd_char==39 ) // Character literal 'x' (but can't be '\x')
   {
     rd_next();
-    sc_num = rd_char;  // we take anything from inside, w/o '\'
+    sc_num = rd_char;    // we take anything from inside, w/o '\'
     rd_next();
     if( rd_char!=39 ) return Err; // must end with 'x'
     rd_next();
@@ -655,6 +653,14 @@ int pa_file( char* fn )
 
 int main( int ac, char** av )
 {
+  char* m[] = {"0","-0","1","-1","1234","-1234","000007","-00007","42",
+    "2147000000","2147483647","-2147483647","2147483648","-2147483648", "2147483649", "" };
+  int i=0; while( *m[i] )
+  {
+    char* s = m[i];
+    int n = s2i( s ); p4( s, " ", i2s( n, 0 ), "\n" );
+    ++i;
+  }
   if( !pa_file( av[1] ) ) { p2( "Error in ", av[1] ); return 1; }
   return 0;
 }
