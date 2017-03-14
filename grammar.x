@@ -28,6 +28,7 @@ constexpr : intexpr                             // int n = -42;
           | '{' constexpr { ',' constexpr } '}' // int m[4] = { 1, 2 };
 
 intexpr : [ '-' ] number
+        | [ "sizeof" ] ....         // ???????
 
 number : @Number | @Char
 
@@ -59,7 +60,7 @@ unexpr : '+''+' unexpr
        | '-''-' unexpr
        | unop term
        | "sizeof" '(' type stars ')'
-       | "sizeof" '(' exprtail
+       | "sizeof" '(' exprtail            // call_or_expr here???
        | "sizeof" unexpr
        | postfix
 

@@ -280,7 +280,7 @@ void sc_next() // put token into sc_tkn
 
 // Parser ----------------------------------------------------------------------
 
-enum { F, T }; // Boolear result of pa_* functions: False, True
+enum { F, T }; // Boolean result of pa_* functions: False, True
 
 // Due to recursive nature and difficult syntax, some fns have to be pre-declared
 int pa_expr(); int pa_term(); int pa_type(); int pa_stars(); int pa_exprtail();
