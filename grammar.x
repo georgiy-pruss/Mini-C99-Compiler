@@ -3,87 +3,79 @@
 // parse: https://en.wikipedia.org/wiki/Recursive_descent_parser
 // {...} can be 0 or more times  [...] can be 0 or 1 time   x|y alternative
 
-pgm : decl_or_def { decl_or_def } @Eof          // definition/declaration
+primary : @Number | @Char | @String | @Id | '(' expr ')'
 
-decl_or_def : type stars @Id fn_or_vars | "enum" enumdef
+exprs : expr { ',' expr }
 
-type : "int" | "char" | "void"
+call_or_index : { '[' expr ']' | '(' [ exprs ] ')' }
 
-stars : [ '*' [ '*' ] ]
+postfix : primary call_or_index          // no: postfix ++|--
 
-fn_or_vars : '(' args ')' fntail | varsº
+type : "int" | "char" | "void"           // only these types
 
-fntail : ';' | '{' block      // '{' out of block for easy analysis
+stars : [ '*' [ '*' ] ]                  // up to two stars for int and char
 
-block : { stmt } '}'
+sizeofexpr : '(' type stars ')'
+           | '(' @Id [ '[' @Number ']' ] ')'  // no: sizof expr
 
-varsⁿ : vartailⁿ { ',' stars @Id vartailⁿ } ';'
+unexpr : '+''+' unexpr | '-''-' unexpr
+       | '-' term | '!' term | '*' term  // no: &x ~x
+       | "sizeof" sizeofexpr
+       | postfix
 
-vartailº : [ '[' number ']' ] [ '=' constexpr ]
-vartail¹ : [ '[' number ']' ] [ '=' expr ]
+term : '(' type stars ')' term
+     | '(' expr ')' call_or_index
+     | unexpr
+
+binop : '*' | '/' | '%'                  // pri. 3     no:
+      | '+' | '-'                        // pri. 4     5: << >>
+      | '<' | '>' | '<''=' | '>''='      // pri. 6
+      | '=''=' | '!''='                  // pri. 7     8 9 10: & ^ |
+      | '&''&'                           // pri. 11
+      | '|''|'                           // pri. 12    13: ?:
+      | '='                              // pri. 14    14: += -= <<= ...
+
+expr : term { binop term }
+
+stmt : ';'
+     | '{' block
+     | "break" ';'                | "return" [ expr ] ';'
+     | "while" '(' expr ')' stmt  | "if" '(' expr ')' stmt [ "else" stmt ]
+     | type stars @Id vars__1
+     | expr ';'
+
+number : @Number | @Char
+
+intexpr : number | '-' number | '!' number
+        | "sizeof" sizeofexpr
 
 constexpr : intexpr                             // int n = -42;
           | @String                             // char* s = "abc";
           | @Id                                 // int* ptr = array;
           | '{' constexpr { ',' constexpr } '}' // int m[4] = { 1, 2 };
 
-intexpr : [ '-' ] number
-        | [ "sizeof" ] ....         // ???????
+vartail__0 : [ '[' number ']' ] [ '=' constexpr ]
+vartail__1 : [ '[' number ']' ] [ '=' expr ]
 
-number : @Number | @Char
-
-args : [ argdef { ',' argdef } ]
-
-argdef : type stars @Id
-
-enumdef : '{' enumerator { ',' enumerator } '}' ';'
+vars__n : vartail__n { ',' stars @Id vartail__n } ';'
 
 enumerator : @Id [ '=' intexpr ]
 
-stmt : ';'
-     | '{' block
-     | "break" ';'                              | "return" [ expr ] ';'
-     | "if" '(' expr ')' stmt [ "else" stmt ]   | "while" '(' expr ')' stmt
-     | "enum" enumdef
-     | type stars @Id vars¹
-     | expr ';'
+enumdef : '{' enumerator { ',' enumerator } '}' ';'
 
-expr : term { binop term }
+block : { stmt } '}'
 
-term : '(' type stars ')' term
-     | '(' exprtail
-     | unexpr
+fntail : ';' | '{' block      // '{' out of block for easy analysis
 
-exprtail : expr ')' call_or_index
+argdef : type stars @Id
 
-unexpr : '+''+' unexpr
-       | '-''-' unexpr
-       | unop term
-       | "sizeof" '(' type stars ')'
-       | "sizeof" '(' exprtail            // call_or_expr here???
-       | "sizeof" unexpr
-       | postfix
+args : [ argdef { ',' argdef } ]
 
+fn_or_vars : '(' args ')' fntail | vars__0
 
-postfix : primary call_or_index     // not done: postfix ++|--
+decl_or_def : type stars @Id fn_or_vars | "enum" enumdef
 
-call_or_index : { '[' expr ']' | '(' [ exprs ] ')' }
-
-exprs : expr { ',' expr }
-
-primary : @Number | @Char | @String | @Id | '(' expr ')'
-
-binop : '*' | '/' | '%'                         // pri. 3
-      | '+' | '-'                               // pri. 4   5: << >>
-      | '<' | '>' | '<''=' | '>''='             // pri. 6
-      | '=''=' | '!''='                         // pri. 7
-      | '&'                                     // pri. 8   9: ^
-      | '|'                                     // pri. 10
-      | '&''&'                                  // pri. 11
-      | '|''|'                                  // pri. 12  13: ?:
-      | '='                                     // pri. 14  and op=
-
-unop : '-' | '!' | '*'        // no &x ~x
+program : decl_or_def { decl_or_def } @Eof      // definition/declaration
 
 
 # vim: set syntax=ANTLR :

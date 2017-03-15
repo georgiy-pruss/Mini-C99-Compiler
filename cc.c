@@ -2,6 +2,9 @@
 // gcc -fno-builtin-malloc -fno-builtin-strlen -O2 cc.c -o cc.exe
 // -std=c99 is default
 
+int DEBUG=0;
+int PA_TRACE=0;
+
 // stdlib ----------------------------------------------------------------------
 
 int open( char* path, int oflag, int cmode ); // >0 if ok; mode: rwx(u)rwx(g)rwx(others)
@@ -93,7 +96,7 @@ void p4( char* s, char* s2, char* s3, char* s4 ) { p1( s ); p1( s2 ); p1( s3 ); 
 // Compiler Definitions --------------------------------------------------------
 
 enum { Err, Eof, Num, Chr, Str, Id, // tokens
-       // Op: = i d e n < > l g + - * / % & | a o ! (inc dec eq ne le ge and or)
+       // Op: = i d e n (++ -- == !=) < > l g (<= >=) + - * / % & | ! (3 logical ops)
        // Sep: ( ) [ ] { } , ;
        Kw=200 }; // actual tokens for keywors: Kw+k, where k is from below:
 enum { Void, Char, Int, Enum, If, Else, While, Break, Return, Sizeof }; // keywords
@@ -137,10 +140,10 @@ int  sc_num;       // for Num and Chr
 
 int sc_read_next() // scan for next token
 {
-  if( rd_char < 0 ) { rd_next(); rd_line = 1; p3( "[", i2s(rd_line,0), "]" ); }
+  if( rd_char < 0 ) { rd_next(); rd_line = 1; if(DEBUG) p3( "[", i2s(rd_line,0), "]" ); }
   while( rd_char==' ' || rd_char==10 || rd_char==13 )
   {
-    if( rd_char==10 ) { ++rd_line; p3( "\n[", i2s(rd_line,0), "]" ); } // line no
+    if( rd_char==10 ) { ++rd_line; if(DEBUG) p3( "\n[", i2s(rd_line,0), "]" ); }
     rd_next();
   }
   if( rd_char<0 ) return Eof;
@@ -199,22 +202,24 @@ int sc_read_next() // scan for next token
   else if( rd_char=='=' || rd_char=='<' || rd_char=='>' || rd_char=='!' )
   {
     int c = rd_char; rd_next();
-    if( rd_char == '=' ) // == <= >= != --> e l g n
+    if( rd_char == '=' ) // == <= >= != convert to: e l g n
     {
       rd_next();
       if( c=='=' ) c = 'e'; else if( c=='<' ) c = 'l'; else if( c=='>' ) c = 'g'; else c = 'n';
     }
     return c;
   }
-  else if( rd_char=='+' || rd_char=='-' || rd_char=='&' || rd_char=='|' )
+  else if( rd_char=='+' || rd_char=='-' )
   {
     int c = rd_char; rd_next();
-    if( rd_char == c ) // ++ -- && ||
-    {
-      rd_next();
-      if( c=='+' ) c = 'i'; else if( c=='-' ) c = 'd'; else if( c=='&' ) c = 'a'; else c = 'o';
-    }
+    if( rd_char == c ) { rd_next(); if( c=='+' ) c = 'i'; else c = 'd'; } // ++ --
     return c;
+  }
+  else if( rd_char=='&' || rd_char=='|' )
+  {
+    int c = rd_char; rd_next();
+    if( rd_char == c ) { rd_next(); return c; } // && ||
+    sc_text[0] = c; sc_text[1] = 0; return Err;
   }
   else if( rd_char=='/' ) // comment //... or /*...*/ or divide /
   {
@@ -224,20 +229,20 @@ int sc_read_next() // scan for next token
       rd_next();
       while( rd_char!=10 && rd_char>0 )
         rd_next();
-      if( rd_char==10 ) { ++rd_line; p3( "[//]\n[", i2s(rd_line,0), "]" ); } // line no
+      if( rd_char==10 ) { ++rd_line; if(DEBUG) p3( "[//]\n[", i2s(rd_line,0), "]" ); }
       if(rd_char>0) rd_next();
       return sc_read_next();
     }
     else if( rd_char == '*' ) // /*...*/
     {
       rd_next();
-      if( rd_char==10 ) { ++rd_line; p3( "[/*]\n[", i2s(rd_line,0), "]" ); }
+      if( rd_char==10 ) { ++rd_line; if(DEBUG) p3( "[/*]\n[", i2s(rd_line,0), "]" ); }
       while(1)
       {
         while( rd_char!='*' && rd_char>0 )
         {
           rd_next();
-          if( rd_char==10 ) { ++rd_line; p3( "[**]\n[", i2s(rd_line,0), "]" ); }
+          if( rd_char==10 ) { ++rd_line; if(DEBUG) p3( "[**]\n[", i2s(rd_line,0), "]" ); }
         }
         if(rd_char>0) rd_next();
         if( rd_char == '/' )
@@ -259,15 +264,34 @@ int sc_read_next() // scan for next token
 
 char* KWDS[10] = { "void","char","int","enum","if","else","while","break","return","sizeof" };
 
+char escape_s[200];
+char* escape( char* s )
+{
+  char* d = escape_s;
+  while( *s )
+  {
+    if( *s==10 ) { *d=92; ++d; *d='n'; }
+    else if( *s==13 ) { *d=92; ++d; *d='r'; }
+    else if( *s==8 ) { *d=92; ++d; *d='b'; }
+    else if( *s==0 ) { *d=92; ++d; *d='0'; }
+    else if( *s==32 ) { *d=92; ++d; *d='_'; } // \_ for space
+    else *d=*s;
+    ++d;
+    ++s;
+  }
+  *d = 0;
+  return escape_s;
+}
+
 void sc_next() // put token into sc_tkn
 {
   sc_tkn = sc_read_next();
-  if( 1 ) // for debug
+  if( DEBUG )
   {
     p3( " ", i2s( sc_tkn, 0 ), " - " );
     if (sc_tkn >= Kw)        p2( "kw ", KWDS[ sc_tkn - Kw ] );
     else if( sc_tkn == Id )  p2( "id ", sc_text );
-    else if( sc_tkn == Str ) p2( "str ", sc_text );
+    else if( sc_tkn == Str ) p2( "str ", escape(sc_text) );
     else if( sc_tkn == Num ) p2( "num ", i2s( sc_num, 0 ) );
     else if( sc_tkn == Chr ) p2( "chr ", i2s( sc_num, 0 ) );
     else if( sc_tkn == Eof ) p1( "eof" );
@@ -278,372 +302,344 @@ void sc_next() // put token into sc_tkn
   }
 }
 
+// Semantics & Code generation -------------------------------------------------
+
+enum { INTSZ = 4 };
+
 // Parser ----------------------------------------------------------------------
+
+int tL = 0; // indent level
+void tI() { p1("                    "); int i=0; while(i<tL) { p1( "." ); ++i; } }
+void t1( char* s ) { if( PA_TRACE ) { tI(); p2( s,"\n" ); ++tL; } }
+void t2( char* s, char* s2 ) { if( PA_TRACE ) { tI(); p3( s,s2,"\n" ); ++tL; } }
+void t3( char* s, char* s2, char* s3 ) { if( PA_TRACE ) { tI(); p4( s,s2,s3,"\n" ); ++tL; } }
+void t4( char* s, char* s2, char* s3, char* s4 ) { if( PA_TRACE )
+  { tI(); p4( s,s2,s3,s4 );p1("\n"); ++tL; } }
+int t_( int r )  { if( PA_TRACE ) { --tL; tI(); p3( "<< ", i2s(r,0), "\n" ); } return r; }
 
 enum { F, T }; // Boolean result of pa_* functions: False, True
 
 // Due to recursive nature and difficult syntax, some fns have to be pre-declared
-int pa_expr(); int pa_term(); int pa_type(); int pa_stars(); int pa_exprtail();
-int pa_block(); int pa_enumdef(); int pa_vars(int k); int pa_intexpr();
+int pa_expr(); int pa_term(); int pa_block(); int pa_vars(int k);
 
 int pa_primary()
 {
-  p1("pa_primary\n");
-  if( sc_tkn==Num || sc_tkn==Chr || sc_tkn==Str || sc_tkn==Id ) { sc_next(); return T; }
-  if( sc_tkn!='(' ) return F;
-  sc_next(); if( !pa_expr() ) return F;
-  if( sc_tkn!=')' ) return F;
-  sc_next(); return T;
+  t1("pa_primary");
+  if( sc_tkn==Num || sc_tkn==Chr || sc_tkn==Str || sc_tkn==Id ) { sc_next(); return t_(T); }
+  if( sc_tkn!='(' ) return t_(F);
+  sc_next(); if( !pa_expr() ) return t_(F);
+  if( sc_tkn!=')' ) return t_(F);
+  sc_next();
+  return t_(T);
 }
 
 int pa_exprs()
 {
-  p1("pa_exprs\n");
-  if( !pa_expr() ) return F;
-  while( sc_tkn==',' ) { sc_next(); if( !pa_expr() ) return F; }
-  return T;
+  t1("pa_exprs");
+  if( !pa_expr() ) return t_(F);
+  while( sc_tkn==',' ) { sc_next(); if( !pa_expr() ) return t_(F); }
+  return t_(T);
 }
 
 int pa_call_or_index()
 {
-  p1("pa_call_or_index\n");
+  t1("pa_call_or_index");
   while( sc_tkn=='(' || sc_tkn=='[' )
   {
-    if( sc_tkn=='[' ) { sc_next(); if( !pa_expr() || sc_tkn!=']' ) return F; }
-    else /* '(' */ { sc_next(); if( sc_tkn!=')' ) { if( !pa_exprs() || sc_tkn!=')' ) return F; } }
+    if( sc_tkn=='[' ) { sc_next(); if( !pa_expr() || sc_tkn!=']' ) return t_(F); }
+    else /* '(' */ { sc_next(); if( sc_tkn!=')' ) { if( !pa_exprs() || sc_tkn!=')' ) return t_(F); } }
     sc_next();
   }
-  return T;
+  return t_(T);
 }
 
 int pa_postfix()
 {
-  p1("pa_postfix\n");
-  if( !pa_primary() ) return F;
-  return pa_call_or_index();
+  t1("pa_postfix");
+  if( !pa_primary() ) return t_(F);
+  return t_(pa_call_or_index());
+}
+
+int pa_type()
+{
+  t1("pa_type");
+  if( sc_tkn==Kw+Int || sc_tkn==Kw+Char || sc_tkn==Kw+Void) { sc_next(); return t_(T); }
+  return t_(F);
+}
+
+int pa_stars()
+{
+  t1("pa_stars");
+  if( sc_tkn=='*' ) { sc_next(); if( sc_tkn=='*' ) sc_next(); }
+  return t_(T);
+}
+
+int pa_sizeofexpr()
+{
+  t1("pa_sizeofexpr");
+  if( sc_tkn!='(' ) return t_(F);
+  sc_next();
+  if( pa_type() )
+  {
+    pa_stars(); if( sc_tkn==')' ) { sc_next(); return t_(T); }
+    return t_(F);
+  }
+  if( sc_tkn!=Id ) return t_(F);
+  sc_next();
+  if( sc_tkn=='[' )
+  {
+    sc_next(); if( sc_tkn!=Num ) return t_(F);
+    sc_next(); if( sc_tkn!=']' ) return t_(F);
+    sc_next();
+  }
+  if( sc_tkn==')' ) { sc_next(); return t_(T); }
+  return t_(F);
 }
 
 int pa_unexpr()
 {
-  p1("pa_unexpr\n");
-  if( sc_tkn=='i' || sc_tkn=='d' ) { sc_next(); return pa_unexpr(); }
-  if( sc_tkn=='-' || sc_tkn=='!' || sc_tkn=='*' ) { sc_next(); return pa_term(); }
-  if( sc_tkn==Kw+Sizeof )
-  {
-    sc_next();
-    if( sc_tkn=='(' )
-    {
-      sc_next();
-      if( pa_type() )
-      {
-        if( !pa_stars() ) return F;
-        if( sc_tkn==')' ) { sc_next(); return T; }
-        return F;
-      }
-      return pa_exprtail();
-    }
-    return pa_unexpr();
-  }
-  return pa_postfix();
-}
-
-int pa_exprtail()
-{
-  p1("pa_exprtail\n");
-  if( !pa_expr() ) return F;
-  if( sc_tkn!=')' ) return F;
-  sc_next();
-  return pa_call_or_index();
+  t1("pa_unexpr");
+  if( sc_tkn=='i' || sc_tkn=='d' ) { sc_next(); return t_(pa_unexpr()); }
+  if( sc_tkn=='-' || sc_tkn=='!' || sc_tkn=='*' ) { sc_next(); return t_(pa_term()); }
+  if( sc_tkn==Kw+Sizeof ) { sc_next(); return t_(pa_sizeofexpr()); }
+  return t_(pa_postfix());
 }
 
 int pa_term()
 {
-  p1("pa_term\n");
+  t1("pa_term");
   if( sc_tkn=='(' )
   {
     sc_next();
     if( pa_type() )
     {
-      if( !pa_stars() ) return F;
-      if( sc_tkn!=')' ) return F;
-      sc_next();
-      return pa_term();
+      pa_stars(); if( sc_tkn!=')' ) return t_(F);
+      sc_next(); return t_(pa_term());
     }
-    return pa_exprtail();
+    if( !pa_expr() ) return t_(F);
+    if( sc_tkn!=')' )return t_(F);
+    sc_next();
+    return t_(pa_call_or_index());
   }
-  return pa_unexpr();
+  return t_(pa_unexpr());
 }
 
 int pa_binop()
 {
-  p1("pa_binop\n");
+  t1("pa_binop");
   if( sc_tkn=='*' || sc_tkn=='/' || sc_tkn=='%' ||                // 3
       sc_tkn=='+' || sc_tkn=='-' ||                               // 4
       sc_tkn=='<' || sc_tkn=='>' || sc_tkn=='l' || sc_tkn=='g' || // 6
       sc_tkn=='e' || sc_tkn=='n' ||                               // 7
-      sc_tkn=='&' || sc_tkn=='|' ||                               // 8 10
-      sc_tkn=='a' || sc_tkn=='o' || sc_tkn=='=' )                 // 11 12 14
-    { sc_next(); return T; }
-  return F;
+      sc_tkn=='&' || sc_tkn=='|' || sc_tkn=='=' )                 // 11 12 14
+    { sc_next(); return t_(T); }
+  return t_(F);
 }
 
 int pa_expr()
 {
-  p1("pa_expr\n");
-  if( !pa_term() ) return F;
-  while( pa_binop() ) if( !pa_term() ) return F;
-  return T;
+  t1("pa_expr");
+  if( !pa_term() ) return t_(F);
+  while( pa_binop() ) if( !pa_term() ) return t_(F);
+  return t_(T);
 }
 
 int pa_stmt()
 {
-  p1("pa_stmt\n");
-  if( sc_tkn==';' ) { sc_next(); return T; } // empty stmt ';'
-  if( sc_tkn=='{' ) { sc_next(); return pa_block(); }
+  t1("pa_stmt");
+  if( sc_tkn==';' ) { sc_next(); return t_(T); }                // empty stmt ';'
+  if( sc_tkn=='{' ) { sc_next(); return t_(pa_block()); }
   if( sc_tkn==Kw+Break )
   {
     sc_next(); if( sc_tkn!=';' ) return F; sc_next(); return T;
   }
   if( sc_tkn==Kw+Return )
   {
-    sc_next();
-    if( sc_tkn==';' ) { sc_next(); return T; }
-    if( !pa_expr() ) return F;
-    if( sc_tkn!=';' ) return F;
-    sc_next(); return T;
+    sc_next(); if( sc_tkn==';' ) { sc_next(); return t_(T); }
+    if( !pa_expr() || sc_tkn!=';' ) return t_(F);
+    sc_next(); return t_(T);
   }
   if( sc_tkn==Kw+While )
   {
-    sc_next(); if( sc_tkn!='(' ) return F; sc_next();
-    if( !pa_expr() ) return F;
-    if( sc_tkn!=')' ) return F;
-    sc_next();
-    return pa_stmt();
+    sc_next(); if( sc_tkn!='(' ) return t_(F);
+    sc_next(); if( !pa_expr() || sc_tkn!=')' ) return t_(F);
+    sc_next(); return t_(pa_stmt());
   }
   if( sc_tkn==Kw+If )
   {
-    sc_next(); if( sc_tkn!='(' ) return F; sc_next();
-    if( !pa_expr() ) return F;
-    if( sc_tkn!=')' ) return F;
-    sc_next();
-    if( !pa_stmt() ) return F;
-    if( sc_tkn==Kw+Else )
-    {
-      sc_next();
-      if( !pa_stmt() ) return F;
-    }
-    return T;
-  }
-  if( sc_tkn==Kw+Enum )
-  {
-    sc_next();
-    return pa_enumdef();
+    sc_next(); if( sc_tkn!='(' ) return t_(F);
+    sc_next(); if( !pa_expr() || sc_tkn!=')' ) return t_(F);
+    sc_next(); if( !pa_stmt() ) return t_(F);
+    if( sc_tkn==Kw+Else ) { sc_next(); if( !pa_stmt() ) return t_(F); }
+    return t_(T);
   }
   if( sc_tkn==Kw+Int || sc_tkn==Kw+Char || sc_tkn==Kw+Void )
   {
-    if( !pa_type() || !pa_stars() ) return F;
-    if( sc_tkn != Id ) return F;
+    if( !pa_type() || !pa_stars() ) return t_(F);
+    if( sc_tkn != Id ) return t_(F);
     sc_next();
-    return pa_vars(1);
+    return t_(pa_vars(1));
   }
   // expr ';'
-  if( !pa_expr() ) return F; if( sc_tkn!=';' ) return F; sc_next(); return T;
-}
-
-int pa_enumerator()
-{
-  p1("pa_enumerator\n");
-  if( sc_tkn != Id ) return F;
+  if( !pa_expr() || sc_tkn!=';' ) return t_(F);
   sc_next();
-  if( sc_tkn=='=' )
-  {
-    sc_next();
-    if( !pa_intexpr() ) return F;
-  }
-  return T;
-}
-
-int pa_enumdef()
-{
-  p1("pa_enumdef\n");
-  if( sc_tkn != '{' ) return F;
-  sc_next();
-  if( !pa_enumerator() ) return F;
-  while( sc_tkn==',' )
-  {
-    sc_next();
-    if( !pa_enumerator() ) return F;
-  }
-  if( sc_tkn != '}' ) return F;
-  sc_next();
-  if( sc_tkn != ';' ) return F;
-  sc_next();
-  return T;
-}
-
-int pa_argdef()
-{
-  p1("pa_argdef\n");
-  if( !pa_type() || !pa_stars() ) return F;
-  if( sc_tkn != Id ) return F;
-  sc_next();
-  return T;
-}
-
-int pa_args()
-{
-  p1("pa_args\n");
-  if( !pa_argdef() ) return T;
-  while( sc_tkn==',' )
-  {
-    sc_next();
-    if( !pa_argdef() ) return F;
-  }
-  return T;
+  return t_(T);
 }
 
 int pa_number()
 {
-  p1("pa_number\n");
-  if( sc_tkn!=Num && sc_tkn!=Chr ) return F;
+  t1("pa_number");
+  if( sc_tkn!=Num && sc_tkn!=Chr ) return t_(F);
   // i2s( sc_num, tmp );
   sc_next();
-  return T;
+  return t_(T);
 }
 
 int pa_intexpr()
 {
-  p1("pa_intexpr\n");
-  if( sc_tkn=='-' )
-    sc_next();
-  return pa_number();
+  t1("pa_intexpr");
+  if( sc_tkn==Kw+Sizeof ) { sc_next(); return t_(pa_sizeofexpr()); }
+  if( sc_tkn=='-' || sc_tkn=='!' ) sc_next();
+  return t_(pa_number());
 }
 
 int pa_constexpr()
 {
-  p1("pa_constexpr\n");
-  if( sc_tkn==Id ) { sc_next(); return T; }  // array variable as address
-  if( sc_tkn==Str ) { sc_next(); return T; } // string as array of char
-  if( sc_tkn!='{' ) return pa_intexpr();
+  t1("pa_constexpr");
+  if( sc_tkn==Id ) { sc_next(); return t_(T); }  // array variable as address
+  if( sc_tkn==Str ) { sc_next(); return t_(T); } // string as array of char
+  if( sc_tkn!='{' ) return t_(pa_intexpr());
   sc_next();
-  if( !pa_constexpr() ) return F;
-  while( sc_tkn==',' )
-  {
-    sc_next();
-    if( !pa_constexpr() ) return F;
-  }
-  if( sc_tkn!='}' ) return F;
+  if( !pa_constexpr() ) return t_(F);
+  while( sc_tkn==',' ) { sc_next(); if( !pa_constexpr() ) return t_(F); }
+  if( sc_tkn!='}' ) return t_(F);
   sc_next();
-  return T;
+  return t_(T);
 }
 
 int pa_vartail(int k)
 {
-  p3("pa_vartail:",i2s(k,0),"\n");
+  t2("pa_vartail__",i2s(k,0));
   if( sc_tkn=='[' )
   {
-    sc_next();
-    if( !pa_number() ) return F;
-    if( sc_tkn!=']' ) return F;
+    sc_next(); if( !pa_number() ) return t_(F); if( sc_tkn!=']' ) return t_(F);
     sc_next();
   }
   if( sc_tkn=='=' )
   {
-    sc_next();
-    if( k==0 ) return pa_constexpr(); else /* 1 */ return pa_expr();
+    sc_next(); if( k==0 ) return t_(pa_constexpr()); else /* 1 */ return t_(pa_expr());
   }
-  return T;
+  return t_(T);
 }
 
 int pa_vars(int k)
 {
-  p3("pa_vars:",i2s(k,0),"\n");
-  if( !pa_vartail(k) ) return F;
+  t2("pa_vars__",i2s(k,0));
+  if( !pa_vartail(k) ) return t_(F);
   while( sc_tkn==',' )
   {
-    sc_next();
-    if( !pa_stars() ) return F;
-    if( sc_tkn != Id ) return F;
-    sc_next();
-    if( !pa_vartail(k) ) return F;
+    sc_next(); pa_stars(); if( sc_tkn != Id ) return t_(F);
+    sc_next(); if( !pa_vartail(k) ) return t_(F);
   }
-  if( sc_tkn!=';' ) return F;
+  if( sc_tkn!=';' ) return t_(F);
   sc_next();
-  return T;
+  return t_(T);
+}
+
+int pa_enumerator()
+{
+  t1("pa_enumerator");
+  if( sc_tkn != Id ) return t_(F);
+  sc_next(); if( sc_tkn=='=' ) { sc_next(); if( !pa_intexpr() ) return t_(F); }
+  return t_(T);
+}
+
+int pa_enumdef()
+{
+  t1("pa_enumdef");
+  if( sc_tkn != '{' ) return t_(F);
+  sc_next(); if( !pa_enumerator() ) return t_(F);
+  while( sc_tkn==',' ) { sc_next(); if( !pa_enumerator() ) return t_(F); }
+  if( sc_tkn != '}' ) return t_(F);
+  sc_next(); if( sc_tkn != ';' ) return t_(F);
+  sc_next();
+  return t_(T);
 }
 
 int pa_block() // no check, checks done outside; next token right away
 {
-  p1("pa_block\n");
-  while( sc_tkn!='}' )
-    if( !pa_stmt() ) return F; // error
+  t1("pa_block");
+  while( sc_tkn!='}' ) if( !pa_stmt() ) return t_(F); // error
   sc_next();
-  return T;
+  return t_(T);
 }
 
 int pa_fntail()
 {
-  p1("pa_fntail\n");
-  if( sc_tkn == ';' ) { sc_next(); return T; }          // fn declaration
-  if( sc_tkn == '{' ) { sc_next(); return pa_block(); } // fn definition
-  return F;
+  t1("pa_fntail");
+  if( sc_tkn == ';' ) { sc_next(); return t_(T); }          // fn declaration
+  if( sc_tkn == '{' ) { sc_next(); return t_(pa_block()); } // fn definition
+  return t_(F);
+}
+
+int pa_argdef()
+{
+  t1("pa_argdef");
+  if( !pa_type() ) return t_(F);
+  pa_stars();
+  if( sc_tkn != Id ) return t_(F);
+  sc_next();
+  return t_(T);
+}
+
+int pa_args()
+{
+  t1("pa_args");
+  if( !pa_argdef() ) return t_(T);
+  while( sc_tkn==',' ) { sc_next(); if( !pa_argdef() ) return t_(F); }
+  return t_(T);
 }
 
 int pa_fn_or_vars()
 {
-  p1("pa_fn_or_vars\n");
-  if( sc_tkn != '(' ) return pa_vars(0);
+  t1("pa_fn_or_vars");
+  if( sc_tkn != '(' ) return t_(pa_vars(0));
+  sc_next(); if( ! pa_args() ) return t_(F);
+  if( sc_tkn != ')' ) return t_(F);
   sc_next();
-  if( ! pa_args() ) return F;
-  if( sc_tkn != ')' ) return F;
-  sc_next();
-  return pa_fntail();
-}
-
-int pa_stars()
-{
-  p1("pa_stars\n");
-  if( sc_tkn=='*' ) { sc_next(); if( sc_tkn=='*' ) sc_next(); }
-  return T;
-}
-
-int pa_type()
-{
-  p1("pa_type\n");
-  if( sc_tkn==Kw+Int || sc_tkn==Kw+Char || sc_tkn==Kw+Void) { sc_next(); return T; }
-  return F;
+  return t_(pa_fntail());
 }
 
 int pa_decl_or_def()
 {
-  p1("pa_decl_or_def\n");
-  if( sc_tkn==Kw+Enum ) { sc_next(); return pa_enumdef(); }
-  if( !pa_type() || !pa_stars() ) return F;
-  if( sc_tkn != Id ) return F;
+  t1("pa_decl_or_def");
+  if( sc_tkn==Kw+Enum ) { sc_next(); return t_(pa_enumdef()); }
+  if( !pa_type() ) return t_(F);
+  pa_stars();
+  if( sc_tkn != Id ) return t_(F);
   sc_next();
-  return pa_fn_or_vars();
+  return t_(pa_fn_or_vars());
 }
 
-int pa_file( char* fn )
+int pa_program( char* fn )
 {
-  p3("pa_file ",fn,"\n");
+  t2("pa_program ",fn);
   rd_file = open( fn, O_RDONLY, 0 );
-  if( rd_file<=0 ) return T;
+  if( rd_file<=0 ) return t_(F);
 
   int rc = T;
-  sc_next();
-  while( sc_tkn!=Eof )
-    if( !pa_decl_or_def() )
-      { rc = F; break; }
+  sc_next(); // start parsing<-scanning<-reading
+  while( sc_tkn!=Eof ) if( !pa_decl_or_def() ) { rc = F; break; }
 
   close( rd_file );
-  return rc;
+  return t_(rc);
 }
 
 // Main compiler function ------------------------------------------------------
 
 int main( int ac, char** av )
 {
-  if( !pa_file( av[1] ) ) { p2( "Error in ", av[1] ); return 1; }
+  if( !pa_program( av[1] ) ) { p2( "\n*** Error in ", av[1] ); return 1; }
+  p1( "ok\n" );
   return 0;
 }
