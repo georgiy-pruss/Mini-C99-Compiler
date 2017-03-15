@@ -14,7 +14,7 @@ int open( char* path, int oflag, int cmode ); // >0 if ok; mode: rwx(u)rwx(g)rwx
 int close( int fd );                          // 0 if ok
 int read( int fd, char* buf, int count );     // fd=0 - stdin
 int write( int fd, char* buf, int count );    // fd=1 - stdout, fd=2 - stderr
-char* malloc( int size );                     // unsigned long long for 64-bit architecture
+char* malloc( int size );
 void free( char* ptr );
 void exit( int status );
 
@@ -23,25 +23,24 @@ enum { O_RDONLY, O_WRONLY, O_RDWR, O_APPEND=8, O_CREAT=512, O_TRUNC=1024, O_EXCL
 
 int is_abc( int c ) { return c>='a' && c<='z' || c>='A' && c<='Z' || c=='_'; }
 
-int strlen( char* s ) { int n=0; while( *s ) { ++s; ++n; } return n; }
-char* strcpy( char* d, char* s ) { char* r=d; while( *s ) { *d = *s; ++d; ++s; } *d = 0; return r; }
-char* strcat( char* s, char* t ) { int n = strlen( s ); strcpy( s+n, t ); return s; }
+int strlen( char* s ) { char* b=s; while( *s ) ++s; return s-b; }
+char* strcpy( char* d, char* s ) { char* r = d; while( *s ) { *d = *s; ++d; ++s; } *d = 0; return r; }
+char* strcat( char* s, char* t ) { strcpy( s + strlen( s ), t ); return s; }
+char* strdup( char* s ) { return strcpy( malloc( strlen(s) + 1 ), s ); }
 
 char* strrev( char* s )
 {
   int n = strlen(s); if( n<=1 ) return s;
-  char* b = s; char* e = s + n - 1;
-  while( b<e ) { char t = *e; *e = *b; *b = t; ++b; --e; }
+  for( char *b = s, *e = s + n - 1; b<e; ++b, --e ) { char t = *e; *e = *b; *b = t; }
   return s;
 }
 
 int strcmp( char* s, char* t )
 {
-  while( *s )
+  for( ; *s; ++s, ++t )
   {
     if( *t==0 || *s>*t ) return 1;
     if( *s<*t ) return -1;
-    ++s; ++t;
   }
   if( *t ) return -1;
   return 0;
@@ -51,17 +50,8 @@ int strequ( char* s, char* t ) { return strcmp( s, t ) == 0; }
 
 char* strrchr( char* s, int c )
 {
-  int n = strlen(s);
-  while( n>0 ) { if( s[n-1] == c ) return s+(n-1); --n; }
+  for( int n = strlen(s); n>0; --n ) { if( s[n-1] == c ) return s + (n-1); }
   return 0;
-}
-
-char* strdup( char* s )
-{
-  int n = strlen(s);
-  char* t = malloc( n+1 );
-  strcpy( t, s );
-  return t;
 }
 
 char i2s_buf[16]; // buffer for i2s(v)
@@ -78,7 +68,7 @@ char* i2s( int value )
     value = -value;
   }
   char* beg = dst;
-  while( value != 0 ) { *dst = (char)(value % 10 + '0'); ++dst; value = value / 10; }
+  for( ; value != 0; ++dst ) { *dst = (char)(value % 10 + '0'); value = value / 10; }
   *dst = 0;
   strrev( beg );
   return str;
@@ -88,7 +78,7 @@ int s2i( char* str )
 {
   if( *str == '-' ) return -s2i( str+1 );
   int v = 0;
-  while( *str >= '0' && *str <= '9' ) { v = 10*v + *str - '0'; ++str; }
+  for( ; *str >= '0' && *str <= '9'; ++str ) v = 10*v + *str - '0';
   return v;
 }
 
@@ -110,15 +100,16 @@ enum { Err, Eof, Num, Chr, Str, Id, // tokens
        // Op: = i d e n (++ -- == !=) < > l g (<= >=) + - * / % & | ! (3 logical ops)
        // Sep: ( ) [ ] { } , ;
        Kw=200 }; // actual tokens for keywors: Kw+k, where k is from below:
-enum { Void, Char, Int, Enum, If, Else, While, Break, Return, Sizeof }; // keywords
+enum { Void, Char, Int, Enum, If, Else, While, For, Break, Return, Sizeof }; // keywords
 
 int find_kw( char* s )
 {
   if( strequ( s, "int"    ) ) return Int;    if( strequ( s, "char"   ) ) return Char;
   if( strequ( s, "void"   ) ) return Void;   if( strequ( s, "enum"   ) ) return Enum;
   if( strequ( s, "if"     ) ) return If;     if( strequ( s, "else"   ) ) return Else;
-  if( strequ( s, "while"  ) ) return While;  if( strequ( s, "break"  ) ) return Break;
-  if( strequ( s, "return" ) ) return Return; if( strequ( s, "sizeof" ) ) return Sizeof;
+  if( strequ( s, "while"  ) ) return While;  if( strequ( s, "for"    ) ) return For;
+  if( strequ( s, "break"  ) ) return Break;  if( strequ( s, "return" ) ) return Return;
+  if( strequ( s, "sizeof" ) ) return Sizeof;
   return -1;
 }
 
@@ -273,13 +264,13 @@ int sc_read_next() // scan for next token
   }
 }
 
-char* KWDS[10] = { "void","char","int","enum","if","else","while","break","return","sizeof" };
+char* KWDS[11] = { "void","char","int","enum","if","else","while","for","break","return","sizeof" };
 
 char escape_s[200];
 char* escape( char* s )
 {
   char* d = escape_s;
-  while( *s )
+  for( ; *s; ++d, ++s )
   {
     if( *s==10 ) { *d=92; ++d; *d='n'; }
     else if( *s==13 ) { *d=92; ++d; *d='r'; }
@@ -287,8 +278,6 @@ char* escape( char* s )
     else if( *s==0 ) { *d=92; ++d; *d='0'; }
     else if( *s==32 ) { *d=92; ++d; *d='_'; } // \_ for space
     else *d=*s;
-    ++d;
-    ++s;
   }
   *d = 0;
   return escape_s;
@@ -305,14 +294,13 @@ void allocnames( int n )
 {
   names = (char**)malloc( 4*n );
   nnames = n;
-  int i = 0;
-  while( i<n ) { names[i] = 0; ++i; }
+  for( int i = 0; i<n; ++i ) names[i] = 0;
 }
 
 int hash( char* s )
 {
-  int h = 5381, i = 0;
-  while( s[i] ) { h = (h*66 + s[i]) % 16777216; ++i; }
+  int h = 5381;
+  for( ; *s; ++s ) h = (h*66 + *s) % 16777216;
   return h;
 }
 
@@ -321,8 +309,7 @@ int freeze_name( char* s )
   if( HT_DEBUG ) p1( s );
   int M=1009;
   if( names==0 ) allocnames( M );
-  int h = hash( s );
-  int x = h % M;
+  int x = hash( s ) % M;
   while( names[x] )
   {
     if( strequ( names[x], s ) ) { if( HT_DEBUG ) p3( " == ", i2s(x), "\n" ); return x; }
@@ -337,16 +324,12 @@ int freeze_name( char* s )
 
 void dump_names()
 {
-  int i=0, k=0;
-  while( i<nnames )
-  {
-    if( names[i] ) { ++k; p4( i2s(i), " ", names[i], "\n" ); }
-    ++i;
-  }
-  p1( "---------\n" );
-  p2( i2s(k), " ^^^\n" );
-  p2( i2s(fnames), " names\n" );
-  p2( i2s(collisions), " colls\n" );
+  int namecount=0;
+  for( int i=0; i<nnames; ++i ) if( names[i] ) { ++namecount; p4( i2s(i), " ", names[i], "\n" ); }
+  p1( "-------------------------------------\n" );
+  p2( i2s(fnames), " names, " );
+  if( namecount!=fnames ) p3( " BUT IN TABLE: ", i2s(namecount), ", " );
+  p2( i2s(collisions), " collisions\n" );
 }
 
 
@@ -482,8 +465,7 @@ int pa_term()
       pa_stars(); if( sc_tkn!=')' ) return t_(F);
       sc_next(); return t_(pa_term());
     }
-    if( !pa_expr() ) return t_(F);
-    if( sc_tkn!=')' )return t_(F);
+    if( !pa_expr() || sc_tkn!=')' ) return t_(F);
     sc_next();
     return t_(pa_call_or_index());
   }
@@ -510,10 +492,24 @@ int pa_expr()
   return t_(T);
 }
 
+int pa_def_or_expr()
+{
+  t1("pa_def_or_expr");
+  if( sc_tkn == Kw + Int || sc_tkn == Kw + Char || sc_tkn == Kw + Void )
+  {
+    if( !pa_type() || !pa_stars() ) return t_( F );
+    if( sc_tkn != Id ) return t_( F );
+    sc_next(); return t_( pa_vars(1) );
+  }
+  if( !pa_expr() || sc_tkn != ';' ) return t_( F ); // expr ';'
+  sc_next();
+  return t_( T );
+}
+
 int pa_stmt()
 {
   t1("pa_stmt");
-  if( sc_tkn==';' ) { sc_next(); return t_(T); }                // empty stmt ';'
+  if( sc_tkn==';' ) { sc_next(); return t_(T); } // empty stmt ';'
   if( sc_tkn=='{' ) { sc_next(); return t_(pa_block()); }
   if( sc_tkn==Kw+Break )
   {
@@ -539,17 +535,17 @@ int pa_stmt()
     if( sc_tkn==Kw+Else ) { sc_next(); if( !pa_stmt() ) return t_(F); }
     return t_(T);
   }
-  if( sc_tkn==Kw+Int || sc_tkn==Kw+Char || sc_tkn==Kw+Void )
+  if( sc_tkn==Kw+For )
   {
-    if( !pa_type() || !pa_stars() ) return t_(F);
-    if( sc_tkn != Id ) return t_(F);
+    sc_next(); if( sc_tkn != '(' ) return t_( F );
     sc_next();
-    return t_(pa_vars(1));
+    if( sc_tkn!=';' ) { if( !pa_def_or_expr() ) return t_( F ); } else sc_next();
+    if( sc_tkn!=';' ) if( !pa_expr() ) return t_( F ); sc_next();
+    if( sc_tkn!=')' ) if( !pa_exprs() ) return t_( F ); // opt. post-expressions
+    if( sc_tkn!=')' ) return t_( F ); sc_next();
+    return t_( pa_stmt() );
   }
-  // expr ';'
-  if( !pa_expr() || sc_tkn!=';' ) return t_(F);
-  sc_next();
-  return t_(T);
+  return pa_def_or_expr();
 }
 
 int pa_number()
@@ -632,7 +628,7 @@ int pa_enumdef()
   return t_(T);
 }
 
-int pa_block() // no check, checks done outside; next token right away
+int pa_block() // no check for '{', it's done outside; next token right away
 {
   t1("pa_block");
   while( sc_tkn!='}' ) if( !pa_stmt() ) return t_(F); // error
@@ -705,14 +701,6 @@ int pa_program( char* fn )
 
 int main( int ac, char** av )
 {
-  /*
-  SC_DEBUG=0; // -T
-  RD_LINES=0; // -L
-  PA_TRACE=0; // -P
-  HT_DEBUG=0; // -H
-  HT_DUMP=0;  // -D
-  */
-
   if( ac==1 || ac==2 && (strequ( av[1], "-h" ) || strequ( av[1], "--help" )) )
   {
     p1( "cc.exe [optsions] file.c\n" );
@@ -724,20 +712,18 @@ int main( int ac, char** av )
     return 0;
   }
   char* filename = 0;
-  int a=0;
-  while( a<ac )
+  for( int i=1; i<ac; ++i )
   {
-    if( *av[a] != '-' )
-      filename = av[a];
+    if( *av[i] != '-' )
+      filename = av[i];
     else
     {
-      if( av[a][1] == 'T' ) SC_DEBUG=1;
-      if( av[a][1] == 'L' ) RD_LINES=1;
-      if( av[a][1] == 'P' ) PA_TRACE=1;
-      if( av[a][1] == 'H' ) HT_DEBUG=1;
-      if( av[a][1] == 'D' ) HT_DUMP=1;
+      if( av[i][1] == 'T' ) SC_DEBUG=1;
+      if( av[i][1] == 'L' ) RD_LINES=1;
+      if( av[i][1] == 'P' ) PA_TRACE=1;
+      if( av[i][1] == 'H' ) HT_DEBUG=1;
+      if( av[i][1] == 'D' ) HT_DUMP=1;
     }
-    ++a;
   }
   if( !filename ) { p1( "No file name provided\n" ); return 0; }
   if( !pa_program( filename ) ) { p3( "\n*** Error in ", filename, " ***\n" ); return 1; }

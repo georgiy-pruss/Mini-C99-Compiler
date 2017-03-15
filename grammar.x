@@ -1,11 +1,9 @@
-// comments are //... and /*...*/ the later can be multi-line
 // syntax: http://www.lysator.liu.se/c/ANSI-C-grammar-y.html
-// parse: https://en.wikipedia.org/wiki/Recursive_descent_parser
-// {...} can be 0 or more times  [...] can be 0 or 1 time   x|y alternative
+// {...} can be 0 or more times;  [...] is optional;  x|y alternative
 
 primary : @Number | @Char | @String | @Id | '(' expr ')'
 
-exprs : expr { ',' expr }
+exprs : expr { ',' expr }  // in calls and last item in for-header
 
 call_or_index : { '[' expr ']' | '(' [ exprs ] ')' }
 
@@ -16,7 +14,7 @@ type : "int" | "char" | "void"           // only these types
 stars : [ '*' [ '*' ] ]                  // up to two stars for int and char
 
 sizeofexpr : '(' type stars ')'
-           | '(' @Id [ '[' @Number ']' ] ')'  // no: sizof expr
+           | '(' @Id [ '[' @Number ']' ] ')'  // no: sizof expr w/o ()
 
 unexpr : '+''+' unexpr | '-''-' unexpr
        | '-' term | '!' term | '*' term  // no: &x ~x
@@ -37,12 +35,15 @@ binop : '*' | '/' | '%'                  // pri. 3     no:
 
 expr : term { binop term }
 
+def_or_expr : type stars @Id vars__1     // ends with ';'
+            | expr ';'
+
 stmt : ';'
      | '{' block
      | "break" ';'                | "return" [ expr ] ';'
      | "while" '(' expr ')' stmt  | "if" '(' expr ')' stmt [ "else" stmt ]
-     | type stars @Id vars__1
-     | expr ';'
+     | "for" '(' def_or_expr [ expr ] ';' [ expr { ',' expr } ] ')' stmt
+     | def_or_expr // ends with ';'
 
 number : @Number | @Char
 
@@ -54,8 +55,8 @@ constexpr : intexpr                             // int n = -42;
           | @Id                                 // int* ptr = array;
           | '{' constexpr { ',' constexpr } '}' // int m[4] = { 1, 2 };
 
-vartail__0 : [ '[' number ']' ] [ '=' constexpr ]
-vartail__1 : [ '[' number ']' ] [ '=' expr ]
+vartail__0 : [ '[' number ']' ] [ '=' constexpr ]  // no: int a[] = {...};
+vartail__1 : [ '[' number ']' ] [ '=' expr ]       // no: char s[] = "...";
 
 vars__n : vartail__n { ',' stars @Id vartail__n } ';'
 
