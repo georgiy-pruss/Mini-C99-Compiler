@@ -2,8 +2,11 @@
 // gcc -fno-builtin-malloc -fno-builtin-strlen -O2 cc.c -o cc.exe
 // -std=c99 is default
 
-int DEBUG=0;
-int PA_TRACE=0;
+int SC_DEBUG=0; // -T
+int RD_LINES=0; // -L
+int PA_TRACE=0; // -P
+int HT_DEBUG=0; // -H
+int HT_DUMP=0;  // -D
 
 // stdlib ----------------------------------------------------------------------
 
@@ -148,10 +151,10 @@ int  sc_num;       // for Num and Chr
 
 int sc_read_next() // scan for next token
 {
-  if( rd_char < 0 ) { rd_next(); rd_line = 1; if(DEBUG) p3( "[", i2s(rd_line), "]" ); }
+  if( rd_char < 0 ) { rd_next(); rd_line = 1; if(RD_LINES) p3( "[", i2s(rd_line), "]" ); }
   while( rd_char==' ' || rd_char==10 || rd_char==13 )
   {
-    if( rd_char==10 ) { ++rd_line; if(DEBUG) p3( "\n[", i2s(rd_line), "]" ); }
+    if( rd_char==10 ) { ++rd_line; if(RD_LINES) p3( "\n[", i2s(rd_line), "]" ); }
     rd_next();
   }
   if( rd_char<0 ) return Eof;
@@ -237,20 +240,20 @@ int sc_read_next() // scan for next token
       rd_next();
       while( rd_char!=10 && rd_char>0 )
         rd_next();
-      if( rd_char==10 ) { ++rd_line; if(DEBUG) p3( "[//]\n[", i2s(rd_line), "]" ); }
+      if( rd_char==10 ) { ++rd_line; if(RD_LINES) p3( "[//]\n[", i2s(rd_line), "]" ); }
       if(rd_char>0) rd_next();
       return sc_read_next();
     }
     else if( rd_char == '*' ) // /*...*/
     {
       rd_next();
-      if( rd_char==10 ) { ++rd_line; if(DEBUG) p3( "[/*]\n[", i2s(rd_line), "]" ); }
+      if( rd_char==10 ) { ++rd_line; if(RD_LINES) p3( "[/*]\n[", i2s(rd_line), "]" ); }
       while(1)
       {
         while( rd_char!='*' && rd_char>0 )
         {
           rd_next();
-          if( rd_char==10 ) { ++rd_line; if(DEBUG) p3( "[**]\n[", i2s(rd_line), "]" ); }
+          if( rd_char==10 ) { ++rd_line; if(RD_LINES) p3( "[**]\n[", i2s(rd_line), "]" ); }
         }
         if(rd_char>0) rd_next();
         if( rd_char == '/' )
@@ -291,6 +294,8 @@ char* escape( char* s )
   return escape_s;
 }
 
+// Hash Table ------------------------------------------------------------------
+
 char** names = 0;
 int nnames = 0;
 int fnames = 0;
@@ -306,30 +311,25 @@ void allocnames( int n )
 
 int hash( char* s )
 {
-  int h = 5381;
-  int i = 0;
-  while( s[i] )
-  {
-    h = (h*66 + s[i]) % 16777216;
-    ++i;
-  }
+  int h = 5381, i = 0;
+  while( s[i] ) { h = (h*66 + s[i]) % 16777216; ++i; }
   return h;
 }
 
 int freeze_name( char* s )
 {
-  /*p2( s, "  " );*/
+  if( HT_DEBUG ) p1( s );
   int M=1009;
   if( names==0 ) allocnames( M );
   int h = hash( s );
   int x = h % M;
   while( names[x] )
   {
-    if( strequ( names[x], s ) ) { /*p3( "== ", i2s(x), "\n" );*/ return x; }
+    if( strequ( names[x], s ) ) { if( HT_DEBUG ) p3( " == ", i2s(x), "\n" ); return x; }
     x = (x+1) % M;
-    ++collisions;
+    if( HT_DUMP ) ++collisions;
   }
-  /*p3( "++ ", i2s(x), "\n" );*/
+  if( HT_DEBUG ) p3( " ++ ", i2s(x), "\n" );
   names[x] = strdup( s );
   ++fnames;
   return x;
@@ -354,7 +354,7 @@ void sc_next() // put token into sc_tkn
 {
   sc_tkn = sc_read_next();
   if( sc_tkn == Id ) freeze_name( sc_text );
-  if( DEBUG )
+  if( SC_DEBUG )
   {
     p3( " ", i2s(sc_tkn), " - " );
     if (sc_tkn >= Kw)        p2( "kw ", KWDS[ sc_tkn - Kw ] );
@@ -705,9 +705,43 @@ int pa_program( char* fn )
 
 int main( int ac, char** av )
 {
-  if( ac!=2 ) { p1( "No file name provided\n" ); return 0; }
-  if( !pa_program( av[1] ) ) { p3( "\n*** Error in ", av[1], " ***\n" ); return 1; }
+  /*
+  SC_DEBUG=0; // -T
+  RD_LINES=0; // -L
+  PA_TRACE=0; // -P
+  HT_DEBUG=0; // -H
+  HT_DUMP=0;  // -D
+  */
+
+  if( ac==1 || ac==2 && (strequ( av[1], "-h" ) || strequ( av[1], "--help" )) )
+  {
+    p1( "cc.exe [optsions] file.c\n" );
+    p1( "-T  show tokens\n" );
+    p1( "-L  show line numbers\n" );
+    p1( "-P  show parser trace\n" );
+    p1( "-H  show hash table trace\n" );
+    p1( "-D  show hash table data\n" );
+    return 0;
+  }
+  char* filename = 0;
+  int a=0;
+  while( a<ac )
+  {
+    if( *av[a] != '-' )
+      filename = av[a];
+    else
+    {
+      if( av[a][1] == 'T' ) SC_DEBUG=1;
+      if( av[a][1] == 'L' ) RD_LINES=1;
+      if( av[a][1] == 'P' ) PA_TRACE=1;
+      if( av[a][1] == 'H' ) HT_DEBUG=1;
+      if( av[a][1] == 'D' ) HT_DUMP=1;
+    }
+    ++a;
+  }
+  if( !filename ) { p1( "No file name provided\n" ); return 0; }
+  if( !pa_program( filename ) ) { p3( "\n*** Error in ", filename, " ***\n" ); return 1; }
   p1( "ok\n" );
-  dump_names();
+  if( HT_DUMP ) dump_names();
   return 0;
 }
