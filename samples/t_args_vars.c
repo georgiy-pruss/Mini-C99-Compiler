@@ -1,3 +1,5 @@
+// debugging in vs2013 http://www.kipirvine.com/asm/debug/vstudio2013/index.htm
+// crt file D:\VS2013\VC\crt\src\crtexe.c
 
 int f(int p1, int p2, int p3)
 {
