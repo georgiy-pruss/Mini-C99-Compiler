@@ -53,11 +53,19 @@ char* strrchr( char* s, int c )
   return 0;
 }
 
-char i2s_buf[16]; // buffer for i2s() if the second argument is 0
-
-char* i2s( int value, char* str )
+char* strdup( char* s )
 {
-  if( str==0 ) str = i2s_buf; // use common buffer
+  int n = strlen(s);
+  char* t = malloc( n+1 );
+  strcpy( t, s );
+  return t;
+}
+
+char i2s_buf[16]; // buffer for i2s(v)
+
+char* i2s( int value )
+{
+  char* str = i2s_buf;
   if( value==0 ) { *str = '0'; str[1] = 0; return str; }
   char* dst = str;
   if( value<0 )
@@ -140,10 +148,10 @@ int  sc_num;       // for Num and Chr
 
 int sc_read_next() // scan for next token
 {
-  if( rd_char < 0 ) { rd_next(); rd_line = 1; if(DEBUG) p3( "[", i2s(rd_line,0), "]" ); }
+  if( rd_char < 0 ) { rd_next(); rd_line = 1; if(DEBUG) p3( "[", i2s(rd_line), "]" ); }
   while( rd_char==' ' || rd_char==10 || rd_char==13 )
   {
-    if( rd_char==10 ) { ++rd_line; if(DEBUG) p3( "\n[", i2s(rd_line,0), "]" ); }
+    if( rd_char==10 ) { ++rd_line; if(DEBUG) p3( "\n[", i2s(rd_line), "]" ); }
     rd_next();
   }
   if( rd_char<0 ) return Eof;
@@ -229,20 +237,20 @@ int sc_read_next() // scan for next token
       rd_next();
       while( rd_char!=10 && rd_char>0 )
         rd_next();
-      if( rd_char==10 ) { ++rd_line; if(DEBUG) p3( "[//]\n[", i2s(rd_line,0), "]" ); }
+      if( rd_char==10 ) { ++rd_line; if(DEBUG) p3( "[//]\n[", i2s(rd_line), "]" ); }
       if(rd_char>0) rd_next();
       return sc_read_next();
     }
     else if( rd_char == '*' ) // /*...*/
     {
       rd_next();
-      if( rd_char==10 ) { ++rd_line; if(DEBUG) p3( "[/*]\n[", i2s(rd_line,0), "]" ); }
+      if( rd_char==10 ) { ++rd_line; if(DEBUG) p3( "[/*]\n[", i2s(rd_line), "]" ); }
       while(1)
       {
         while( rd_char!='*' && rd_char>0 )
         {
           rd_next();
-          if( rd_char==10 ) { ++rd_line; if(DEBUG) p3( "[**]\n[", i2s(rd_line,0), "]" ); }
+          if( rd_char==10 ) { ++rd_line; if(DEBUG) p3( "[**]\n[", i2s(rd_line), "]" ); }
         }
         if(rd_char>0) rd_next();
         if( rd_char == '/' )
@@ -283,17 +291,76 @@ char* escape( char* s )
   return escape_s;
 }
 
+char** names = 0;
+int nnames = 0;
+int fnames = 0;
+int collisions = 0;
+
+void allocnames( int n )
+{
+  names = (char**)malloc( 4*n );
+  nnames = n;
+  int i = 0;
+  while( i<n ) { names[i] = 0; ++i; }
+}
+
+int hash( char* s )
+{
+  int h = 1234567;
+  int i = 0;
+  while( s[i] )
+  {
+    h = (h*96 + s[i]*129 - 31 + h/8388608) % 16777216; // <<6.58 bits and >>23 bits
+    ++i;
+  }
+  return h;
+}
+
+int freeze_name( char* s )
+{
+  /*p2( s, "  " );*/
+  if( names==0 ) allocnames( 547 );
+  int h = hash( s );
+  int x = h % 547;
+  while( names[x] )
+  {
+    if( strequ( names[x], s ) ) { /*p3( "== ", i2s(x), "\n" );*/ return x; }
+    x = (x+1) % 547;
+    ++collisions;
+  }
+  /*p3( "++ ", i2s(x), "\n" );*/
+  names[x] = strdup( s );
+  ++fnames;
+  return x;
+}
+
+void dump_names()
+{
+  int i=0, k=0;
+  while( i<nnames )
+  {
+    if( names[i] ) { ++k; p4( i2s(i), " ", names[i], "\n" ); }
+    ++i;
+  }
+  assert( k==fnames, "k==fnames" );
+  p1( "---------\n" );
+  p2( i2s(fnames), " names\n" );
+  p2( i2s(collisions), " colls\n" );
+}
+
+
 void sc_next() // put token into sc_tkn
 {
   sc_tkn = sc_read_next();
+  if( sc_tkn == Id ) freeze_name( sc_text );
   if( DEBUG )
   {
-    p3( " ", i2s( sc_tkn, 0 ), " - " );
+    p3( " ", i2s(sc_tkn), " - " );
     if (sc_tkn >= Kw)        p2( "kw ", KWDS[ sc_tkn - Kw ] );
-    else if( sc_tkn == Id )  p2( "id ", sc_text );
+    else if( sc_tkn == Id )  p4( "id ", sc_text, " #",i2s(freeze_name( sc_text )) );
     else if( sc_tkn == Str ) p2( "str ", escape(sc_text) );
-    else if( sc_tkn == Num ) p2( "num ", i2s( sc_num, 0 ) );
-    else if( sc_tkn == Chr ) p2( "chr ", i2s( sc_num, 0 ) );
+    else if( sc_tkn == Num ) p2( "num ", i2s(sc_num) );
+    else if( sc_tkn == Chr ) p2( "chr ", i2s(sc_num) );
     else if( sc_tkn == Eof ) p1( "eof" );
     else if( sc_tkn == Err ) p2( "err", sc_text );
     else if( sc_tkn < Kw ) { char o[2] = "."; o[0]=sc_tkn; p2( "op/sep ", o ); }
@@ -313,7 +380,7 @@ void tI() { p1("                    "); int i=0; while(i<tL) { p1( "." ); ++i; }
 void t1( char* s ) { if( PA_TRACE ) { tI(); p2( s,"\n" ); ++tL; } }
 void t2( char* s, char* s2 ) { if( PA_TRACE ) { tI(); p3( s,s2,"\n" ); ++tL; } }
 void t3( char* s, char* s2, char* s3 ) { if( PA_TRACE ) { tI(); p4( s,s2,s3,"\n" ); ++tL; } }
-int t_( int r )  { if( PA_TRACE ) { --tL; tI(); p3( "<< ", i2s(r,0), "\n" ); } return r; }
+int t_( int r )  { if( PA_TRACE ) { --tL; tI(); p3( "<< ", i2s(r), "\n" ); } return r; }
 
 enum { F, T }; // Boolean result of pa_* functions: False, True
 
@@ -517,7 +584,7 @@ int pa_constexpr()
 
 int pa_vartail(int k)
 {
-  t2("pa_vartail__",i2s(k,0));
+  t2("pa_vartail__",i2s(k));
   if( sc_tkn=='[' )
   {
     sc_next(); if( !pa_number() ) return t_(F); if( sc_tkn!=']' ) return t_(F);
@@ -532,7 +599,7 @@ int pa_vartail(int k)
 
 int pa_vars(int k)
 {
-  t2("pa_vars__",i2s(k,0));
+  t2("pa_vars__",i2s(k));
   if( !pa_vartail(k) ) return t_(F);
   while( sc_tkn==',' )
   {
@@ -637,7 +704,9 @@ int pa_program( char* fn )
 
 int main( int ac, char** av )
 {
-  if( !pa_program( av[1] ) ) { p2( "\n*** Error in ", av[1] ); return 1; }
+  if( ac!=2 ) { p1( "No file name provided\n" ); return 0; }
+  if( !pa_program( av[1] ) ) { p3( "\n*** Error in ", av[1], " ***\n" ); return 1; }
   p1( "ok\n" );
+  dump_names();
   return 0;
 }
