@@ -11,7 +11,7 @@ int open( char* path, int oflag, int cmode ); // >0 if ok; mode: rwx(u)rwx(g)rwx
 int close( int fd );                          // 0 if ok
 int read( int fd, char* buf, int count );     // fd=0 - stdin
 int write( int fd, char* buf, int count );    // fd=1 - stdout, fd=2 - stderr
-char* malloc( int size );
+char* malloc( int size );                     // unsigned long long for 64-bit architecture
 void free( char* ptr );
 void exit( int status );
 
@@ -313,8 +313,6 @@ void tI() { p1("                    "); int i=0; while(i<tL) { p1( "." ); ++i; }
 void t1( char* s ) { if( PA_TRACE ) { tI(); p2( s,"\n" ); ++tL; } }
 void t2( char* s, char* s2 ) { if( PA_TRACE ) { tI(); p3( s,s2,"\n" ); ++tL; } }
 void t3( char* s, char* s2, char* s3 ) { if( PA_TRACE ) { tI(); p4( s,s2,s3,"\n" ); ++tL; } }
-void t4( char* s, char* s2, char* s3, char* s4 ) { if( PA_TRACE )
-  { tI(); p4( s,s2,s3,s4 );p1("\n"); ++tL; } }
 int t_( int r )  { if( PA_TRACE ) { --tL; tI(); p3( "<< ", i2s(r,0), "\n" ); } return r; }
 
 enum { F, T }; // Boolean result of pa_* functions: False, True
