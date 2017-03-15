@@ -45,7 +45,9 @@ stmt : ';'
      | "for" '(' def_or_expr [ expr ] ';' [ expr { ',' expr } ] ')' stmt
      | def_or_expr // ends with ';'
 
-number : @Number | @Char
+number : @Number | @Char | @Id // can be enum-const
+
+// shoud be re-arranged to scalar const and vector const
 
 intexpr : number | '-' number | '!' number
         | "sizeof" sizeofexpr

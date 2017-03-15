@@ -2,6 +2,13 @@
 // gcc -fno-builtin-malloc -fno-builtin-strlen -O2 cc.c -o cc.exe
 // -std=c99 is default
 
+// Parameters ------------------------------------------------------------------
+
+enum { INTSZ = 4, // all this is for 32-bit architecture; int and int* is 4 bytes
+  STRSZ=260     ,    // max size of any string (line, name, etc.)
+  ID_TABLE_LEN=1009, // for id freezing; should be prime number
+  RD_BUF=8000 };     // buffer for reading program text
+
 int SC_DEBUG=0; // -T
 int RD_LINES=0; // -L
 int PA_TRACE=0; // -P
@@ -54,7 +61,7 @@ char* strrchr( char* s, int c )
   return 0;
 }
 
-char i2s_buf[16]; // buffer for i2s(v)
+char i2s_buf[16]; // buffer for i2s(v); longest number is -GMMMKKKEEE i.e. 12 chars
 
 char* i2s( int value )
 {
@@ -115,7 +122,7 @@ int find_kw( char* s )
 
 // File reader -----------------------------------------------------------------
 
-char rd_buf[8000];
+char rd_buf[RD_BUF];
 int  rd_buf_len  = -1; // actual length of buffer; init <rd_char_pos to start rd_next
 int  rd_char_pos =  0; // position in buffer
 int  rd_char     = -1; // current/last char; also <0 to start in sc_read_next
@@ -134,13 +141,64 @@ void rd_next() // read next character, save it in rd_char; <0 if eof
   rd_char = rd_buf[ rd_char_pos ]; ++rd_char_pos;
 }
 
+// Id Table --------------------------------------------------------------------
+
+char** id_table = 0;
+int id_table_len = 0;
+int id_count = 0;
+int collisions = 0;
+
+void id_table_create( int n )
+{
+  id_table = (char**)malloc( 4*n );
+  id_table_len = n;
+  for( int i = 0; i<n; ++i ) id_table[i] = 0;
+}
+
+int id_hash( char* s )
+{
+  int h = 5381;
+  for( ; *s; ++s ) h = (h*66 + *s) % 16777216;
+  return h;
+}
+
+int id_index( char* s ) // looks up in the table or adds there if needed
+{
+  if( HT_DEBUG ) p1( s );
+  if( id_table==0 ) id_table_create( ID_TABLE_LEN );
+  int h = id_hash( s ) % id_table_len;
+  int collision = 0;
+  while( id_table[h] )
+  {
+    if( strequ( id_table[h], s ) ) { if( HT_DEBUG ) p3( " == ", i2s(h), "\n" ); return h; }
+    h = (h+1) % id_table_len;
+    collision = 1;
+  }
+  if( collision ) ++collisions;
+  if( HT_DEBUG ) p3( " ++ ", i2s(h), "\n" );
+  id_table[h] = strdup( s );
+  ++id_count;
+  return h;
+}
+
+void id_table_dump()
+{
+  int k=0;
+  for( int i=0; i<id_table_len; ++i )
+    if( id_table[i] ) { ++k; p4( i2s(i), " ", id_table[i], "\n" ); }
+  p1( "-------------------------------------\n" );
+  p2( i2s(k), " ids, " );
+  if( k!=id_count ) p3( " BUT MUST BE: ", i2s(id_count), ", " );
+  p2( i2s(collisions), " collisions\n" );
+}
+
 // Scanner ---------------------------------------------------------------------
 
-int  sc_tkn;       // current token
-char sc_text[260]; // for Id, Kw, Num, Str
-int  sc_num;       // for Num and Chr
+int  sc_tkn;         // current token
+char sc_text[STRSZ]; // for Id, Kw, Num, Str
+int  sc_num;         // for Num and Chr, also id_number for Id
 
-int sc_read_next() // scan for next token
+int sc_read_next()   // scan for next token
 {
   if( rd_char < 0 ) { rd_next(); rd_line = 1; if(RD_LINES) p3( "[", i2s(rd_line), "]" ); }
   while( rd_char==' ' || rd_char==10 || rd_char==13 )
@@ -164,6 +222,7 @@ int sc_read_next() // scan for next token
     *p = 0;
     int k = find_kw( sc_text );
     if( k >= 0 ) return Kw+k;
+    sc_num = id_index( sc_text );
     return Id;
   }
   else if( rd_char=='"' ) // String
@@ -266,83 +325,31 @@ int sc_read_next() // scan for next token
 
 char* KWDS[11] = { "void","char","int","enum","if","else","while","for","break","return","sizeof" };
 
-char escape_s[200];
-char* escape( char* s )
+char repr[STRSZ];
+char* str_repr( char* s )
 {
-  char* d = escape_s;
+  char* d = repr; *d = '"'; ++d;
   for( ; *s; ++d, ++s )
   {
     if( *s==10 ) { *d=92; ++d; *d='n'; }
-    else if( *s==13 ) { *d=92; ++d; *d='r'; }
     else if( *s==8 ) { *d=92; ++d; *d='b'; }
     else if( *s==0 ) { *d=92; ++d; *d='0'; }
-    else if( *s==32 ) { *d=92; ++d; *d='_'; } // \_ for space
+    else if( *s==13 ) { *d=92; ++d; *d='r'; }
     else *d=*s;
   }
-  *d = 0;
-  return escape_s;
+  *d = '"'; ++d; *d = 0;
+  return repr;
 }
 
-// Hash Table ------------------------------------------------------------------
-
-char** names = 0;
-int nnames = 0;
-int fnames = 0;
-int collisions = 0;
-
-void allocnames( int n )
-{
-  names = (char**)malloc( 4*n );
-  nnames = n;
-  for( int i = 0; i<n; ++i ) names[i] = 0;
-}
-
-int hash( char* s )
-{
-  int h = 5381;
-  for( ; *s; ++s ) h = (h*66 + *s) % 16777216;
-  return h;
-}
-
-int freeze_name( char* s )
-{
-  if( HT_DEBUG ) p1( s );
-  int M=1009;
-  if( names==0 ) allocnames( M );
-  int x = hash( s ) % M;
-  while( names[x] )
-  {
-    if( strequ( names[x], s ) ) { if( HT_DEBUG ) p3( " == ", i2s(x), "\n" ); return x; }
-    x = (x+1) % M;
-    if( HT_DUMP ) ++collisions;
-  }
-  if( HT_DEBUG ) p3( " ++ ", i2s(x), "\n" );
-  names[x] = strdup( s );
-  ++fnames;
-  return x;
-}
-
-void dump_names()
-{
-  int namecount=0;
-  for( int i=0; i<nnames; ++i ) if( names[i] ) { ++namecount; p4( i2s(i), " ", names[i], "\n" ); }
-  p1( "-------------------------------------\n" );
-  p2( i2s(fnames), " names, " );
-  if( namecount!=fnames ) p3( " BUT IN TABLE: ", i2s(namecount), ", " );
-  p2( i2s(collisions), " collisions\n" );
-}
-
-
-void sc_next() // put token into sc_tkn
+void sc_next() // read and put token into sc_tkn
 {
   sc_tkn = sc_read_next();
-  if( sc_tkn == Id ) freeze_name( sc_text );
   if( SC_DEBUG )
   {
     p3( " ", i2s(sc_tkn), " - " );
     if (sc_tkn >= Kw)        p2( "kw ", KWDS[ sc_tkn - Kw ] );
-    else if( sc_tkn == Id )  p4( "id ", sc_text, " #",i2s(freeze_name( sc_text )) );
-    else if( sc_tkn == Str ) p2( "str ", escape(sc_text) );
+    else if( sc_tkn == Id )  p4( "id ", sc_text, " #",i2s(sc_num) );
+    else if( sc_tkn == Str ) p2( "str ", str_repr(sc_text) );
     else if( sc_tkn == Num ) p2( "num ", i2s(sc_num) );
     else if( sc_tkn == Chr ) p2( "chr ", i2s(sc_num) );
     else if( sc_tkn == Eof ) p1( "eof" );
@@ -355,7 +362,6 @@ void sc_next() // put token into sc_tkn
 
 // Semantics & Code generation -------------------------------------------------
 
-enum { INTSZ = 4 };
 
 // Parser ----------------------------------------------------------------------
 
@@ -548,11 +554,11 @@ int pa_stmt()
   return pa_def_or_expr();
 }
 
-int pa_number()
+int pa_number_or_const()
 {
-  t1("pa_number");
-  if( sc_tkn!=Num && sc_tkn!=Chr ) return t_(F);
-  // i2s( sc_num, tmp );
+  t1("pa_number_or_const");
+  if( sc_tkn!=Num && sc_tkn!=Chr && sc_tkn!=Id ) return t_(F);
+  // i2s( sc_num, tmp ); or it can be enum-const
   sc_next();
   return t_(T);
 }
@@ -562,7 +568,7 @@ int pa_intexpr()
   t1("pa_intexpr");
   if( sc_tkn==Kw+Sizeof ) { sc_next(); return t_(pa_sizeofexpr()); }
   if( sc_tkn=='-' || sc_tkn=='!' ) sc_next();
-  return t_(pa_number());
+  return t_(pa_number_or_const());
 }
 
 int pa_constexpr()
@@ -584,7 +590,8 @@ int pa_vartail(int k)
   t2("pa_vartail__",i2s(k));
   if( sc_tkn=='[' )
   {
-    sc_next(); if( !pa_number() ) return t_(F); if( sc_tkn!=']' ) return t_(F);
+    sc_next();
+    if( !pa_number_or_const() ) return t_(F); if( sc_tkn!=']' ) return t_(F);
     sc_next();
   }
   if( sc_tkn=='=' )
@@ -703,7 +710,7 @@ int main( int ac, char** av )
 {
   if( ac==1 || ac==2 && (strequ( av[1], "-h" ) || strequ( av[1], "--help" )) )
   {
-    p1( "cc.exe [optsions] file.c\n" );
+    p1( "cc.exe [options] file.c\n" );
     p1( "-T  show tokens\n" );
     p1( "-L  show line numbers\n" );
     p1( "-P  show parser trace\n" );
@@ -726,8 +733,9 @@ int main( int ac, char** av )
     }
   }
   if( !filename ) { p1( "No file name provided\n" ); return 0; }
-  if( !pa_program( filename ) ) { p3( "\n*** Error in ", filename, " ***\n" ); return 1; }
+  if( !pa_program( filename ) )
+    { p3( "\n*** Error in ", filename, " around line " ); p2( i2s( rd_line ), " ***\n" ); return 1; }
   p1( "ok\n" );
-  if( HT_DUMP ) dump_names();
+  if( HT_DUMP ) id_table_dump();
   return 0;
 }
