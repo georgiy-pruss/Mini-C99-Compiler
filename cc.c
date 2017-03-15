@@ -306,11 +306,11 @@ void allocnames( int n )
 
 int hash( char* s )
 {
-  int h = 1234567;
+  int h = 5381;
   int i = 0;
   while( s[i] )
   {
-    h = (h*96 + s[i]*129 - 31 + h/8388608) % 16777216; // <<6.58 bits and >>23 bits
+    h = (h*66 + s[i]) % 33554432;
     ++i;
   }
   return h;
@@ -319,13 +319,14 @@ int hash( char* s )
 int freeze_name( char* s )
 {
   /*p2( s, "  " );*/
-  if( names==0 ) allocnames( 547 );
+  int M=1009;
+  if( names==0 ) allocnames( M );
   int h = hash( s );
-  int x = h % 547;
+  int x = h % M;
   while( names[x] )
   {
     if( strequ( names[x], s ) ) { /*p3( "== ", i2s(x), "\n" );*/ return x; }
-    x = (x+1) % 547;
+    x = (x+1) % M;
     ++collisions;
   }
   /*p3( "++ ", i2s(x), "\n" );*/
@@ -342,8 +343,8 @@ void dump_names()
     if( names[i] ) { ++k; p4( i2s(i), " ", names[i], "\n" ); }
     ++i;
   }
-  assert( k==fnames, "k==fnames" );
   p1( "---------\n" );
+  p2( i2s(k), " ^^^\n" );
   p2( i2s(fnames), " names\n" );
   p2( i2s(collisions), " colls\n" );
 }
