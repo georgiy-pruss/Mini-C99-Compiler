@@ -310,7 +310,7 @@ int hash( char* s )
   int i = 0;
   while( s[i] )
   {
-    h = (h*66 + s[i]) % 33554432;
+    h = (h*66 + s[i]) % 16777216;
     ++i;
   }
   return h;
