@@ -3,23 +3,21 @@
 
 primary : @Number | @Char | @String | @Id | '(' expr ')'
 
-exprs : expr { ',' expr }  // args in call and the last item in for-header
+integer : @Number | @Char | @Id  // enum id is like number; maybe { binop integer }
+
+exprs : expr { ',' expr } // args in calls and the last item in for-header
 
 call_or_index : { '[' expr ']' | '(' [ exprs ] ')' }
 
 postfix : primary call_or_index          // no: postfix ++|--
 
-type : "int" | "char" | "void"           // only these types
-
-stars : [ '*' [ '*' ] ]                  // up to two stars for int and char
-
-sizeofexpr : '(' type stars ')'
-           | '(' @Id [ '[' @Number ']' ] ')'  // no: sizeof expr w/o '(' ')'
-
 unexpr : '+''+' unexpr | '-''-' unexpr
        | '-' term | '!' term | '*' term  // no: &x ~x
-       | "sizeof" sizeofexpr
        | postfix
+
+type : "int" | "char" | "void"
+
+stars : [ '*' [ '*' ] ]
 
 term : '(' type stars ')' term
      | '(' expr ')' call_or_index        // shortcut, since we know it's '('
@@ -35,7 +33,7 @@ binop : '*' | '/' | '%'                  // pri. 3     no:
 
 expr : term { binop term }
 
-vardef_or_expr : type stars @Id vars__1     // ends with ';'
+vardef_or_expr : type stars @Id vars     // ends with ';'
                | expr ';'
 
 stmt : ';'
@@ -45,47 +43,33 @@ stmt : ';'
      | "for" '(' vardef_or_expr [ expr ] ';' [ expr { ',' expr } ] ')' stmt
      | vardef_or_expr // ends with ';'
 
+block : { stmt } '}'  // '{' is out of block for easier analysis
 
-number : @Number | @Char | @Id // Id must be be enum-const
+arrayinit : @String                           // char a[] = "abc"; // ARRAY!
+          | '{' @String { ',' @String } '}'   // char* b[] = {"ijk","mn"};
+          | '{' integer { ',' integer } '}'   // int c[] = {1,2,3};
 
-intexpr : number
-        | "sizeof" sizeofexpr
+vartail : [ '=' expr ]
+        | '[' ']' '=' arrayinit               // int** c[] = {0,0};
+        | '[' integer ']' [ '=' arrayinit ]   // int d[100] = {0};
 
-constexpr : [ '-' | '!' ] intexpr { binop intexpr }  // int n = -42;
-          | @String                                  // char* s = "abc";
-          | @Id { binop intexpr }                    // int* ptr = array;
+vars : vartail { ',' stars @Id vartail } ';'
 
-initexpr__0 : constexpr
-initexpr__1 : expr
+argdef : type stars @Id                  // e.g. char** argv
 
-arrayinit : @String
-          | '{' constexpr { ',' constexpr } '}' // ints or strings or enum Ids
+args : argdef { ',' argdef }
 
-vartail__n :  [ '=' initexpr__n ]
-           | '[' ']' '=' arrayinit
-           | '[' intexpr { binop intexpr } ']' [ '=' arrayinit ]
+fn_or_vars : '(' [ args ] ')' ';'        // fn declaration
+           | '(' [ args ] ')' '{' block  // fn definition
+           | vars
 
-vars__n : vartail__n { ',' stars @Id vartail__n } ';'
-
-enumerator : @Id [ '=' intexpr ] // enum ids are like number literals
+enumerator : @Id [ '=' integer ]
 
 enumdef : '{' enumerator { ',' enumerator } '}' ';'
 
+decl_or_def : "enum" enumdef | type stars @Id fn_or_vars
 
-block : { stmt } '}'
-
-fntail : ';' | '{' block      // '{' out of block for easy analysis
-
-argdef : type stars @Id
-
-args : [ argdef { ',' argdef } ]
-
-fn_or_vars : '(' args ')' fntail
-           | vars__0
-
-decl_or_def : type stars @Id fn_or_vars | "enum" enumdef
-
-program : decl_or_def { decl_or_def } @Eof      // definition/declaration
+program : decl_or_def { decl_or_def } @Eof  // definition/declaration
 
 
 # vim: set syntax=ANTLR :

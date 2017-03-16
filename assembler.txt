@@ -1,3 +1,6 @@
+gnu assembler directives
+http://linux.web.cern.ch/linux/scientific4/docs/rhel-as-en-4/tic54x-directives.html
+
 p proc nargs,nlocals
 a arg offset?
 v loc type,nwords,offset?
