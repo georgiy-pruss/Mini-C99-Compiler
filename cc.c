@@ -4,17 +4,18 @@
 
 // Parameters ------------------------------------------------------------------
 
-enum { INTSZ = 4, // all this is for 32-bit architecture; int and int* is 4 bytes
-  STRSZ=260     ,    // max size of any string (line, name, etc.)
+enum { INTSZ = 4,    // all this is for 32-bit architecture; int and int* is 4 bytes
+  STR_MAX_SZ=260,    // max size of any string (line, name, etc.)
   ID_TABLE_LEN=1009, // for id freezing; should be prime number
-  ST_LEN=1000,       // symbol table; max length is 1000 (it's for scopes!)
+  ST_LEN=1000,       // symbol table; max length is 1000 (it's for scopes current state!)
   RD_BUF=8000 };     // buffer for reading program text
 
-int SC_DEBUG=0; // -T
-int RD_LINES=0; // -L
-int PA_TRACE=0; // -P
-int HT_DEBUG=0; // -H
-int HT_DUMP=0;  // -D
+int SC_DEBUG=0; // -T - tokens trace
+int RD_LINES=0; // -L - lines
+int PA_TRACE=0; // -P - parser trace
+int IT_DEBUG=0; // -I - id table trace
+int IT_DUMP=0;  // -D - id table dump
+int ST_DUMP=0;  // -S - symbol table dump
 
 // stdlib ----------------------------------------------------------------------
 
@@ -66,20 +67,19 @@ char i2s_buf[16]; // buffer for i2s(v); longest number is -GMMMKKKEEE i.e. 12 ch
 
 char* i2s( int value )
 {
-  char* str = i2s_buf;
-  if( value==0 ) { *str = '0'; str[1] = 0; return str; }
-  char* dst = str;
+  if( value==0 ) return "0";
+  char* dst = i2s_buf;
   if( value<0 )
   {
-    if( value==(-2147483647-1) ) { strcpy( str, "-2147483648" ); return str; }
+    if( value==(-2147483647-1) ) return "-2147483648"; // min int
     *dst = '-'; ++dst;
     value = -value;
   }
-  char* beg = dst;
+  char* to_rev = dst;
   for( ; value != 0; ++dst ) { *dst = (char)(value % 10 + '0'); value = value / 10; }
   *dst = 0;
-  strrev( beg );
-  return str;
+  strrev( to_rev );
+  return i2s_buf;
 }
 
 int s2i( char* str )
@@ -108,7 +108,7 @@ enum { Err, Eof, Num, Chr, Str, Id, // tokens
        // Op: = i d e n (++ -- == !=) < > l g (<= >=) + - * / % & | ! (3 logical ops)
        // Sep: ( ) [ ] { } , ;
        Kw=200 }; // actual tokens for keywors: Kw+k, where k is from below:
-enum { Void, Char, Int, Enum, If, Else, While, For, Break, Return, Sizeof }; // keywords
+enum { Void, Char, Int, Enum, If, Else, While, For, Break, Return }; // keywords
 
 int find_kw( char* s )
 {
@@ -117,7 +117,6 @@ int find_kw( char* s )
   if( strequ( s, "if"     ) ) return If;     if( strequ( s, "else"   ) ) return Else;
   if( strequ( s, "while"  ) ) return While;  if( strequ( s, "for"    ) ) return For;
   if( strequ( s, "break"  ) ) return Break;  if( strequ( s, "return" ) ) return Return;
-  if( strequ( s, "sizeof" ) ) return Sizeof;
   return -1;
 }
 
@@ -134,7 +133,7 @@ void rd_next() // read next character, save it in rd_char; <0 if eof
 {
   if( rd_char_pos >= rd_buf_len )
   {
-    rd_buf_len = read( rd_file, rd_buf, sizeof(rd_buf)-1 );
+    rd_buf_len = read( rd_file, rd_buf, RD_BUF-1 );
     if( rd_buf_len <= 0 ) { rd_char = -1; return; } // eof
     rd_buf[ rd_buf_len ] = 0;
     rd_char_pos = 0;
@@ -165,18 +164,18 @@ int id_hash( char* s )
 
 int id_index( char* s ) // looks up in the table or adds there if needed
 {
-  if( HT_DEBUG ) p1( s );
+  if( IT_DEBUG ) p1( s );
   if( id_table==0 ) id_table_create( ID_TABLE_LEN );
   int h = id_hash( s ) % id_table_len;
   int collision = 0;
   while( id_table[h] )
   {
-    if( strequ( id_table[h], s ) ) { if( HT_DEBUG ) p3( " == ", i2s(h), "\n" ); return h; }
+    if( strequ( id_table[h], s ) ) { if( IT_DEBUG ) p3( " == ", i2s(h), "\n" ); return h; }
     h = (h+1) % id_table_len;
     collision = 1;
   }
   if( collision ) ++collisions;
-  if( HT_DEBUG ) p3( " ++ ", i2s(h), "\n" );
+  if( IT_DEBUG ) p3( " ++ ", i2s(h), "\n" );
   id_table[h] = strdup( s );
   ++id_count;
   return h;
@@ -196,7 +195,7 @@ void id_table_dump()
 // Scanner ---------------------------------------------------------------------
 
 int  sc_tkn;         // current token
-char sc_text[STRSZ]; // for Id, Kw, Num, Str
+char sc_text[STR_MAX_SZ]; // for Id, Kw, Num, Str
 int  sc_num;         // for Num and Chr, also id_number for Id
 
 int sc_read_next()   // scan for next token
@@ -324,9 +323,9 @@ int sc_read_next()   // scan for next token
   }
 }
 
-char* KWDS[11] = { "void","char","int","enum","if","else","while","for","break","return","sizeof" };
+char* KWDS[11] = { "void","char","int","enum","if","else","while","for","break","return" };
 
-char repr[STRSZ];
+char repr[STR_MAX_SZ];
 char* str_repr( char* s )
 {
   char* d = repr; *d = '"'; ++d;
@@ -375,7 +374,7 @@ int  st_count;
 enum { T_v, T_c, T_cp, T_cpp, T_i, T_ip, T_ipp }; // st_type
 enum { K_e, K_v, K_a, K_f }; // enum, var, array, function
 
-int st_create( int n )
+void st_create( int n )
 {
   // array of struct is split into set of arrays. b/c no struct in the language
   st_id = (int*)malloc( INTSZ*n );
@@ -400,7 +399,7 @@ int st_check( int id, int level )
   return i;
 }
 
-int st_add_enum( int level, int id, int value )
+void st_add_enum( int level, int id, int value )
 {
   int i = st_check( id, level );
   st_type[i] = T_i;
@@ -408,7 +407,7 @@ int st_add_enum( int level, int id, int value )
   st_value[i] = value;
 }
 
-int st_add_var( int level, int id, int type, int addr )
+void st_add_var( int level, int id, int type, int addr )
 {
   int i = st_check( id, level );
   st_type[i] = type;
@@ -416,7 +415,7 @@ int st_add_var( int level, int id, int type, int addr )
   st_value[i] = addr;
 }
 
-int st_add_array( int level, int id, int type, int addr, int dim )
+void st_add_array( int level, int id, int type, int addr, int dim )
 {
   int i = st_check( id, level );
   st_type[i] = type;
@@ -425,7 +424,7 @@ int st_add_array( int level, int id, int type, int addr, int dim )
   st_prop[i] = dim;
 }
 
-int st_add_fn( int level, int id, int type, int addr, int nargs )
+void st_add_fn( int level, int id, int type, int addr, int nargs )
 {
   int i = st_check( id, level );
   st_type[i] = type;
@@ -524,34 +523,11 @@ int pa_stars()
   return t_(T);
 }
 
-int pa_sizeofexpr()
-{
-  t1("pa_sizeofexpr");
-  if( sc_tkn!='(' ) return t_(F);
-  sc_next();
-  if( pa_type() )
-  {
-    pa_stars(); if( sc_tkn==')' ) { sc_next(); return t_(T); }
-    return t_(F);
-  }
-  if( sc_tkn!=Id ) return t_(F);
-  sc_next();
-  if( sc_tkn=='[' )
-  {
-    sc_next(); if( sc_tkn!=Num ) return t_(F);
-    sc_next(); if( sc_tkn!=']' ) return t_(F);
-    sc_next();
-  }
-  if( sc_tkn==')' ) { sc_next(); return t_(T); }
-  return t_(F);
-}
-
 int pa_unexpr()
 {
   t1("pa_unexpr");
   if( sc_tkn=='i' || sc_tkn=='d' ) { sc_next(); return t_(pa_unexpr()); }
   if( sc_tkn=='-' || sc_tkn=='!' || sc_tkn=='*' ) { sc_next(); return t_(pa_term()); }
-  if( sc_tkn==Kw+Sizeof ) { sc_next(); return t_(pa_sizeofexpr()); }
   return t_(pa_postfix());
 }
 
@@ -670,7 +646,6 @@ int pa_number_or_const()
 int pa_intexpr()
 {
   t1("pa_intexpr");
-  if( sc_tkn==Kw+Sizeof ) { sc_next(); return t_(pa_sizeofexpr()); }
   if( sc_tkn=='-' || sc_tkn=='!' ) sc_next();
   se_value = 1234;
   return t_(pa_number_or_const());
@@ -830,8 +805,9 @@ int main( int ac, char** av )
     p1( "-T  show tokens\n" );
     p1( "-L  show line numbers\n" );
     p1( "-P  show parser trace\n" );
-    p1( "-H  show hash table trace\n" );
-    p1( "-D  show hash table data\n" );
+    p1( "-I  show id table trace\n" );
+    p1( "-D  dump id table data\n" );
+    p1( "-S  dump symbol table\n" );
     return 0;
   }
   char* filename = 0;
@@ -844,15 +820,20 @@ int main( int ac, char** av )
       if( av[i][1] == 'T' ) SC_DEBUG=1;
       if( av[i][1] == 'L' ) RD_LINES=1;
       if( av[i][1] == 'P' ) PA_TRACE=1;
-      if( av[i][1] == 'H' ) HT_DEBUG=1;
-      if( av[i][1] == 'D' ) HT_DUMP=1;
+      if( av[i][1] == 'I' ) IT_DEBUG=1;
+      if( av[i][1] == 'D' ) IT_DUMP=1;
+      if( av[i][1] == 'S' ) ST_DUMP=1;
     }
   }
-  if( !filename ) { p1( "No file name provided\n" ); return 0; }
+
+  if( !filename ) { p1( "No file name provided\n" ); return 1; }
+  int rc = 0;
   if( !pa_program( filename ) )
-    { p3( "\n*** Error in ", filename, " around line " ); p2( i2s( rd_line ), " ***\n" ); return 1; }
-  p1( "ok\n" );
-  if( HT_DUMP ) id_table_dump();
-  st_dump();
-  return 0;
+  {
+    p3( "\n*** Error in ", filename, " around line " ); p2( i2s( rd_line ), " ***\n" );
+    rc = 2;
+  }
+  if( IT_DUMP ) id_table_dump();
+  if( ST_DUMP ) st_dump();
+  return rc;
 }

@@ -3,7 +3,7 @@
 
 primary : @Number | @Char | @String | @Id | '(' expr ')'
 
-exprs : expr { ',' expr }  // in calls and last item in for-header
+exprs : expr { ',' expr }  // args in call and the last item in for-header
 
 call_or_index : { '[' expr ']' | '(' [ exprs ] ')' }
 
@@ -14,7 +14,7 @@ type : "int" | "char" | "void"           // only these types
 stars : [ '*' [ '*' ] ]                  // up to two stars for int and char
 
 sizeofexpr : '(' type stars ')'
-           | '(' @Id [ '[' @Number ']' ] ')'  // no: sizof expr w/o ()
+           | '(' @Id [ '[' @Number ']' ] ')'  // no: sizeof expr w/o '(' ')'
 
 unexpr : '+''+' unexpr | '-''-' unexpr
        | '-' term | '!' term | '*' term  // no: &x ~x
@@ -22,7 +22,7 @@ unexpr : '+''+' unexpr | '-''-' unexpr
        | postfix
 
 term : '(' type stars ')' term
-     | '(' expr ')' call_or_index
+     | '(' expr ')' call_or_index        // shortcut, since we know it's '('
      | unexpr
 
 binop : '*' | '/' | '%'                  // pri. 3     no:
@@ -35,36 +35,42 @@ binop : '*' | '/' | '%'                  // pri. 3     no:
 
 expr : term { binop term }
 
-def_or_expr : type stars @Id vars__1     // ends with ';'
-            | expr ';'
+vardef_or_expr : type stars @Id vars__1     // ends with ';'
+               | expr ';'
 
 stmt : ';'
      | '{' block
      | "break" ';'                | "return" [ expr ] ';'
      | "while" '(' expr ')' stmt  | "if" '(' expr ')' stmt [ "else" stmt ]
-     | "for" '(' def_or_expr [ expr ] ';' [ expr { ',' expr } ] ')' stmt
-     | def_or_expr // ends with ';'
+     | "for" '(' vardef_or_expr [ expr ] ';' [ expr { ',' expr } ] ')' stmt
+     | vardef_or_expr // ends with ';'
 
-number : @Number | @Char | @Id // can be enum-const
 
-// shoud be re-arranged to scalar const and vector const
+number : @Number | @Char | @Id // Id must be be enum-const
 
-intexpr : number | '-' number | '!' number
+intexpr : number
         | "sizeof" sizeofexpr
 
-constexpr : intexpr                             // int n = -42;
-          | @String                             // char* s = "abc";
-          | @Id                                 // int* ptr = array;
-          | '{' constexpr { ',' constexpr } '}' // int m[4] = { 1, 2 };
+constexpr : [ '-' | '!' ] intexpr { binop intexpr }  // int n = -42;
+          | @String                                  // char* s = "abc";
+          | @Id { binop intexpr }                    // int* ptr = array;
 
-vartail__0 : [ '[' number ']' ] [ '=' constexpr ]  // no: int a[] = {...};
-vartail__1 : [ '[' number ']' ] [ '=' expr ]       // no: char s[] = "...";
+initexpr__0 : constexpr
+initexpr__1 : expr
+
+arrayinit : @String
+          | '{' constexpr { ',' constexpr } '}' // ints or strings or enum Ids
+
+vartail__n :  [ '=' initexpr__n ]
+           | '[' ']' '=' arrayinit
+           | '[' intexpr { binop intexpr } ']' [ '=' arrayinit ]
 
 vars__n : vartail__n { ',' stars @Id vartail__n } ';'
 
-enumerator : @Id [ '=' intexpr ]
+enumerator : @Id [ '=' intexpr ] // enum ids are like number literals
 
 enumdef : '{' enumerator { ',' enumerator } '}' ';'
+
 
 block : { stmt } '}'
 
@@ -74,7 +80,8 @@ argdef : type stars @Id
 
 args : [ argdef { ',' argdef } ]
 
-fn_or_vars : '(' args ')' fntail | vars__0
+fn_or_vars : '(' args ')' fntail
+           | vars__0
 
 decl_or_def : type stars @Id fn_or_vars | "enum" enumdef
 
