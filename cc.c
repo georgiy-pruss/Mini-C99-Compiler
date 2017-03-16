@@ -7,6 +7,7 @@
 enum { INTSZ = 4, // all this is for 32-bit architecture; int and int* is 4 bytes
   STRSZ=260     ,    // max size of any string (line, name, etc.)
   ID_TABLE_LEN=1009, // for id freezing; should be prime number
+  ST_LEN=1000,       // symbol table; max length is 1000 (it's for scopes!)
   RD_BUF=8000 };     // buffer for reading program text
 
 int SC_DEBUG=0; // -T
@@ -360,8 +361,102 @@ void sc_next() // read and put token into sc_tkn
   }
 }
 
-// Semantics & Code generation -------------------------------------------------
+// Symbol table ----------------------------------------------------------------
 
+int st_len = 0; // symbol table length; no ST initially
+int* st_id;     // ref to id_table
+char* st_level; // 0 global 1+ scope levels
+char* st_type;  // 0 void 1 2 3 char^ 4 5 6 int^
+char* st_kind;  // Enum    Var    Array  Func
+int* st_value;  // --value --addr --addr --addr
+int* st_prop;   //                --len  --nargs
+int  st_count;
+
+enum { T_v, T_c, T_cp, T_cpp, T_i, T_ip, T_ipp }; // st_type
+enum { K_e, K_v, K_a, K_f }; // enum, var, array, function
+
+int st_create( int n )
+{
+  // array of struct is split into set of arrays. b/c no struct in the language
+  st_id = (int*)malloc( INTSZ*n );
+  st_level = malloc( n );
+  st_type = malloc( n );
+  st_kind = malloc( n );
+  st_value = (int*)malloc( INTSZ*n );
+  st_prop = (int*)malloc( INTSZ*n );
+  st_len = n;
+  st_count = 0;
+}
+
+int st_check( int id, int level )
+{
+  if( st_len==0 ) st_create( ST_LEN );
+  int i = st_count;
+  //if( i>= st_len ) p1( "ERROR TOO MANY NAMES IN SCOPES\n" );
+  // check if already there
+  st_id[i] = id;
+  st_level[i] = level;
+  ++st_count;
+  return i;
+}
+
+int st_add_enum( int level, int id, int value )
+{
+  int i = st_check( id, level );
+  st_type[i] = T_i;
+  st_kind[i] = K_e;
+  st_value[i] = value;
+}
+
+int st_add_var( int level, int id, int type, int addr )
+{
+  int i = st_check( id, level );
+  st_type[i] = type;
+  st_kind[i] = K_v;
+  st_value[i] = addr;
+}
+
+int st_add_array( int level, int id, int type, int addr, int dim )
+{
+  int i = st_check( id, level );
+  st_type[i] = type;
+  st_kind[i] = K_a;
+  st_value[i] = addr;
+  st_prop[i] = dim;
+}
+
+int st_add_fn( int level, int id, int type, int addr, int nargs )
+{
+  int i = st_check( id, level );
+  st_type[i] = type;
+  st_kind[i] = K_f;
+  st_value[i] = addr;
+  st_prop[i] = nargs;
+}
+
+void st_clean( int level )
+{
+  if( level==0 ) return;
+  while( st_count>0 && st_level[st_count-1]==level )
+    --st_count;
+}
+
+int st_find( int id )
+{
+  // search. .....
+  return -1;
+}
+
+void st_dump()
+{
+  for( int i=0; i<st_count; ++i )
+  {
+    p2( i2s(i), ":: " ); p4( "id: ", i2s( st_id[i] ), " name: ", id_table[st_id[i]] );
+    p2( " lvl:", i2s(st_level[i]) ); p2( " type: ", i2s(st_type[i]) );
+    p2( " kind: ", i2s(st_kind[i]) ); p2( " value: ", i2s(st_value[i]) );
+    p3( " prop: ", i2s(st_prop[i]), "\n");
+  }
+}
 
 // Parser ----------------------------------------------------------------------
 
@@ -554,11 +649,20 @@ int pa_stmt()
   return pa_def_or_expr();
 }
 
+int se_level = 0;
+int se_value = 0;
+
 int pa_number_or_const()
 {
   t1("pa_number_or_const");
   if( sc_tkn!=Num && sc_tkn!=Chr && sc_tkn!=Id ) return t_(F);
-  // i2s( sc_num, tmp ); or it can be enum-const
+  if( sc_tkn==Num || sc_tkn==Chr )
+    se_value = sc_num;
+  else
+  {
+    int id = st_find( sc_num );
+    if( id<0 ) /* error */ ;
+  }
   sc_next();
   return t_(T);
 }
@@ -568,6 +672,7 @@ int pa_intexpr()
   t1("pa_intexpr");
   if( sc_tkn==Kw+Sizeof ) { sc_next(); return t_(pa_sizeofexpr()); }
   if( sc_tkn=='-' || sc_tkn=='!' ) sc_next();
+  se_value = 1234;
   return t_(pa_number_or_const());
 }
 
@@ -615,11 +720,21 @@ int pa_vars(int k)
   return t_(T);
 }
 
+int se_enum = 0;
+
 int pa_enumerator()
 {
   t1("pa_enumerator");
   if( sc_tkn != Id ) return t_(F);
-  sc_next(); if( sc_tkn=='=' ) { sc_next(); if( !pa_intexpr() ) return t_(F); }
+  int id = sc_num;
+  sc_next();
+  if( sc_tkn=='=' )
+  {
+    sc_next(); if( !pa_intexpr() ) return t_(F);
+    se_enum = se_value;
+  }
+  st_add_enum( se_level, id, se_enum );
+  ++se_enum;
   return t_(T);
 }
 
@@ -627,6 +742,7 @@ int pa_enumdef()
 {
   t1("pa_enumdef");
   if( sc_tkn != '{' ) return t_(F);
+  se_enum = 0;
   sc_next(); if( !pa_enumerator() ) return t_(F);
   while( sc_tkn==',' ) { sc_next(); if( !pa_enumerator() ) return t_(F); }
   if( sc_tkn != '}' ) return t_(F);
@@ -737,5 +853,6 @@ int main( int ac, char** av )
     { p3( "\n*** Error in ", filename, " around line " ); p2( i2s( rd_line ), " ***\n" ); return 1; }
   p1( "ok\n" );
   if( HT_DUMP ) id_table_dump();
+  st_dump();
   return 0;
 }
