@@ -2,6 +2,8 @@
 // gcc -fno-builtin-malloc -fno-builtin-strlen -O2 cc.c -o cc.exe
 // -std=c99 is default in gcc
 
+// TODO chars '\x', ops & ^ | ~
+
 // Parameters ------------------------------------------------------------------
 
 enum { INTSZ = 4,    // all this is for 32-bit architecture; int and int* is 4 bytes
@@ -29,8 +31,6 @@ void exit( int status );
 
 enum { O_RDONLY, O_WRONLY, O_RDWR, O_APPEND=8, O_CREAT=512, O_TRUNC=1024, O_EXCL=2048 };
 // O_TEXT=0x4000 O_BINARY=0x8000                  win: 256           512         1024
-
-enum { LF=10, CR=13, BS=8, APO=39, BKSL=92 }; // some chars, including ['] and [\]
 
 int is_abc( int c ) { return c>='a' && c<='z' || c>='A' && c<='Z' || c=='_'; }
 
@@ -98,10 +98,18 @@ void p4( char* s, char* s2, char* s3, char* s4 ) { p1( s ); p1( s2 ); p1( s3 ); 
 // Compiler Definitions --------------------------------------------------------
 
 enum { Err, Eof, Num, Chr, Str, Id, // tokens
-       // Op: = i d e n (++ -- == !=) < > l g (<= >=) + - * / % & | ! (3 logical ops)
+       // Op: = i d e n (++ -- == !=) < > l g (<= >=) + - * / % & ^ | ~ ! a o (&& ||)
        // Sep: ( ) [ ] { } , ;
-       Kw=200 }; // actual tokens for keywors: Kw+k, where k is from below:
+       Kw=128 }; // actual tokens for keywors: Kw+k, where k is from below:
 enum { Void, Char, Int, Enum, If, Else, While, For, Break, Return }; // keywords
+
+int op_prec[128] = {0}; // operator precedence
+
+void set_prec()
+{
+  char* opchar = "=oa|^&en<>lg+-*/%";
+  for( char* p = "134567889999BBCCC"; *p; ++opchar, ++p ) op_prec[*opchar]=*p-'0';
+}
 
 int find_kw( char* s )
 {
@@ -191,10 +199,19 @@ int  sc_tkn;              // current token
 char sc_text[STR_MAX_SZ]; // for Id, Kw, Num, Str
 int  sc_num;              // for Num and Chr, also id_number for Id
 
+void sc_do_backslash()
+{
+  rd_next();
+  if( rd_char=='n' ) rd_char = '\n';
+  else if( rd_char=='r' ) rd_char = '\r';
+  else if( rd_char=='b' ) rd_char = '\b';
+  else if( rd_char=='0' ) rd_char = 0;
+}
+
 int sc_read_next()        // scan for next token
 {
   if( rd_char < 0 ) { rd_next(); rd_line = 1; if(RD_LINES) p3( "[", i2s(rd_line), "]" ); }
-  while( rd_char==' ' || rd_char==LF || rd_char==CR )
+  while( rd_char==' ' || rd_char=='\n' || rd_char=='\r' )
   {
     if( rd_char==10 ) { ++rd_line; if(RD_LINES) p3( "\n[", i2s(rd_line), "]" ); }
     rd_next();
@@ -217,38 +234,32 @@ int sc_read_next()        // scan for next token
     sc_num = id_index( sc_text );
     return Id;
   }
-  if( rd_char=='"' ) // String
+  if( rd_char=='"' ) // String literal
   {
     rd_next();
     char* p = sc_text;
     while( rd_char!='"' )
     {
-      if( rd_char == BKSL ) // \ - backslash in strings (only; not in chars!)
-      {
-        rd_next();
-        if( rd_char=='n' ) rd_char = LF;
-        else if( rd_char=='r' ) rd_char = CR;
-        else if( rd_char=='b' ) rd_char = BS;
-        else if( rd_char=='0' ) rd_char = 0;
-      }
+      if( rd_char == '\\' ) sc_do_backslash();
       *p = rd_char; ++p; rd_next();
     }
     *p = 0;
     rd_next();
     return Str;
   }
-  if( rd_char==APO ) // Character literal 'x' (but can't be '\x')
+  if( rd_char=='\'' ) // Character literal (actually ''' is ok too :)
   {
     rd_next();
-    sc_num = rd_char;     // we take anything from inside, w/o '\'
+    if( rd_char == '\\' ) sc_do_backslash();
+    sc_num = rd_char;
     rd_next();
-    if( rd_char!=APO ) return Err; // must end with apostrophe
+    if( rd_char!='\'' ) return Err; // must end with apostrophe
     rd_next();
     return Chr;
   }
   if( rd_char=='{' || rd_char=='}' || rd_char=='(' || rd_char==')' ||
       rd_char=='[' || rd_char==']' || rd_char==',' || rd_char==';' ||
-      rd_char=='*' || rd_char=='%' )
+      rd_char=='*' || rd_char=='%' || rd_char=='^' )
   {
     int c = rd_char; rd_next();
     return c;
@@ -272,8 +283,8 @@ int sc_read_next()        // scan for next token
   if( rd_char=='&' || rd_char=='|' )
   {
     int c = rd_char; rd_next();
-    if( rd_char == c ) { rd_next(); return c; } // && ||
-    sc_text[0] = c; sc_text[1] = 0; return Err;
+    if( rd_char == c ) { rd_next(); if( c=='&' ) c = 'a'; else c = 'o'; } // && ||
+    return c;
   }
   if( rd_char=='/' ) // comment //... or /*...*/ or divide /
   {
@@ -281,22 +292,22 @@ int sc_read_next()        // scan for next token
     if( rd_char == '/' ) // //...
     {
       rd_next();
-      while( rd_char!=LF && rd_char>0 )
+      while( rd_char!='\n' && rd_char>0 )
         rd_next();
-      if( rd_char==LF ) { ++rd_line; if(RD_LINES) p3( "[//]\n[", i2s(rd_line), "]" ); }
+      if( rd_char=='\n' ) { ++rd_line; if(RD_LINES) p3( "[//]\n[", i2s(rd_line), "]" ); }
       if(rd_char>0) rd_next();
       return sc_read_next();
     }
     if( rd_char == '*' ) // /*...*/
     {
       rd_next();
-      if( rd_char==LF ) { ++rd_line; if(RD_LINES) p3( "[/*]\n[", i2s(rd_line), "]" ); }
+      if( rd_char=='\n' ) { ++rd_line; if(RD_LINES) p3( "[/*]\n[", i2s(rd_line), "]" ); }
       while(1)
       {
         while( rd_char!='*' && rd_char>0 )
         {
           rd_next();
-          if( rd_char==LF ) { ++rd_line; if(RD_LINES) p3( "[**]\n[", i2s(rd_line), "]" ); }
+          if( rd_char=='\n' ) { ++rd_line; if(RD_LINES) p3( "[**]\n[", i2s(rd_line), "]" ); }
         }
         if(rd_char>0) rd_next();
         if( rd_char == '/' )
@@ -319,10 +330,10 @@ char* str_repr( char* s )
   char* d = repr; *d = '"'; ++d;
   for( ; *s; ++d, ++s )
   {
-    if( *s==LF ) { *d=BKSL; ++d; *d='n'; }
-    else if( *s==0 ) { *d=BKSL; ++d; *d='0'; }
-    else if( *s==BS ) { *d=BKSL; ++d; *d='b'; }
-    else if( *s==CR ) { *d=BKSL; ++d; *d='r'; }
+    if( *s=='\n' ) { *d='\\'; ++d; *d='n'; }
+    else if( *s==0 ) { *d='\\'; ++d; *d='0'; }
+    else if( *s=='\b' ) { *d='\\'; ++d; *d='b'; }
+    else if( *s=='\r' ) { *d='\\'; ++d; *d='r'; }
     else *d=*s;
   }
   *d = '"'; ++d; *d = 0;
@@ -354,9 +365,9 @@ int st_len = 0; // symbol table length; no ST initially, create dynamically
 int* st_id;     // ref to id_table
 char* st_level; // 0 global 1+ scope levels
 char* st_type;  // 0 void 1 2 3 char^ 4 5 6 int^
-char* st_kind;  // Enum    Var    VarArray Arg    Func
-int* st_value;  // --value --addr --addr   --addr --addr
-int* st_prop;   //                --len           --nargs
+char* st_kind;  // Enum    Var    Array  Arg    Func
+int* st_value;  // --value --addr --addr --addr --addr
+int* st_prop;   //                --len         --nargs
 int  st_count;  // number of symbols in ST
 
 enum { T_v, T_c, T_cp, T_cpp, T_i, T_ip, T_ipp }; // st_type
@@ -468,21 +479,28 @@ int se_args; // number of arguments in fn
 int tL = 0; // indent level
 void tI() { p1("                    "); int i=0; while(i<tL) { p1( "." ); ++i; } }
 void t1( char* s ) { if( PA_TRACE ) { tI(); p2( s,"\n" ); ++tL; } }
-//void t2( char* s, char* s2 ) { if( PA_TRACE ) { tI(); p3( s,s2,"\n" ); ++tL; } }
-//void t3( char* s, char* s2, char* s3 ) { if( PA_TRACE ) { tI(); p4( s,s2,s3,"\n" ); ++tL; } }
+void t2( char* s, char* s2 ) { if( PA_TRACE ) { tI(); p3( s,s2,"\n" ); ++tL; } }
+void t3( char* s, char* s2, char* s3 ) { if( PA_TRACE ) { tI(); p4( s,s2,s3,"\n" ); ++tL; } }
 int t_( int r )  { if( PA_TRACE ) { --tL; tI(); p3( "<< ", i2s(r), "\n" ); } return r; }
 
 enum { F, T }; // Boolean result of pa_* functions: False, True
 
 // Due to recursive nature and difficult syntax, some fns have to be pre-declared
-int pa_expr(); int pa_term(); int pa_vars(); int pa_block(); int pa_vardef_or_expr();
+int pa_expr(int min_prec); int pa_term(); int pa_vars(); int pa_block(); int pa_vardef_or_expr();
 
 int pa_primary()
 {
   t1("pa_primary");
-  if( sc_tkn==Num || sc_tkn==Chr || sc_tkn==Str || sc_tkn==Id ) { sc_next(); return t_(T); }
+  if( sc_tkn==Num || sc_tkn==Chr || sc_tkn==Str || sc_tkn==Id )
+  {
+    if( sc_tkn==Num || sc_tkn==Chr ) p3( "=number ",i2s(sc_num),"\n");
+    else if( sc_tkn==Str ) p3( "=str [",sc_text,"]\n");
+    else if( sc_tkn==Id ) p3( "=id  [",sc_text,"]\n");
+
+    sc_next(); return t_(T);
+  }
   if( sc_tkn!='(' ) return t_(F);
-  sc_next(); if( !pa_expr() ) return t_(F);
+  sc_next(); if( !pa_expr(1) ) return t_(F);
   if( sc_tkn!=')' ) return t_(F);
   sc_next();
   se_type = T_i; // elaborate!...
@@ -512,8 +530,8 @@ int pa_integer() // has value at compile time
 int pa_exprs()
 {
   t1("pa_exprs");
-  if( !pa_expr() ) return t_(F);
-  while( sc_tkn==',' ) { sc_next(); if( !pa_expr() ) return t_(F); }
+  if( !pa_expr(1) ) return t_(F);
+  while( sc_tkn==',' ) { sc_next(); if( !pa_expr(1) ) return t_(F); }
   return t_(T);
 }
 
@@ -522,7 +540,7 @@ int pa_call_or_index()
   t1("pa_call_or_index");
   while( sc_tkn=='(' || sc_tkn=='[' )
   {
-    if( sc_tkn=='[' ) { sc_next(); if( !pa_expr() || sc_tkn!=']' ) return t_(F); }
+    if( sc_tkn=='[' ) { sc_next(); if( !pa_expr(1) || sc_tkn!=']' ) return t_(F); }
     else /* '(' */ { sc_next(); if( sc_tkn!=')' ) { if( !pa_exprs() || sc_tkn!=')' ) return t_(F); } }
     sc_next();
   }
@@ -578,30 +596,45 @@ int pa_term()
       pa_stars(); if( sc_tkn!=')' ) return t_(F);
       sc_next(); return t_(pa_term());
     }
-    if( !pa_expr() || sc_tkn!=')' ) return t_(F);
+    if( !pa_expr(1) || sc_tkn!=')' ) return t_(F);
     sc_next();
     return t_(pa_call_or_index());
   }
   return t_(pa_unexpr());
 }
 
-int pa_binop()
+int sc_op;
+
+int pa_binop_no_advance()
 {
   t1("pa_binop");
-  if( sc_tkn=='*' || sc_tkn=='/' || sc_tkn=='%' ||                // 3
-      sc_tkn=='+' || sc_tkn=='-' ||                               // 4
-      sc_tkn=='<' || sc_tkn=='>' || sc_tkn=='l' || sc_tkn=='g' || // 6
-      sc_tkn=='e' || sc_tkn=='n' ||                               // 7
-      sc_tkn=='&' || sc_tkn=='|' || sc_tkn=='=' )                 // 11 12 14
-    { sc_next(); return t_(T); }
+  if( sc_tkn=='*' || sc_tkn=='/' || sc_tkn=='%' ||                // B
+      sc_tkn=='+' || sc_tkn=='-' ||                               // A
+      sc_tkn=='<' || sc_tkn=='>' || sc_tkn=='l' || sc_tkn=='g' || // 9
+      sc_tkn=='e' || sc_tkn=='n' ||                               // 8
+      sc_tkn=='&' || sc_tkn=='^' || sc_tkn=='|' ||                // 7 6 5
+      sc_tkn=='a' || sc_tkn=='o' || sc_tkn=='=' )                 // 4 3 1
+    return t_(T);
   return t_(F);
 }
 
-int pa_expr()
+int pa_expr( int min_prec ) // precedence climbing
 {
-  t1("pa_expr");
+  t2("pa_expr ",i2s(min_prec));
   if( !pa_term() ) return t_(F);
-  while( pa_binop() ) if( !pa_term() ) return t_(F); // ADD PRIORITIES!
+  int op;
+  int pr;
+  while( pa_binop_no_advance() && op_prec[sc_tkn] >= min_prec )
+  {
+    op = sc_tkn;
+    pr = op_prec[sc_tkn];
+    sc_next();
+    if( !pa_expr( pr+1 ) )
+      return t_(F);
+    char ops[3]; ops[0]=(char)op; ops[1]='\n'; ops[2]='\0';
+    p2( "exec ",ops );
+  }
+  sc_next();
   return t_(T);
 }
 
@@ -615,7 +648,7 @@ int pa_vardef_or_expr()
     st_add_var( se_level, sc_num, T_i, 0 );
     sc_next(); return t_( pa_vars() );
   }
-  if( !pa_expr() || sc_tkn != ';' ) return t_( F ); // expr ';'
+  if( !pa_expr(1) || sc_tkn != ';' ) return t_( F ); // expr ';'
   sc_next();
   return t_( T );
 }
@@ -632,19 +665,19 @@ int pa_stmt()
   if( sc_tkn==Kw+Return )
   {
     sc_next(); if( sc_tkn==';' ) { sc_next(); return t_(T); }
-    if( !pa_expr() || sc_tkn!=';' ) return t_(F);
+    if( !pa_expr(1) || sc_tkn!=';' ) return t_(F);
     sc_next(); return t_(T);
   }
   if( sc_tkn==Kw+While )
   {
     sc_next(); if( sc_tkn!='(' ) return t_(F);
-    sc_next(); if( !pa_expr() || sc_tkn!=')' ) return t_(F);
+    sc_next(); if( !pa_expr(1) || sc_tkn!=')' ) return t_(F);
     sc_next(); return t_(pa_stmt());
   }
   if( sc_tkn==Kw+If )
   {
     sc_next(); if( sc_tkn!='(' ) return t_(F);
-    sc_next(); if( !pa_expr() || sc_tkn!=')' ) return t_(F);
+    sc_next(); if( !pa_expr(1) || sc_tkn!=')' ) return t_(F);
     sc_next(); if( !pa_stmt() ) return t_(F);
     if( sc_tkn==Kw+Else ) { sc_next(); if( !pa_stmt() ) return t_(F); }
     return t_(T);
@@ -654,7 +687,7 @@ int pa_stmt()
     sc_next(); if( sc_tkn != '(' ) return t_( F );
     sc_next();
     if( sc_tkn!=';' ) { if( !pa_vardef_or_expr() ) return t_( F ); } else sc_next();
-    if( sc_tkn!=';' ) if( !pa_expr() ) return t_( F ); sc_next();
+    if( sc_tkn!=';' ) if( !pa_expr(1) ) return t_( F ); sc_next();
     if( sc_tkn!=')' ) if( !pa_exprs() ) return t_( F ); // opt. post-expressions
     if( sc_tkn!=')' ) return t_( F ); sc_next();
     return t_( pa_stmt() );
@@ -706,7 +739,7 @@ int pa_vartail()
   if( sc_tkn=='=' )
   {
     sc_next();
-    return t_(pa_expr()); // must be calculable for globals
+    return t_(pa_expr(1)); // must be calculable for globals
   }
   if( sc_tkn!='[' ) return t_(T); // without initial value
   sc_next();
@@ -732,6 +765,7 @@ int pa_vars(int k)
 {
   t1("pa_vars");
   // can't have 'void' var
+  // disallow array of double-pointers, like T** V[N];
   if( !pa_vartail(k) ) return t_(F);
   while( sc_tkn==',' )
   {
@@ -820,6 +854,7 @@ int pa_decl_or_def()
 int pa_program( char* fn )
 {
   t1("pa_program");
+  set_prec();
   rd_file = open( fn, O_RDONLY, 0 );
   if( rd_file<=0 ) return t_(F);
   int rc = T;

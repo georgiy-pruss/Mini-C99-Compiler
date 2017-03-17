@@ -12,7 +12,7 @@ call_or_index : { '[' expr ']' | '(' [ exprs ] ')' }
 postfix : primary call_or_index          // no: postfix ++|--
 
 unexpr : '+''+' unexpr | '-''-' unexpr
-       | '-' term | '!' term | '*' term  // no: &x ~x
+       | '-' term | '~' term | '!' term | '*' term  // no: &x
        | postfix
 
 type : "int" | "char" | "void" // void is used only for function result
@@ -23,13 +23,14 @@ term : '(' type stars ')' term
      | '(' expr ')' call_or_index        // shortcut, since we know it's '('
      | unexpr
 
-binop : '*' | '/' | '%'                  // pri. 3     no:
-      | '+' | '-'                        // pri. 4     5: << >>
-      | '<' | '>' | '<''=' | '>''='      // pri. 6
-      | '=''=' | '!''='                  // pri. 7     8 9 10: & ^ |
-      | '&''&'                           // pri. 11
-      | '|''|'                           // pri. 12    13: ?:
-      | '='                              // pri. 14    14: += -= <<= ...
+binop : '*' | '/' | '%'                  // prec. 12
+      | '+' | '-'                        // prec. 11   10: << >>
+      | '<' | '>' | '<''=' | '>''='      // prec. 9
+      | '=''=' | '!''='                  // prec. 8
+      | '&' | '^' | '|'                  // prec. 7 6 5
+      | '&''&'                           // prec. 4
+      | '|''|'                           // prec. 3    2: ?:
+      | '='                              // prec. 1    also: += -= <<= ...
 
 expr : term { binop term }
 
