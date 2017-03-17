@@ -1,6 +1,6 @@
 // cc.c -- self-compiling C compiler - 2017 (C) G.Pruss
 // gcc -fno-builtin-malloc -fno-builtin-strlen -O2 cc.c -o cc.exe
-// -std=c99 is default
+// -std=c99 is default in gcc
 
 // Parameters ------------------------------------------------------------------
 
@@ -30,10 +30,12 @@ void exit( int status );
 enum { O_RDONLY, O_WRONLY, O_RDWR, O_APPEND=8, O_CREAT=512, O_TRUNC=1024, O_EXCL=2048 };
 // O_TEXT=0x4000 O_BINARY=0x8000                  win: 256           512         1024
 
+enum { LF=10, CR=13, BS=8, APO=39, BKSL=92 }; // some chars, including ['] and [\]
+
 int is_abc( int c ) { return c>='a' && c<='z' || c>='A' && c<='Z' || c=='_'; }
 
 int strlen( char* s ) { char* b=s; while( *s ) ++s; return s-b; }
-char* strcpy( char* d, char* s ) { char* r = d; while( *s ) { *d = *s; ++d; ++s; } *d = 0; return r; }
+char* strcpy( char* d, char* s ) { char* r=d; for( ; *s ; ++d, ++s ) *d=*s; *d=0; return r; }
 char* strcat( char* s, char* t ) { strcpy( s + strlen( s ), t ); return s; }
 char* strdup( char* s ) { return strcpy( malloc( strlen(s) + 1 ), s ); }
 
@@ -62,7 +64,7 @@ char* strrchr( char* s, int c )
   return 0;
 }
 
-char i2s_buf[16]; // buffer for i2s(v); longest number is -GMMMKKKEEE i.e. 12 chars
+char i2s_buf[12]; // buffer for return value of i2s(x)
 
 char* i2s( int value )
 {
@@ -70,7 +72,7 @@ char* i2s( int value )
   char* dst = i2s_buf;
   if( value<0 )
   {
-    if( value==(-2147483647-1) ) return "-2147483648"; // min int
+    if( value==(-2147483647-1) ) return "-2147483648"; // minimal 32-bit integer
     *dst = '-'; ++dst;
     value = -value;
   }
@@ -79,14 +81,6 @@ char* i2s( int value )
   *dst = 0;
   strrev( to_rev );
   return i2s_buf;
-}
-
-int s2i( char* str )
-{
-  if( *str == '-' ) return -s2i( str+1 );
-  int v = 0;
-  for( ; *str >= '0' && *str <= '9'; ++str ) v = 10*v + *str - '0';
-  return v;
 }
 
 void assert( int cond, char* msg )
@@ -193,14 +187,14 @@ void id_table_dump()
 
 // Scanner ---------------------------------------------------------------------
 
-int  sc_tkn;         // current token
+int  sc_tkn;              // current token
 char sc_text[STR_MAX_SZ]; // for Id, Kw, Num, Str
-int  sc_num;         // for Num and Chr, also id_number for Id
+int  sc_num;              // for Num and Chr, also id_number for Id
 
-int sc_read_next()   // scan for next token
+int sc_read_next()        // scan for next token
 {
   if( rd_char < 0 ) { rd_next(); rd_line = 1; if(RD_LINES) p3( "[", i2s(rd_line), "]" ); }
-  while( rd_char==' ' || rd_char==10 || rd_char==13 )
+  while( rd_char==' ' || rd_char==LF || rd_char==CR )
   {
     if( rd_char==10 ) { ++rd_line; if(RD_LINES) p3( "\n[", i2s(rd_line), "]" ); }
     rd_next();
@@ -208,13 +202,12 @@ int sc_read_next()   // scan for next token
   if( rd_char<0 ) return Eof;
   if( rd_char>='0' && rd_char<='9' ) // Number
   {
-    char* p = sc_text;
-    while( rd_char>='0' && rd_char<='9' ) { *p = rd_char; ++p; rd_next(); }
-    *p = 0;
-    sc_num = s2i( sc_text );
+    int v = rd_char - '0';
+    for( rd_next(); rd_char>='0' && rd_char<='9'; rd_next() ) v = 10*v + rd_char - '0';
+    sc_num = v;
     return Num;
   }
-  else if( is_abc(rd_char) ) // Id or Keyword
+  if( is_abc(rd_char) ) // Id or Keyword
   {
     char* p = sc_text;
     while( is_abc(rd_char) || rd_char>='0' && rd_char<='9' ) { *p = rd_char; ++p; rd_next(); }
@@ -224,18 +217,18 @@ int sc_read_next()   // scan for next token
     sc_num = id_index( sc_text );
     return Id;
   }
-  else if( rd_char=='"' ) // String
+  if( rd_char=='"' ) // String
   {
     rd_next();
     char* p = sc_text;
     while( rd_char!='"' )
     {
-      if( rd_char == 92 ) // \ - backslash in strings (only; not in chars!)
+      if( rd_char == BKSL ) // \ - backslash in strings (only; not in chars!)
       {
         rd_next();
-        if( rd_char=='n' ) rd_char = 10;
-        else if( rd_char=='r' ) rd_char = 13;
-        else if( rd_char=='b' ) rd_char = 8;
+        if( rd_char=='n' ) rd_char = LF;
+        else if( rd_char=='r' ) rd_char = CR;
+        else if( rd_char=='b' ) rd_char = BS;
         else if( rd_char=='0' ) rd_char = 0;
       }
       *p = rd_char; ++p; rd_next();
@@ -244,22 +237,23 @@ int sc_read_next()   // scan for next token
     rd_next();
     return Str;
   }
-  else if( rd_char==39 ) // Character literal 'x' (but can't be '\x')
+  if( rd_char==APO ) // Character literal 'x' (but can't be '\x')
   {
     rd_next();
-    sc_num = rd_char;    // we take anything from inside, w/o '\'
+    sc_num = rd_char;     // we take anything from inside, w/o '\'
     rd_next();
-    if( rd_char!=39 ) return Err; // must end with 'x'
+    if( rd_char!=APO ) return Err; // must end with apostrophe
     rd_next();
     return Chr;
   }
-  else if( rd_char=='{' || rd_char=='}' || rd_char=='(' || rd_char==')' ||
-           rd_char=='[' || rd_char==']' || rd_char==',' || rd_char==';' ||
-           rd_char=='*' || rd_char=='%' )
+  if( rd_char=='{' || rd_char=='}' || rd_char=='(' || rd_char==')' ||
+      rd_char=='[' || rd_char==']' || rd_char==',' || rd_char==';' ||
+      rd_char=='*' || rd_char=='%' )
   {
-    int c = rd_char; rd_next(); return c;
+    int c = rd_char; rd_next();
+    return c;
   }
-  else if( rd_char=='=' || rd_char=='<' || rd_char=='>' || rd_char=='!' )
+  if( rd_char=='=' || rd_char=='<' || rd_char=='>' || rd_char=='!' )
   {
     int c = rd_char; rd_next();
     if( rd_char == '=' ) // == <= >= != convert to: e l g n
@@ -269,40 +263,40 @@ int sc_read_next()   // scan for next token
     }
     return c;
   }
-  else if( rd_char=='+' || rd_char=='-' )
+  if( rd_char=='+' || rd_char=='-' )
   {
     int c = rd_char; rd_next();
     if( rd_char == c ) { rd_next(); if( c=='+' ) c = 'i'; else c = 'd'; } // ++ --
     return c;
   }
-  else if( rd_char=='&' || rd_char=='|' )
+  if( rd_char=='&' || rd_char=='|' )
   {
     int c = rd_char; rd_next();
     if( rd_char == c ) { rd_next(); return c; } // && ||
     sc_text[0] = c; sc_text[1] = 0; return Err;
   }
-  else if( rd_char=='/' ) // comment //... or /*...*/ or divide /
+  if( rd_char=='/' ) // comment //... or /*...*/ or divide /
   {
     rd_next();
     if( rd_char == '/' ) // //...
     {
       rd_next();
-      while( rd_char!=10 && rd_char>0 )
+      while( rd_char!=LF && rd_char>0 )
         rd_next();
-      if( rd_char==10 ) { ++rd_line; if(RD_LINES) p3( "[//]\n[", i2s(rd_line), "]" ); }
+      if( rd_char==LF ) { ++rd_line; if(RD_LINES) p3( "[//]\n[", i2s(rd_line), "]" ); }
       if(rd_char>0) rd_next();
       return sc_read_next();
     }
-    else if( rd_char == '*' ) // /*...*/
+    if( rd_char == '*' ) // /*...*/
     {
       rd_next();
-      if( rd_char==10 ) { ++rd_line; if(RD_LINES) p3( "[/*]\n[", i2s(rd_line), "]" ); }
+      if( rd_char==LF ) { ++rd_line; if(RD_LINES) p3( "[/*]\n[", i2s(rd_line), "]" ); }
       while(1)
       {
         while( rd_char!='*' && rd_char>0 )
         {
           rd_next();
-          if( rd_char==10 ) { ++rd_line; if(RD_LINES) p3( "[**]\n[", i2s(rd_line), "]" ); }
+          if( rd_char==LF ) { ++rd_line; if(RD_LINES) p3( "[**]\n[", i2s(rd_line), "]" ); }
         }
         if(rd_char>0) rd_next();
         if( rd_char == '/' )
@@ -311,15 +305,10 @@ int sc_read_next()   // scan for next token
       if(rd_char>0) rd_next();
       return sc_read_next();
     }
-    else
-      return '/';
+    return '/';
   }
-  else
-  {
-    sc_text[0] = rd_char; sc_text[1] = 0;
-    rd_next();
-    return Err;
-  }
+  sc_text[0] = rd_char; sc_text[1] = 0;
+  return Err;
 }
 
 char* KWDS[11] = { "void","char","int","enum","if","else","while","for","break","return" };
@@ -330,10 +319,10 @@ char* str_repr( char* s )
   char* d = repr; *d = '"'; ++d;
   for( ; *s; ++d, ++s )
   {
-    if( *s==10 ) { *d=92; ++d; *d='n'; }
-    else if( *s==8 ) { *d=92; ++d; *d='b'; }
-    else if( *s==0 ) { *d=92; ++d; *d='0'; }
-    else if( *s==13 ) { *d=92; ++d; *d='r'; }
+    if( *s==LF ) { *d=BKSL; ++d; *d='n'; }
+    else if( *s==0 ) { *d=BKSL; ++d; *d='0'; }
+    else if( *s==BS ) { *d=BKSL; ++d; *d='b'; }
+    else if( *s==CR ) { *d=BKSL; ++d; *d='r'; }
     else *d=*s;
   }
   *d = '"'; ++d; *d = 0;
@@ -361,17 +350,17 @@ void sc_next() // read and put token into sc_tkn
 
 // Symbol table ----------------------------------------------------------------
 
-int st_len = 0; // symbol table length; no ST initially
+int st_len = 0; // symbol table length; no ST initially, create dynamically
 int* st_id;     // ref to id_table
 char* st_level; // 0 global 1+ scope levels
 char* st_type;  // 0 void 1 2 3 char^ 4 5 6 int^
-char* st_kind;  // Enum    Var    Array  Func
-int* st_value;  // --value --addr --addr --addr
-int* st_prop;   //                --len  --nargs
-int  st_count;
+char* st_kind;  // Enum    Var    VarArray Arg    Func
+int* st_value;  // --value --addr --addr   --addr --addr
+int* st_prop;   //                --len           --nargs
+int  st_count;  // number of symbols in ST
 
 enum { T_v, T_c, T_cp, T_cpp, T_i, T_ip, T_ipp }; // st_type
-enum { K_e, K_v, K_a, K_f }; // enum, var, array, function     TODO arg
+enum { K_enum, K_var, K_array, K_arg, K_fn };
 
 void st_create( int n )
 {
@@ -390,7 +379,7 @@ int st_check( int id, int level )
 {
   if( st_len==0 ) st_create( ST_LEN );
   int i = st_count;
-  //if( i>= st_len ) p1( "ERROR TOO MANY NAMES IN SCOPES\n" );
+  if( i>= st_len ) p1( "ERROR TOO MANY NAMES IN SCOPES\n" ); // exit(9);
   // check if already there
   st_id[i] = id;
   st_level[i] = level;
@@ -402,7 +391,7 @@ void st_add_enum( int level, int id, int value )
 {
   int i = st_check( id, level );
   st_type[i] = T_i;
-  st_kind[i] = K_e;
+  st_kind[i] = K_enum;
   st_value[i] = value;
 }
 
@@ -410,7 +399,7 @@ void st_add_var( int level, int id, int type, int addr )
 {
   int i = st_check( id, level );
   st_type[i] = type;
-  st_kind[i] = K_v;
+  st_kind[i] = K_var;
   st_value[i] = addr;
 }
 
@@ -418,16 +407,24 @@ void st_add_array( int level, int id, int type, int addr, int dim )
 {
   int i = st_check( id, level );
   st_type[i] = type;
-  st_kind[i] = K_a;
+  st_kind[i] = K_array;
   st_value[i] = addr;
   st_prop[i] = dim;
+}
+
+void st_add_arg( int level, int id, int type, int addr )
+{
+  int i = st_check( id, level );
+  st_type[i] = type;
+  st_kind[i] = K_arg;
+  st_value[i] = addr;
 }
 
 void st_add_fn( int level, int id, int type, int addr, int nargs )
 {
   int i = st_check( id, level );
   st_type[i] = type;
-  st_kind[i] = K_f;
+  st_kind[i] = K_fn;
   st_value[i] = addr;
   st_prop[i] = nargs;
 }
@@ -450,7 +447,7 @@ void st_dump()
 {
   for( int i=0; i<st_count; ++i )
   {
-    p2( i2s(i), ":: " ); p4( "id: ", i2s( st_id[i] ), " name: ", id_table[st_id[i]] );
+    p2( i2s(i), " - " ); p4( "id: ", i2s( st_id[i] ), " name: ", id_table[st_id[i]] );
     p2( " lvl:", i2s(st_level[i]) ); p2( " type: ", i2s(st_type[i]) );
     p2( " kind: ", i2s(st_kind[i]) ); p2( " value: ", i2s(st_value[i]) );
     p3( " prop: ", i2s(st_prop[i]), "\n");
@@ -463,8 +460,8 @@ int se_type;
 int se_stars; // 0, 1, 2 - number of stars in "type stars"
 int se_value; // value of constant expr, e.g. "integer"
 int se_level = 0; // 0 is global
-int se_enum = 0; // value of enumerator in enum
-
+int se_enum; // value of enumerator in enum
+int se_args; // number of arguments in fn
 
 // Parser ----------------------------------------------------------------------
 
@@ -500,7 +497,7 @@ int pa_integer() // has value at compile time
   if( sc_tkn==Id ) // Id must be enum
   {
     int i = st_find( sc_num );
-    if( i<0 || st_kind[i] != K_e ) return t_(F);
+    if( i<0 || st_kind[i] != K_enum ) return t_(F);
     se_value = st_value[i];
   }
   else
@@ -566,6 +563,7 @@ int pa_stars()
   t1("pa_stars");
   se_stars = 0;
   if( sc_tkn=='*' ) { sc_next(); se_stars = 1; if( sc_tkn=='*' ) { sc_next(); se_stars = 2; } }
+  //if( se_stars>0 && se_type==T_v ) p1( "CAN'T HAVE POINTER TO VOID" );
   return t_(T);
 }
 
@@ -614,6 +612,7 @@ int pa_vardef_or_expr()
   {
     if( !pa_type() || !pa_stars() ) return t_( F );
     if( sc_tkn != Id ) return t_( F );
+    st_add_var( se_level, sc_num, T_i, 0 );
     sc_next(); return t_( pa_vars() );
   }
   if( !pa_expr() || sc_tkn != ';' ) return t_( F ); // expr ';'
@@ -732,10 +731,12 @@ int pa_vartail()
 int pa_vars(int k)
 {
   t1("pa_vars");
+  // can't have 'void' var
   if( !pa_vartail(k) ) return t_(F);
   while( sc_tkn==',' )
   {
     sc_next(); pa_stars(); if( sc_tkn != Id ) return t_(F);
+    st_add_var( se_level, sc_num, T_i, 0 );
     sc_next(); if( !pa_vartail(k) ) return t_(F);
   }
   if( sc_tkn!=';' ) return t_(F);
@@ -747,8 +748,11 @@ int pa_argdef()
 {
   t1("pa_argdef");
   if( !pa_type() ) return t_(F);
+  // can't have 'void' arg
   pa_stars();
   if( sc_tkn != Id ) return t_(F);
+  ++se_args;
+  st_add_arg( se_level, sc_num, T_c, se_args );
   sc_next();
   return t_(T);
 }
@@ -756,6 +760,7 @@ int pa_argdef()
 int pa_args()
 {
   t1("pa_args");
+  int se_args = 0;
   if( !pa_argdef() ) return t_(T);
   while( sc_tkn==',' ) { sc_next(); if( !pa_argdef() ) return t_(F); }
   return t_(T);

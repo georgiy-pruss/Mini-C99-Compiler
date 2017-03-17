@@ -15,7 +15,7 @@ unexpr : '+''+' unexpr | '-''-' unexpr
        | '-' term | '!' term | '*' term  // no: &x ~x
        | postfix
 
-type : "int" | "char" | "void"
+type : "int" | "char" | "void" // void is used only for function result
 
 stars : [ '*' [ '*' ] ]
 
