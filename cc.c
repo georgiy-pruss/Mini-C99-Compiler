@@ -286,6 +286,14 @@ int sc_read_next()        // scan for next token
     if( rd_char == c ) { rd_next(); if( c=='&' ) c = 'a'; else c = 'o'; } // && ||
     return c;
   }
+  if( rd_char=='#' ) // comment #...
+  {
+    rd_next();
+    while( rd_char!='\n' && rd_char>0 )
+      rd_next();
+    if(rd_char>0) rd_next();
+    return sc_read_next();
+  }
   if( rd_char=='/' ) // comment //... or /*...*/ or divide /
   {
     rd_next();

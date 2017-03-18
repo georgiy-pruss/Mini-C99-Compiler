@@ -26,13 +26,9 @@ int find(int n, int i1, int a, int b, int op)
         tab[i1] = n;
     }
 
-    //for(i=0;i<nb_num;i++)
-    i=0;
-    while( i<nb_num )
+    for(i=0;i<nb_num;++i)
     {
-        //for(j=i+1;j<nb_num;j++)
-        j=i+1;
-        while(j<nb_num)
+        for(j=i+1;j<nb_num;++j)
         {
             a = tab[i];
             b = tab[j];
@@ -65,9 +61,7 @@ int find(int n, int i1, int a, int b, int op)
                 tab[i] = a;
                 tab[j] = b;
             }
-            ++j;
         }
-        ++i;
     }
 
     return 0;
@@ -78,8 +72,7 @@ int main(int argc, char **argv)
     int i, res, p;
 
     if (argc < 3) {
-        printf("usage: %s: result numbers...\n"
-               "Try to find result from numbers with the 4 basic operations.\n", argv[0]);
+        printf("usage: %s: result numbers...\nTry to find result from numbers with the 4 basic operations.\n", argv[0]);
         exit(1);
     }
 
@@ -87,19 +80,13 @@ int main(int argc, char **argv)
     result = atoi(argv[p]);
     printf("result=%d\n", result);
     nb_num = 0;
-    //for(i=p+1;i<argc;i++) {
-    i=p+1;
-    while(i<argc)
-    {
-        tab[nb_num++] = atoi(argv[i]);
-        ++i;
-    }
+    for(i=p+1;i<argc;++i,++nb_num)
+        tab[nb_num] = atoi(argv[i]);
 
     stack_ptr = -1;
     res = find(0, 0, 0, 0, ' ');
     if (res) {
-        //for(i=0;i<=stack_ptr;i++) {
-        while(0) {
+        for(i=0;i<=stack_ptr;++i) {
             printf("%d %c %d = %d\n",
                    stack_res[3*i], stack_op[i],
                    stack_res[3*i+1], stack_res[3*i+2]);

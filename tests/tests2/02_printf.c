@@ -1,11 +1,11 @@
 #include <stdio.h>
 
-int main() 
+int main()
 {
    printf("Hello world\n");
 
    int Count;
-   for (Count = -5; Count <= 5; Count++)
+   for (Count = -5; Count <= 5; ++Count)
       printf("Count = %d\n", Count);
 
    printf("String 'hello', 'there' is '%s', '%s'\n", "hello", "there");
