@@ -2,14 +2,12 @@
 // gcc -fno-builtin-malloc -fno-builtin-strlen -O2 cc.c -o cc.exe
 // -std=c99 is default in gcc
 
-// TODO chars '\x', ops & ^ | ~
-
 // Parameters ------------------------------------------------------------------
 
 enum { INTSZ = 4,    // all this is for 32-bit architecture; int and int* is 4 bytes
   STR_MAX_SZ=260,    // max size of any string (line, name, etc.)
   ID_TABLE_LEN=1009, // for id freezing; should be prime number
-  ST_LEN=200,        // symbol table; max length is 200 (it's for all scopes at a moment)
+  ST_LEN=500,        // symbol table; max length is 500 (it's for all scopes at a moment)
   RD_BUF=8000 };     // buffer for reading program text
 
 int SC_DEBUG=0; // -T - tokens trace
@@ -105,7 +103,7 @@ enum { Void, Char, Int, Enum, If, Else, While, For, Break, Return }; // keywords
 
 int op_prec[128] = {0}; // operator precedence
 
-void set_prec()
+void op_set_prec()
 {
   char* opchar = "=oa|^&en<>lg+-*/%";
   for( char* p = "134567889999BBCCC"; *p; ++opchar, ++p ) op_prec[*opchar]=*p-'0';
@@ -140,6 +138,11 @@ void rd_next() // read next character, save it in rd_char; <0 if eof
     rd_char_pos = 0;
   }
   rd_char = rd_buf[ rd_char_pos ]; ++rd_char_pos;
+}
+
+void err( char* msg )
+{
+  p3( "\n*** Error (~line ", i2s( rd_line ), "): " ); p2( msg, " ***\n" );
 }
 
 // Id Table --------------------------------------------------------------------
@@ -410,7 +413,7 @@ int st_check( int id, int level )
 {
   if( st_len==0 ) st_create( ST_LEN );
   int i = st_count;
-  if( i>= st_len ) p1( "ERROR TOO MANY NAMES IN SCOPES\n" ); // exit(9);
+  if( i>= st_len ) { err( "too many names in scopes" ); exit(9); }
   // check if already there
   st_id[i] = id;
   st_level[i] = level;
@@ -488,25 +491,19 @@ void st_dump_level( int level )
   for( i=0; i<st_count; ++i )
     if( st_level[i]==level )
       break;
-  p3( "level ",i2s(level),"\n" );
+  if( level==0 )
+    p1( "globals\n" );
+  else
+    p3( "level ",i2s(level),"\n" );
   for( ; i<st_count; ++i )
   {
     assert( st_level[i]==level, "levels !=" );
     p2( i2s(i), " - " ); p3( id_table[st_id[i]]," #", i2s( st_id[i] ) );
     p4( " ", st_type_str(st_type[i]), " ", st_kind_str(st_kind[i]) );
-    p2( " v=", i2s(st_value[i]) ); p3( " p=", i2s(st_prop[i]), "\n");
-  }
-}
-
-void st_dump()
-{
-  for( int i=0; i<st_count; ++i )
-  {
-    //p2(i2s(st_id[i]),"\n");
-    p2( i2s(i), " - " ); p3( id_table[st_id[i]]," #", i2s( st_id[i] ) );
-    p2( " @", i2s(st_level[i]) );
-    p4( " ", st_type_str(st_type[i]), " ", st_kind_str(st_kind[i]) );
-    p2( " v=", i2s(st_value[i]) ); p3( " p=", i2s(st_prop[i]), "\n");
+    p2( " v=", i2s(st_value[i]) );
+    if( st_kind[i]==K_array || st_kind[i]==K_fn )
+      p2( " p=", i2s(st_prop[i]));
+    p1("\n");
   }
 }
 
@@ -560,7 +557,7 @@ int pa_integer() // has value at compile time
   if( sc_tkn==Id ) // Id must be enum
   {
     int i = st_find( sc_num );
-    if( i<0 || st_kind[i] != K_enum ) return t_(F);
+    if( i<0 || st_kind[i] != K_enum ) { err("Can't find enum Id"); return t_(F); }
     se_value = st_value[i];
   }
   else
@@ -627,7 +624,7 @@ int pa_stars()
   t1("pa_stars");
   se_stars = 0;
   if( sc_tkn=='*' ) { sc_next(); se_stars = 1; if( sc_tkn=='*' ) { sc_next(); se_stars = 2; } }
-  if( se_stars>0 && se_type==T_v ) { p1( "\nCAN'T HAVE POINTER TO VOID\n" ); exit(8); }
+  if( se_stars>0 && se_type==T_v ) { err( "void* is not implemented" ); exit(8); }
   return t_(T);
 }
 
@@ -774,8 +771,7 @@ int pa_stmt()
     int nv = st_count_at( se_level );
     if( nv>0 )
     {
-      p1("for-scope\n");
-      st_dump_level( se_level );
+      if( ST_DUMP ) { p1("for-scope\n"); st_dump_level( se_level ); }
       st_clean( se_level );
     }
     --se_level;
@@ -792,8 +788,7 @@ int pa_block() // no check for '{', it's done outside; next token right away
   int nv = st_count_at( se_level );
   if( nv>0 )
   {
-    p1("block\n");
-    st_dump_level( se_level );
+    if( ST_DUMP ) { p1("block\n"); st_dump_level( se_level ); }
     st_clean( se_level );
   }
   --se_level;
@@ -858,9 +853,9 @@ int pa_vartail()
   }
   else // length is specified
   {
-    if( !pa_integer() ) return t_(F);
+    if( !pa_integer() ) return t_(F); // value in se_value
     if( sc_tkn!=']' ) return t_(F);
-    st_add_array( se_level, id, t, 0, sc_num );
+    st_add_array( se_level, id, t, 0, se_value );
     sc_next();
     if( sc_tkn!='=' ) return t_(T); // no initialization
     sc_next();
@@ -930,8 +925,7 @@ int pa_fn_or_vars()
     int nv = st_count_at( se_level );
     if( nv>0 )
     {
-      p1("args\n");
-      st_dump_level( se_level );
+      if( ST_DUMP ) { p1("args\n"); st_dump_level( se_level ); }
       st_clean( se_level );
     }
     --se_level;
@@ -983,7 +977,6 @@ int pa_decl_or_def()
 int pa_program( char* fn )
 {
   t1("pa_program");
-  set_prec();
   rd_file = open( fn, O_RDONLY, 0 );
   if( rd_file<=0 ) return t_(F);
   int rc = T;
@@ -1024,18 +1017,16 @@ int main( int ac, char** av )
     }
   }
 
-  if( !filename ) { p1( "No file name provided\n" ); return 1; }
+  if( !filename ) { p1( "No file name provided\n" ); exit(1); }
+  // init
+  op_set_prec();
   int rc = 0;
   if( !pa_program( filename ) )
   {
-    p3( "\n*** Error in ", filename, " around line " ); p2( i2s( rd_line ), " ***\n" );
-    rc = 2;
+    err( "something's wrong" );
+    rc = 2; // don't exit, print tables if requested
   }
   if( IT_DUMP ) id_table_dump();
-  if( ST_DUMP )
-  {
-    p1("globals\n");
-    st_dump();
-  }
+  if( ST_DUMP ) st_dump_level(0);
   return rc;
 }
