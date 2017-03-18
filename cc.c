@@ -259,7 +259,7 @@ int sc_read_next()        // scan for next token
   }
   if( rd_char=='{' || rd_char=='}' || rd_char=='(' || rd_char==')' ||
       rd_char=='[' || rd_char==']' || rd_char==',' || rd_char==';' ||
-      rd_char=='*' || rd_char=='%' || rd_char=='^' )
+      rd_char=='*' || rd_char=='%' || rd_char=='^' || rd_char=='~' )
   {
     int c = rd_char; rd_next();
     return c;
@@ -493,9 +493,9 @@ int pa_primary()
   t1("pa_primary");
   if( sc_tkn==Num || sc_tkn==Chr || sc_tkn==Str || sc_tkn==Id )
   {
-    if( sc_tkn==Num || sc_tkn==Chr ) p3( "=number ",i2s(sc_num),"\n");
-    else if( sc_tkn==Str ) p3( "=str ",str_repr(sc_text),"\n");
-    else if( sc_tkn==Id ) p3( "=id ",sc_text,"\n");
+    // if( sc_tkn==Num || sc_tkn==Chr ) p3( "=number ",i2s(sc_num),"\n");
+    // else if( sc_tkn==Str ) p3( "=str ",str_repr(sc_text),"\n");
+    // else if( sc_tkn==Id ) p3( "=id ",sc_text,"\n");
 
     sc_next(); return t_(T);
   }
@@ -558,7 +558,7 @@ int pa_unexpr()
 {
   t1("pa_unexpr");
   if( sc_tkn=='i' || sc_tkn=='d' ) { sc_next(); return t_(pa_unexpr()); }
-  if( sc_tkn=='-' || sc_tkn=='!' || sc_tkn=='*' ) { sc_next(); return t_(pa_term()); }
+  if( sc_tkn=='-' || sc_tkn=='!' || sc_tkn=='*' || sc_tkn=='~') { sc_next(); return t_(pa_term()); }
   return t_(pa_postfix());
 }
 
@@ -603,20 +603,16 @@ int pa_term()
   return t_(pa_unexpr());
 }
 
-int sc_op;
-
-int pa_binop_na()
+int pa_binop_na() // na = no advance, sc_next() must be called in the caller
 {
   t1("pa_binop");
-  if( sc_tkn=='*' || sc_tkn=='/' || sc_tkn=='%' ||                // B
-      sc_tkn=='+' || sc_tkn=='-' ||                               // A
-      sc_tkn=='<' || sc_tkn=='>' || sc_tkn=='l' || sc_tkn=='g' || // 9
+  if( sc_tkn=='*' || sc_tkn=='/' || sc_tkn=='%' ||                // C
+      sc_tkn=='+' || sc_tkn=='-' ||                               // B   A: << >>
+      sc_tkn=='<' || sc_tkn=='>' || sc_tkn=='l' || sc_tkn=='g' || // 9   2: ?:
       sc_tkn=='e' || sc_tkn=='n' ||                               // 8
       sc_tkn=='&' || sc_tkn=='^' || sc_tkn=='|' ||                // 7 6 5
       sc_tkn=='a' || sc_tkn=='o' || sc_tkn=='=' )                 // 4 3 1
-  {
     return t_(T);
-  }
   return t_(F);
 }
 
@@ -634,23 +630,15 @@ int pa_expr( int min_prec ) // precedence climbing
 
     sc_next();
 
-    //if( pr < min_prec )
-    //{
-    //  if( !pa_term() )
-    //    return t_(F);
-    //}
-    //else
-    //{
-      if( !pa_expr( p ) )
-        return t_(F);
-    //}
-    //if( !pa_term() )
-    //  return t_(F);
-    char ops[3]; ops[0]=(char)t; ops[1]='\n'; ops[2]='\0';
-    p2( "exec ",ops );
+    if( !pa_expr( p ) )
+      // probably no need for sc_next() here
+      return t_(F);
+
+    //char ops[3]; ops[0]=(char)t; ops[1]='\n'; ops[2]='\0';
+    //p2( "exec ",ops ); or some other semantics
   }
 
-  // maybe sc_next()
+  // maybe sc_next() here
   return t_(T);
 }
 
