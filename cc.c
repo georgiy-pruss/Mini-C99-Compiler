@@ -213,7 +213,7 @@ int sc_read_next()        // scan for next token
   if( rd_char < 0 ) { rd_next(); rd_line = 1; if(RD_LINES) p3( "[", i2s(rd_line), "]" ); }
   while( rd_char==' ' || rd_char=='\n' || rd_char=='\r' )
   {
-    if( rd_char==10 ) { ++rd_line; if(RD_LINES) p3( "\n[", i2s(rd_line), "]" ); }
+    if( rd_char=='\n' ) { ++rd_line; if(RD_LINES) p3( "\n[", i2s(rd_line), "]" ); }
     rd_next();
   }
   if( rd_char<0 ) return Eof;
@@ -324,10 +324,10 @@ int sc_read_next()        // scan for next token
 
 char* KWDS[11] = { "void","char","int","enum","if","else","while","for","break","return" };
 
-char repr[STR_MAX_SZ];
+char str_repr_buf[STR_MAX_SZ];
 char* str_repr( char* s )
 {
-  char* d = repr; *d = '"'; ++d;
+  char* d = str_repr_buf; *d = '"'; ++d;
   for( ; *s; ++d, ++s )
   {
     if( *s=='\n' ) { *d='\\'; ++d; *d='n'; }
@@ -337,7 +337,7 @@ char* str_repr( char* s )
     else *d=*s;
   }
   *d = '"'; ++d; *d = 0;
-  return repr;
+  return str_repr_buf;
 }
 
 void sc_next() // read and put token into sc_tkn
@@ -477,7 +477,7 @@ int se_args; // number of arguments in fn
 // Parser ----------------------------------------------------------------------
 
 int tL = 0; // indent level
-void tI() { p1("                    "); int i=0; while(i<tL) { p1( "." ); ++i; } }
+void tI() { p1("            "); int i=0; while(i<tL) { p1( "." ); ++i; } }
 void t1( char* s ) { if( PA_TRACE ) { tI(); p2( s,"\n" ); ++tL; } }
 void t2( char* s, char* s2 ) { if( PA_TRACE ) { tI(); p3( s,s2,"\n" ); ++tL; } }
 void t3( char* s, char* s2, char* s3 ) { if( PA_TRACE ) { tI(); p4( s,s2,s3,"\n" ); ++tL; } }
@@ -494,8 +494,8 @@ int pa_primary()
   if( sc_tkn==Num || sc_tkn==Chr || sc_tkn==Str || sc_tkn==Id )
   {
     if( sc_tkn==Num || sc_tkn==Chr ) p3( "=number ",i2s(sc_num),"\n");
-    else if( sc_tkn==Str ) p3( "=str [",sc_text,"]\n");
-    else if( sc_tkn==Id ) p3( "=id  [",sc_text,"]\n");
+    else if( sc_tkn==Str ) p3( "=str ",str_repr(sc_text),"\n");
+    else if( sc_tkn==Id ) p3( "=id ",sc_text,"\n");
 
     sc_next(); return t_(T);
   }
@@ -605,7 +605,7 @@ int pa_term()
 
 int sc_op;
 
-int pa_binop_no_advance()
+int pa_binop()
 {
   t1("pa_binop");
   if( sc_tkn=='*' || sc_tkn=='/' || sc_tkn=='%' ||                // B
@@ -614,7 +614,11 @@ int pa_binop_no_advance()
       sc_tkn=='e' || sc_tkn=='n' ||                               // 8
       sc_tkn=='&' || sc_tkn=='^' || sc_tkn=='|' ||                // 7 6 5
       sc_tkn=='a' || sc_tkn=='o' || sc_tkn=='=' )                 // 4 3 1
+  {
+    sc_op = sc_tkn;
+    sc_next();
     return t_(T);
+  }
   return t_(F);
 }
 
@@ -624,17 +628,17 @@ int pa_expr( int min_prec ) // precedence climbing
   if( !pa_term() ) return t_(F);
   int op;
   int pr;
-  while( pa_binop_no_advance() && op_prec[sc_tkn] >= min_prec )
+  while( pa_binop() ) // && op_prec[sc_tkn] >= min_prec )
   {
-    op = sc_tkn;
+    op = sc_op;
     pr = op_prec[sc_tkn];
-    sc_next();
-    if( !pa_expr( pr+1 ) )
+    //if( !pa_expr( pr+1 ) )
+    //  return t_(F);
+    if( !pa_term() )
       return t_(F);
     char ops[3]; ops[0]=(char)op; ops[1]='\n'; ops[2]='\0';
     p2( "exec ",ops );
   }
-  sc_next();
   return t_(T);
 }
 
@@ -643,14 +647,14 @@ int pa_vardef_or_expr()
   t1("pa_vardef_or_expr");
   if( sc_tkn == Kw + Int || sc_tkn == Kw + Char || sc_tkn == Kw + Void )
   {
-    if( !pa_type() || !pa_stars() ) return t_( F );
-    if( sc_tkn != Id ) return t_( F );
+    if( !pa_type() || !pa_stars() ) return t_(F);
+    if( sc_tkn != Id ) return t_(F);
     st_add_var( se_level, sc_num, T_i, 0 );
-    sc_next(); return t_( pa_vars() );
+    sc_next(); return t_(pa_vars());
   }
-  if( !pa_expr(1) || sc_tkn != ';' ) return t_( F ); // expr ';'
+  if( !pa_expr(1) || sc_tkn != ';' ) return t_(F); // expr ';'
   sc_next();
-  return t_( T );
+  return t_(T);
 }
 
 int pa_stmt()
@@ -660,7 +664,7 @@ int pa_stmt()
   if( sc_tkn=='{' ) { sc_next(); return t_(pa_block()); }
   if( sc_tkn==Kw+Break )
   {
-    sc_next(); if( sc_tkn!=';' ) return F; sc_next(); return T;
+    sc_next(); if( sc_tkn!=';' ) return t_(F); sc_next(); return t_(T);
   }
   if( sc_tkn==Kw+Return )
   {
@@ -684,15 +688,15 @@ int pa_stmt()
   }
   if( sc_tkn==Kw+For )
   {
-    sc_next(); if( sc_tkn != '(' ) return t_( F );
+    sc_next(); if( sc_tkn != '(' ) return t_(F);
     sc_next();
-    if( sc_tkn!=';' ) { if( !pa_vardef_or_expr() ) return t_( F ); } else sc_next();
-    if( sc_tkn!=';' ) if( !pa_expr(1) ) return t_( F ); sc_next();
-    if( sc_tkn!=')' ) if( !pa_exprs() ) return t_( F ); // opt. post-expressions
-    if( sc_tkn!=')' ) return t_( F ); sc_next();
+    if( sc_tkn!=';' ) { if( !pa_vardef_or_expr() ) return t_(F); } else sc_next();
+    if( sc_tkn!=';' ) if( !pa_expr(1) ) return t_(F); sc_next();
+    if( sc_tkn!=')' ) if( !pa_exprs() ) return t_(F); // opt. post-expressions
+    if( sc_tkn!=')' ) return t_(F); sc_next();
     return t_( pa_stmt() );
   }
-  return pa_vardef_or_expr();
+  return t_(pa_vardef_or_expr());
 }
 
 int pa_block() // no check for '{', it's done outside; next token right away
