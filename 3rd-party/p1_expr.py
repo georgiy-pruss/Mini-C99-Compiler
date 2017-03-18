@@ -1,9 +1,6 @@
 # see http://effbot.org/zone/simple-top-down-parsing.txt
 
-import sys
-import re
-
-pa_prec = {"+":10,"-":10,"<":5,">":5,"=":5,"*":20,"/":30,"^":40,"E":0}
+pa_prec = {"<":5,">":5,"=":5,"+":10,"-":10,"*":20,"/":30,"^":40}
 
 pgm_text = ""
 pos = -1
@@ -18,26 +15,41 @@ def start(program):
 def next():
   global pos
   pos += 1
-  if pos>=len(pgm_text): return 'E'
+  if pos>=len(pgm_text):
+    print( "*** next() returns <E>" )
+    return 'E'
   c = pgm_text[pos]
+  print( "*** next() returns "+c )
   return c
 
 def expr(rbp):
   global sc_tkn
-  t = sc_tkn
-  sc_tkn = next()
 
+  print( ">>> entered expr with rbp",rbp )
+  print( "tkn "+sc_tkn+" saved to t" )
+  t = sc_tkn
+  print( "<-> left is int("+t+")" )
   left = int(t) # first term
 
-  while rbp < pa_prec[sc_tkn]:
+  sc_tkn = next()
+  print( "tkn becomes "+sc_tkn+" before loop" )
 
+  while sc_tkn in pa_prec and rbp < pa_prec[sc_tkn]:
+
+    print( "in loop start, rbp was",str(rbp)+", sc_tkn was",sc_tkn+", its prec was "+
+        str(pa_prec[sc_tkn]) )
     t = sc_tkn
+    print( "in loop, tkn "+sc_tkn+" saved to t" )
     sc_tkn = next()
+    print( "in loop, sc_tkn =",sc_tkn )
 
     p = pa_prec[t]
+    print( "in loop, prec of t is",p )
     if t=="^": p -= 1 # right-assoc. operator
+    print( "in loop, calling expr with p",p )
     e = expr(p)
-    print(t,left,e)
+    print( "in loop, expr returned",e )
+    print( "in loop, now performing",t,left,e)
     if t=="*": left *= e
     if t=="/": left /= e
     if t=="+": left += e
@@ -47,6 +59,7 @@ def expr(rbp):
     if t=="=": left = left == e
     if t=="^": left = left ** e
 
+  print( "<<< out of loop, returning",left,"from expr")
   return left
 
 def parse(program):
@@ -56,6 +69,7 @@ def parse(program):
   print( "-->", e )
   print()
 
+'''
 parse("6")
 parse("2^3^1")
 parse("1+2")
@@ -66,6 +80,7 @@ parse("1*2/3")
 parse("1+4>1+5")
 parse("1+2*2=1+5")
 parse("1+2*2<1^4+5")
-parse("1+2*3+4")
 parse("1*2+3*4")
+'''
+parse("1+2*3+4")
 

@@ -1,3 +1,9 @@
+gcc -S -masm=intel t_defs.c -o t_defs.s
+    # ... -g -c -Wa,-alh
+gcc -masm=intel t_defs.s -o t_defs.exe
+
+
+
 gcc -Wa,-adhln -g intmainargsps.c >intmainargsps.s2
 -masm=intel
 remove -g
@@ -11,7 +17,6 @@ d: omit debugging directives; n: omit forms processing
 h: include high-level source
 l: include assembly
 
-gcc intmainargspsi.s -masm=intel -o im.exe
 
 https://sourceware.org/binutils/docs/as/index.html#Top
 

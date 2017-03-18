@@ -500,7 +500,7 @@ int pa_primary()
     sc_next(); return t_(T);
   }
   if( sc_tkn!='(' ) return t_(F);
-  sc_next(); if( !pa_expr(1) ) return t_(F);
+  sc_next(); if( !pa_expr(0) ) return t_(F);
   if( sc_tkn!=')' ) return t_(F);
   sc_next();
   se_type = T_i; // elaborate!...
@@ -530,8 +530,8 @@ int pa_integer() // has value at compile time
 int pa_exprs()
 {
   t1("pa_exprs");
-  if( !pa_expr(1) ) return t_(F);
-  while( sc_tkn==',' ) { sc_next(); if( !pa_expr(1) ) return t_(F); }
+  if( !pa_expr(0) ) return t_(F);
+  while( sc_tkn==',' ) { sc_next(); if( !pa_expr(0) ) return t_(F); }
   return t_(T);
 }
 
@@ -540,7 +540,7 @@ int pa_call_or_index()
   t1("pa_call_or_index");
   while( sc_tkn=='(' || sc_tkn=='[' )
   {
-    if( sc_tkn=='[' ) { sc_next(); if( !pa_expr(1) || sc_tkn!=']' ) return t_(F); }
+    if( sc_tkn=='[' ) { sc_next(); if( !pa_expr(0) || sc_tkn!=']' ) return t_(F); }
     else /* '(' */ { sc_next(); if( sc_tkn!=')' ) { if( !pa_exprs() || sc_tkn!=')' ) return t_(F); } }
     sc_next();
   }
@@ -596,7 +596,7 @@ int pa_term()
       pa_stars(); if( sc_tkn!=')' ) return t_(F);
       sc_next(); return t_(pa_term());
     }
-    if( !pa_expr(1) || sc_tkn!=')' ) return t_(F);
+    if( !pa_expr(0) || sc_tkn!=')' ) return t_(F);
     sc_next();
     return t_(pa_call_or_index());
   }
@@ -605,7 +605,7 @@ int pa_term()
 
 int sc_op;
 
-int pa_binop()
+int pa_binop_na()
 {
   t1("pa_binop");
   if( sc_tkn=='*' || sc_tkn=='/' || sc_tkn=='%' ||                // B
@@ -615,8 +615,6 @@ int pa_binop()
       sc_tkn=='&' || sc_tkn=='^' || sc_tkn=='|' ||                // 7 6 5
       sc_tkn=='a' || sc_tkn=='o' || sc_tkn=='=' )                 // 4 3 1
   {
-    sc_op = sc_tkn;
-    sc_next();
     return t_(T);
   }
   return t_(F);
@@ -625,20 +623,34 @@ int pa_binop()
 int pa_expr( int min_prec ) // precedence climbing
 {
   t2("pa_expr ",i2s(min_prec));
+
   if( !pa_term() ) return t_(F);
-  int op;
-  int pr;
-  while( pa_binop() ) // && op_prec[sc_tkn] >= min_prec )
+  // left = result of term()
+
+  while( pa_binop_na() && min_prec < op_prec[sc_tkn] )
   {
-    op = sc_op;
-    pr = op_prec[sc_tkn];
-    //if( !pa_expr( pr+1 ) )
+    int t = sc_tkn;
+    int p = op_prec[t];
+
+    sc_next();
+
+    //if( pr < min_prec )
+    //{
+    //  if( !pa_term() )
+    //    return t_(F);
+    //}
+    //else
+    //{
+      if( !pa_expr( p ) )
+        return t_(F);
+    //}
+    //if( !pa_term() )
     //  return t_(F);
-    if( !pa_term() )
-      return t_(F);
-    char ops[3]; ops[0]=(char)op; ops[1]='\n'; ops[2]='\0';
+    char ops[3]; ops[0]=(char)t; ops[1]='\n'; ops[2]='\0';
     p2( "exec ",ops );
   }
+
+  // maybe sc_next()
   return t_(T);
 }
 
@@ -652,7 +664,7 @@ int pa_vardef_or_expr()
     st_add_var( se_level, sc_num, T_i, 0 );
     sc_next(); return t_(pa_vars());
   }
-  if( !pa_expr(1) || sc_tkn != ';' ) return t_(F); // expr ';'
+  if( !pa_expr(0) || sc_tkn != ';' ) return t_(F); // expr ';'
   sc_next();
   return t_(T);
 }
@@ -669,19 +681,19 @@ int pa_stmt()
   if( sc_tkn==Kw+Return )
   {
     sc_next(); if( sc_tkn==';' ) { sc_next(); return t_(T); }
-    if( !pa_expr(1) || sc_tkn!=';' ) return t_(F);
+    if( !pa_expr(0) || sc_tkn!=';' ) return t_(F);
     sc_next(); return t_(T);
   }
   if( sc_tkn==Kw+While )
   {
     sc_next(); if( sc_tkn!='(' ) return t_(F);
-    sc_next(); if( !pa_expr(1) || sc_tkn!=')' ) return t_(F);
+    sc_next(); if( !pa_expr(0) || sc_tkn!=')' ) return t_(F);
     sc_next(); return t_(pa_stmt());
   }
   if( sc_tkn==Kw+If )
   {
     sc_next(); if( sc_tkn!='(' ) return t_(F);
-    sc_next(); if( !pa_expr(1) || sc_tkn!=')' ) return t_(F);
+    sc_next(); if( !pa_expr(0) || sc_tkn!=')' ) return t_(F);
     sc_next(); if( !pa_stmt() ) return t_(F);
     if( sc_tkn==Kw+Else ) { sc_next(); if( !pa_stmt() ) return t_(F); }
     return t_(T);
@@ -691,7 +703,7 @@ int pa_stmt()
     sc_next(); if( sc_tkn != '(' ) return t_(F);
     sc_next();
     if( sc_tkn!=';' ) { if( !pa_vardef_or_expr() ) return t_(F); } else sc_next();
-    if( sc_tkn!=';' ) if( !pa_expr(1) ) return t_(F); sc_next();
+    if( sc_tkn!=';' ) if( !pa_expr(0) ) return t_(F); sc_next();
     if( sc_tkn!=')' ) if( !pa_exprs() ) return t_(F); // opt. post-expressions
     if( sc_tkn!=')' ) return t_(F); sc_next();
     return t_( pa_stmt() );
@@ -743,7 +755,7 @@ int pa_vartail()
   if( sc_tkn=='=' )
   {
     sc_next();
-    return t_(pa_expr(1)); // must be calculable for globals
+    return t_(pa_expr(0)); // must be calculable for globals
   }
   if( sc_tkn!='[' ) return t_(T); // without initial value
   sc_next();
