@@ -373,6 +373,18 @@ int  st_count;  // number of symbols in ST
 enum { T_v, T_c, T_cp, T_cpp, T_i, T_ip, T_ipp }; // st_type
 enum { K_enum, K_var, K_array, K_arg, K_fn };
 
+char* st_type_str( int t )
+{
+  char* s[] = {"Void","Char","Char*","Char**","Int","Int*","Int**","?"};
+  return s[t];
+}
+
+char* st_kind_str( int k )
+{
+  char* s[] = {"Enum","Var","Array","Arg","Fn"};
+  return s[k];
+}
+
 void st_create( int n )
 {
   // array of struct is split into set of arrays. b/c no struct in the language
@@ -447,6 +459,14 @@ void st_clean( int level )
     --st_count;
 }
 
+int st_count_at( int level )
+{
+  int i = st_count, n = 0;
+  for( ; i>0 && st_level[i-1]==level; --i )
+    ++n;
+  return n;
+}
+
 int st_find( int id )
 {
   for( int i=st_count-1; i>=0; --i )
@@ -454,14 +474,30 @@ int st_find( int id )
   return -1;
 }
 
+void st_dump_level( int level )
+{
+  int i;
+  for( i=0; i<st_count; ++i )
+    if( st_level[i]==level )
+      break;
+  p3( "level ",i2s(level),"\n" );
+  for( ; i<st_count; ++i )
+  {
+    assert( st_level[i]==level, "levels !=" );
+    p2( i2s(i), " - " ); p3( id_table[st_id[i]]," #", i2s( st_id[i] ) );
+    p4( " ", st_type_str(st_type[i]), " ", st_kind_str(st_kind[i]) );
+    p2( " v=", i2s(st_value[i]) ); p3( " p=", i2s(st_prop[i]), "\n");
+  }
+}
+
 void st_dump()
 {
   for( int i=0; i<st_count; ++i )
   {
-    p2( i2s(i), " - " ); p4( "id: ", i2s( st_id[i] ), " name: ", id_table[st_id[i]] );
-    p2( " lvl:", i2s(st_level[i]) ); p2( " type: ", i2s(st_type[i]) );
-    p2( " kind: ", i2s(st_kind[i]) ); p2( " value: ", i2s(st_value[i]) );
-    p3( " prop: ", i2s(st_prop[i]), "\n");
+    p2( i2s(i), " - " ); p3( id_table[st_id[i]]," #", i2s( st_id[i] ) );
+    p2( " @", i2s(st_level[i]) );
+    p4( " ", st_type_str(st_type[i]), " ", st_kind_str(st_kind[i]) );
+    p2( " v=", i2s(st_value[i]) ); p3( " p=", i2s(st_prop[i]), "\n");
   }
 }
 
@@ -690,11 +726,49 @@ int pa_stmt()
   {
     sc_next(); if( sc_tkn != '(' ) return t_(F);
     sc_next();
-    if( sc_tkn!=';' ) { if( !pa_vardef_or_expr() ) return t_(F); } else sc_next();
-    if( sc_tkn!=';' ) if( !pa_expr(0) ) return t_(F); sc_next();
-    if( sc_tkn!=')' ) if( !pa_exprs() ) return t_(F); // opt. post-expressions
-    if( sc_tkn!=')' ) return t_(F); sc_next();
-    return t_( pa_stmt() );
+    ++se_level; // for makes a new scope
+    if( sc_tkn!=';' )
+    {
+      if( !pa_vardef_or_expr() )
+      {
+        st_clean(se_level);
+        --se_level;
+        return t_(F);
+      }
+    }
+    else sc_next();
+    if( sc_tkn!=';' )
+      if( !pa_expr(0) )
+      {
+        st_clean(se_level);
+        --se_level;
+        return t_(F);
+      }
+    sc_next();
+    if( sc_tkn!=')' )
+      if( !pa_exprs() )
+      {
+        st_clean(se_level);
+        --se_level;
+        return t_(F); // opt. post-expressions
+      }
+    if( sc_tkn!=')' )
+    {
+      st_clean(se_level);
+      --se_level;
+      return t_(F);
+    }
+    sc_next();
+    int rc = pa_stmt();
+    int nv = st_count_at( se_level );
+    if( nv>0 )
+    {
+      p1("for-scope\n");
+      st_dump_level( se_level );
+      st_clean( se_level );
+    }
+    --se_level;
+    return t_( rc );
   }
   return t_(pa_vardef_or_expr());
 }
@@ -702,7 +776,16 @@ int pa_stmt()
 int pa_block() // no check for '{', it's done outside; next token right away
 {
   t1("pa_block");
+  ++se_level;
   while( sc_tkn!='}' ) if( !pa_stmt() ) return t_(F); // error
+  int nv = st_count_at( se_level );
+  if( nv>0 )
+  {
+    p1("block\n");
+    st_dump_level( se_level );
+    st_clean( se_level );
+  }
+  --se_level;
   sc_next();
   return t_(T);
 }
@@ -808,10 +891,29 @@ int pa_fn_or_vars()
 {
   t1("pa_fn_or_vars");
   if( sc_tkn != '(' ) return t_(pa_vars(0));
-  sc_next(); if( !pa_args() || sc_tkn != ')' ) return t_(F);
   sc_next();
-  if( sc_tkn == ';' ) { sc_next(); return t_(T); }          // fn declaration
-  if( sc_tkn == '{' ) { sc_next(); return t_(pa_block()); } // fn definition
+  ++se_level; // for args
+  if( !pa_args() || sc_tkn != ')' ) return t_(F);
+  sc_next();
+  if( sc_tkn == ';' ) // fn declaration
+  {
+    st_clean( se_level ); // args were in vain
+    --se_level;
+    sc_next(); return t_(T);
+  }
+  if( sc_tkn == '{' ) // fn definition
+  {
+    sc_next(); int rc = pa_block();
+    int nv = st_count_at( se_level );
+    if( nv>0 )
+    {
+      p1("args\n");
+      st_dump_level( se_level );
+      st_clean( se_level );
+    }
+    --se_level;
+    return t_(rc);
+  }
   return t_(F);
 }
 
@@ -907,6 +1009,10 @@ int main( int ac, char** av )
     rc = 2;
   }
   if( IT_DUMP ) id_table_dump();
-  if( ST_DUMP ) st_dump();
+  if( ST_DUMP )
+  {
+    p1("globals\n");
+    st_dump();
+  }
   return rc;
 }
