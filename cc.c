@@ -9,7 +9,7 @@
 enum { INTSZ = 4,    // all this is for 32-bit architecture; int and int* is 4 bytes
   STR_MAX_SZ=260,    // max size of any string (line, name, etc.)
   ID_TABLE_LEN=1009, // for id freezing; should be prime number
-  ST_LEN=1000,       // symbol table; max length is 1000 (it's for scopes current state!)
+  ST_LEN=200,        // symbol table; max length is 200 (it's for all scopes at a moment)
   RD_BUF=8000 };     // buffer for reading program text
 
 int SC_DEBUG=0; // -T - tokens trace
@@ -494,6 +494,7 @@ void st_dump()
 {
   for( int i=0; i<st_count; ++i )
   {
+    //p2(i2s(st_id[i]),"\n");
     p2( i2s(i), " - " ); p3( id_table[st_id[i]]," #", i2s( st_id[i] ) );
     p2( " @", i2s(st_level[i]) );
     p4( " ", st_type_str(st_type[i]), " ", st_kind_str(st_kind[i]) );
@@ -601,11 +602,12 @@ int pa_unexpr()
 int pa_type()
 {
   t1("pa_type");
-  if( sc_tkn==Kw+Int || sc_tkn==Kw+Char || sc_tkn==Kw+Void)
+  if( sc_tkn==Kw+Int || sc_tkn==Kw+Char || sc_tkn==Kw+Void )
   {
+    int t = sc_tkn;
     sc_next();
-    if( sc_tkn==Kw+Int ) se_type = T_i;
-    else if( sc_tkn==Kw+Char ) se_type = T_c;
+    if( t==Kw+Int ) se_type = T_i;
+    else if( t==Kw+Char ) se_type = T_c;
     else se_type = T_v;
     return t_(T);
   }
@@ -617,7 +619,7 @@ int pa_stars()
   t1("pa_stars");
   se_stars = 0;
   if( sc_tkn=='*' ) { sc_next(); se_stars = 1; if( sc_tkn=='*' ) { sc_next(); se_stars = 2; } }
-  //if( se_stars>0 && se_type==T_v ) p1( "CAN'T HAVE POINTER TO VOID" );
+  if( se_stars>0 && se_type==T_v ) { p1( "\nCAN'T HAVE POINTER TO VOID\n" ); exit(8); }
   return t_(T);
 }
 
@@ -684,8 +686,9 @@ int pa_vardef_or_expr()
   if( sc_tkn == Kw + Int || sc_tkn == Kw + Char || sc_tkn == Kw + Void )
   {
     if( !pa_type() || !pa_stars() ) return t_(F);
+    int t = se_type + se_stars;
     if( sc_tkn != Id ) return t_(F);
-    st_add_var( se_level, sc_num, T_i, 0 );
+    st_add_var( se_level, sc_num, t, 0 );
     sc_next(); return t_(pa_vars());
   }
   if( !pa_expr(0) || sc_tkn != ';' ) return t_(F); // expr ';'
@@ -823,17 +826,25 @@ int pa_arrayinit()
 int pa_vartail()
 {
   t1("pa_vartail");
+  int t = se_type + se_stars;
+  int id = sc_num;
   if( sc_tkn=='=' )
   {
+    st_add_var( se_level, id, t, 1 ); // 1 - let's mark it has value :)
     sc_next();
     return t_(pa_expr(0)); // must be calculable for globals
   }
-  if( sc_tkn!='[' ) return t_(T); // without initial value
+  if( sc_tkn!='[' )
+  {
+    st_add_var( se_level, id, t, 0 );
+    return t_(T); // without initial value
+  }
   sc_next();
   if( sc_tkn==']' ) // take length from the initial value
   {
     sc_next();
     if( sc_tkn!='=' ) return t_(F);
+    st_add_array( se_level, id, t, 0, -1 ); // calc dim
     sc_next();
     return t_(pa_arrayinit());
   }
@@ -841,6 +852,7 @@ int pa_vartail()
   {
     if( !pa_integer() ) return t_(F);
     if( sc_tkn!=']' ) return t_(F);
+    st_add_array( se_level, id, t, 0, sc_num );
     sc_next();
     if( sc_tkn!='=' ) return t_(T); // no initialization
     sc_next();
@@ -848,17 +860,18 @@ int pa_vartail()
   }
 }
 
-int pa_vars(int k)
+int pa_vars()
 {
   t1("pa_vars");
   // can't have 'void' var
   // disallow array of double-pointers, like T** V[N];
-  if( !pa_vartail(k) ) return t_(F);
+  if( !pa_vartail() ) return t_(F);
   while( sc_tkn==',' )
   {
-    sc_next(); pa_stars(); if( sc_tkn != Id ) return t_(F);
-    st_add_var( se_level, sc_num, T_i, 0 );
-    sc_next(); if( !pa_vartail(k) ) return t_(F);
+    sc_next(); pa_stars();
+    if( sc_tkn != Id ) return t_(F);
+    sc_next();
+    if( !pa_vartail() ) return t_(F);
   }
   if( sc_tkn!=';' ) return t_(F);
   sc_next();
@@ -890,7 +903,9 @@ int pa_args()
 int pa_fn_or_vars()
 {
   t1("pa_fn_or_vars");
-  if( sc_tkn != '(' ) return t_(pa_vars(0));
+  if( sc_tkn != '(' ) return t_(pa_vars());
+  int id=sc_num;
+  st_add_fn( se_level, sc_num, T_v, 0, 0 );
   sc_next();
   ++se_level; // for args
   if( !pa_args() || sc_tkn != ')' ) return t_(F);
