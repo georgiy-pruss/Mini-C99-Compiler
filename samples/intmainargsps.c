@@ -1,4 +1,4 @@
-int strlen( char* s ) { int n=0; while( *s++ ) ++n; return n; }
+int strlen( char* s ) { int n=0; for( ; *s ; ++s ) ++n; return n; }
 
 int write( int f, char* s, int n );
 
