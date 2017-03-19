@@ -354,9 +354,12 @@ char* str_repr( char* s )
   return str_repr_buf;
 }
 
+int sc_n_tokens = 0;
+
 void sc_next() // read and put token into sc_tkn
 {
   sc_tkn = sc_read_next();
+  ++sc_n_tokens;
   if( SC_DEBUG )
   {
     p3( " ", i2s(sc_tkn), " - " );
@@ -535,13 +538,8 @@ void cg_begin( char* fn )
 void cg_end()
 {
   cg_n( "  .ident  \"GCC: (GNU) 5.4.0\"" );
-  cg_n( "  .def _open;   .scl 2; .type 32; .endef" );
-  cg_n( "  .def _read;   .scl 2; .type 32; .endef" );
-  cg_n( "  .def _write;  .scl 2; .type 32; .endef" );
-  cg_n( "  .def _close;  .scl 2; .type 32; .endef" );
-  cg_n( "  .def _malloc; .scl 2; .type 32; .endef" );
-  cg_n( "  .def _free;   .scl 2; .type 32; .endef" );
-  cg_n( "  .def _exit;   .scl 2; .type 32; .endef" );
+  char* nm[] = {"open","read","write","close","malloc","free","exit"};
+  for( int i=0; i<7; ++i ) { cg_o( "  .def _" ); cg_o( nm[i] ); cg_n( "; .scl 2; .type 32; .endef" ); }
 }
 
 void cg_fn_begin( char* name )
@@ -1106,5 +1104,6 @@ int main( int ac, char** av )
   if( cg_file>0 ) close( cg_file );
   if( IT_DUMP ) id_table_dump();
   if( ST_DUMP ) st_dump_level(0);
+  if( SC_DEBUG ) p2( i2s( sc_n_tokens ), " tokens\n" );
   return rc;
 }
