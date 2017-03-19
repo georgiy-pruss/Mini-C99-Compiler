@@ -1,9 +1,12 @@
 // syntax: http://www.lysator.liu.se/c/ANSI-C-grammar-y.html
 // {...} can be 0 or more times;  [...] is optional;  x|y alternative
 
+// comments are inline and multi-line C comments /*...*/ and end-of-line
+// C++ comments //... Also #... is treated as a comment, to ignore #include etc
+
 primary : @Number | @Char | @String | @Id | '(' expr ')'
 
-integer : @Number | @Char | @Id  // enum id is like number; maybe { binop integer }
+integer : @Number | @Char | @Id  // enum id is like a number ({ binop integer }?)
 
 exprs : expr { ',' expr } // args in calls and the last item in for-header
 
@@ -56,9 +59,9 @@ vartail : [ '=' expr ]
 
 vars : vartail { ',' stars @Id vartail } ';'
 
-argdef : type stars @Id                  // e.g. char** argv
+argdef : type stars @Id                  // e.g. "char** argv"
 
-args : argdef { ',' argdef }
+args : argdef { ',' argdef }             // but can't be "char* argv[]"
 
 fn_or_vars : '(' [ args ] ')' ';'        // fn declaration
            | '(' [ args ] ')' '{' block  // fn definition
