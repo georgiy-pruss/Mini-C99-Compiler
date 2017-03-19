@@ -1,3 +1,7 @@
+// gcc -S -masm=intel x.c -o x.s
+// gcc -masm=intel x.s -o x.exe
+
+
 BEGIN
                       .file   "intmain.c"
                       .intel_syntax noprefix
@@ -5,7 +9,7 @@ BEGIN
 int write( int f, char* s, int n );
                       <at the very end:>
                       .def  _write; .scl    2;      .type   32;     .endef
-                      // but not in intel listing!
+                      // but not in intel listing! -- but may be!
 
 int strlen( char* s )
 
