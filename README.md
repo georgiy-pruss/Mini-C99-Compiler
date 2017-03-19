@@ -82,7 +82,7 @@ operator is allowed only in this place: `for( int a=N,*t=s; *t; ++t, --a ) {...}
 * Binary operators: `* / %`, `+ -`, `< > <= >=`, `== !=`, `&`, `^`, `|`, `&&`, `||`, `=`.
 No shifts (`<<` `>>`), no conditional (`?:`), no operators with assignment (`+=` `-=` etc).
 
-* Calls, indexations, prefix `++` and `--`, type cast.
+* Calls, indexing, prefix `++` and `--`, type cast.
 
 * No `sizeof`. No postfix `++` and `--`.
 

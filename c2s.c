@@ -81,10 +81,13 @@ char* i2s( int value )
   return i2s_buf;
 }
 
+void before_exit(); // to call if compilation fails, before calling exit()
+
 void assert( int cond, char* msg )
 {
   if( cond != 0 ) return;
   write( 2, "ASSERT: ", 8 ); write( 2, msg, strlen(msg) ); write( 2, "\n", 1 );
+  before_exit();
   exit(1);
 }
 
@@ -413,7 +416,7 @@ int st_check( int id, int level )
 {
   if( st_len==0 ) st_create( ST_LEN );
   int i = st_count;
-  if( i>= st_len ) { err( "too many names in scopes" ); exit(9); }
+  if( i>= st_len ) { err( "too many names in scopes" ); before_exit(); exit(9); }
   // check if already there
   st_id[i] = id;
   st_level[i] = level;
@@ -515,6 +518,68 @@ int se_value; // value of constant expr, e.g. "integer"
 int se_level = 0; // 0 is global
 int se_enum; // value of enumerator in enum
 int se_args; // number of arguments in fn
+
+// Code generation -------------------------------------------------------------
+
+int cg_file = 0;
+
+void cg_o( char* s ) { write( cg_file, s, strlen(s) ); }
+void cg_n( char* s ) { write( cg_file, s, strlen(s) ); write( cg_file, "\n", 1 ); }
+
+void cg_begin( char* fn )
+{
+  cg_o( "  .file \"" ); cg_o( fn ); cg_n( "\"" );
+  cg_n( "  .intel_syntax noprefix" );
+}
+
+void cg_end()
+{
+  cg_n( "  .ident  \"GCC: (GNU) 5.4.0\"" );
+  cg_n( "  .def _open;   .scl 2; .type 32; .endef" );
+  cg_n( "  .def _read;   .scl 2; .type 32; .endef" );
+  cg_n( "  .def _write;  .scl 2; .type 32; .endef" );
+  cg_n( "  .def _close;  .scl 2; .type 32; .endef" );
+  cg_n( "  .def _malloc; .scl 2; .type 32; .endef" );
+  cg_n( "  .def _free;   .scl 2; .type 32; .endef" );
+  cg_n( "  .def _exit;   .scl 2; .type 32; .endef" );
+}
+
+void cg_fn_begin( char* name )
+{
+  if( strequ( name, "main" ) )
+    cg_n( "  .def ___main; .scl 2; .type 32; .endef" );
+  cg_n( "  .text" );
+  cg_o( "  .globl _" ); cg_n( name );
+  cg_o( "  .def  _" ); cg_o( name ); cg_n( "; .scl 2; .type 32; .endef" );
+  cg_o( "_" ); cg_o( name ); cg_n( ":" );
+  cg_n( "  .cfi_startproc" );
+  cg_n( "  push  ebp" );
+  cg_n( "  .cfi_def_cfa_offset 8" );
+  cg_n( "  .cfi_offset 5, -8" );
+  cg_n( "  mov ebp, esp" );
+  cg_n( "  .cfi_def_cfa_register 5" );
+  if( strequ( name, "main" ) )
+    cg_n( "  and esp, -16" );
+  cg_o( "  sub esp, __locsz__" ); cg_o( name ); cg_n( "" );
+  if( strequ( name, "main" ) )
+    cg_n( "  call ___main" );
+}
+
+void cg_fn_end( char* name, int local_sz, int ret0 )
+{
+  if( ret0 )
+    cg_n( "  mov eax, 0" );
+  cg_n( "  leave" );
+  cg_n( "  .cfi_restore 5" );
+  cg_n( "  .cfi_def_cfa 4, 4" );
+  cg_n( "  ret" );
+  cg_n( "  .cfi_endproc" );
+  cg_o( "  .globl __locsz__" ); cg_o( name ); cg_n( "" );
+  cg_n( "  .data" );
+  cg_n( "  .align 4" );
+  cg_o( "__locsz__" ); cg_o( name ); cg_n( ":" );
+  cg_o( "  .long " ); cg_o( i2s(local_sz) ); cg_n( "" );
+}
 
 // Parser ----------------------------------------------------------------------
 
@@ -624,7 +689,7 @@ int pa_stars()
   t1("pa_stars");
   se_stars = 0;
   if( sc_tkn=='*' ) { sc_next(); se_stars = 1; if( sc_tkn=='*' ) { sc_next(); se_stars = 2; } }
-  if( se_stars>0 && se_type==T_v ) { err( "void* is not implemented" ); exit(8); }
+  if( se_stars>0 && se_type==T_v ) { err( "void* is not implemented" ); before_exit(); exit(8); }
   return t_(T);
 }
 
@@ -921,6 +986,7 @@ int pa_fn_or_vars()
   }
   if( sc_tkn == '{' ) // fn definition
   {
+    cg_fn_begin( id_table[id] );
     sc_next(); int rc = pa_block();
     int nv = st_count_at( se_level );
     if( nv>0 )
@@ -929,6 +995,8 @@ int pa_fn_or_vars()
       st_clean( se_level );
     }
     --se_level;
+    int local_stack_size = 32;
+    cg_fn_end( id_table[id], local_stack_size, 1 ); // flag = ret 0
     return t_(rc);
   }
   return t_(F);
@@ -986,13 +1054,18 @@ int pa_program( char* fn )
   return t_(rc);
 }
 
+void before_exit()
+{
+  if( cg_file>0 ) close(cg_file); cg_file=0;
+}
+
 // Main compiler function ------------------------------------------------------
 
 int main( int ac, char** av )
 {
   if( ac==1 || ac==2 && (strequ( av[1], "-h" ) || strequ( av[1], "--help" )) )
   {
-    p1( "cc.exe [options] file.c\n" );
+    p1( "c2s.exe [options] file.c\n" );
     p1( "-T  show tokens\n" );
     p1( "-L  show line numbers\n" );
     p1( "-P  show parser trace\n" );
@@ -1020,12 +1093,17 @@ int main( int ac, char** av )
   if( !filename ) { p1( "No file name provided\n" ); exit(1); }
   // init
   op_set_prec();
+  cg_file = open( "a.s", O_CREAT|O_WRONLY, 511 ); // 0777 - allow all
+  if( cg_file<0 ) { p1( "Can't create file 'a.s'\n" ); exit(1); }
+  cg_begin( filename );
   int rc = 0;
   if( !pa_program( filename ) )
   {
     err( "something's wrong" );
     rc = 2; // don't exit, print tables if requested
   }
+  cg_end();
+  if( cg_file>0 ) close( cg_file );
   if( IT_DUMP ) id_table_dump();
   if( ST_DUMP ) st_dump_level(0);
   return rc;
