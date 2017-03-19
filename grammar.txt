@@ -37,15 +37,14 @@ binop : '*' | '/' | '%'                  // prec. 12
 
 expr : term { binop term }
 
-vardef_or_expr : type stars @Id vars     // ends with ';'
-               | expr ';'
+vardef : type stars @Id vars   // ends with ';'
 
 stmt : ';'
      | '{' block
      | "break" ';'                | "return" [ expr ] ';'
      | "while" '(' expr ')' stmt  | "if" '(' expr ')' stmt [ "else" stmt ]
-     | "for" '(' vardef_or_expr [ expr ] ';' [ expr { ',' expr } ] ')' stmt
-     | vardef_or_expr // ends with ';'
+     | "for" '(' expr [ expr ] ';' [ expr { ',' expr } ] ')' stmt
+     | expr // ends with ';'
 
 block : { stmt } '}'  // '{' is out of block for easier analysis
 
@@ -63,8 +62,8 @@ argdef : type stars @Id                  // e.g. "char** argv"
 
 args : argdef { ',' argdef }             // but can't be "char* argv[]"
 
-fn_or_vars : '(' [ args ] ')' ';'        // fn declaration
-           | '(' [ args ] ')' '{' block  // fn definition
+fn_or_vars : '(' [ args ] ')' ';'                    // fn declaration
+           | '(' [ args ] ')' '{' { vardef } block  // fn definition
            | vars
 
 enumerator : @Id [ '=' integer ]
@@ -74,6 +73,5 @@ enumdef : '{' enumerator { ',' enumerator } '}' ';'
 decl_or_def : "enum" enumdef | type stars @Id fn_or_vars
 
 program : decl_or_def { decl_or_def } @Eof  // definition/declaration
-
 
 # vim: set syntax=ANTLR :

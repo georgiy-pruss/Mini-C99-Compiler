@@ -39,8 +39,8 @@ char* strdup( char* s ) { return strcpy( malloc( strlen(s) + 1 ), s ); }
 
 char* strrev( char* s )
 {
-  int n = strlen(s); if( n<=1 ) return s;
-  for( char *b = s, *e = s + n - 1; b<e; ++b, --e ) { char t = *e; *e = *b; *b = t; }
+  char t, *b = s, *e; int n = strlen(s); if( n<=1 ) return s;
+  for( e = s + n - 1; b<e; ++b, --e ) { t = *e; *e = *b; *b = t; }
   return s;
 }
 
@@ -58,7 +58,8 @@ int strequ( char* s, char* t ) { return strcmp( s, t ) == 0; }
 
 char* strrchr( char* s, int c )
 {
-  for( int n = strlen(s); n>0; --n ) if( s[n-1] == c ) return s + (n-1);
+  int n;
+  for( n = strlen(s); n>0; --n ) if( s[n-1] == c ) return s + (n-1);
   return 0;
 }
 
@@ -66,15 +67,16 @@ char i2s_buf[12]; // buffer for return value of i2s(x)
 
 char* i2s( int value )
 {
+  char* dst; char* to_rev;
   if( value==0 ) return "0";
-  char* dst = i2s_buf;
+  dst = i2s_buf;
   if( value<0 )
   {
     if( value==(-2147483647-1) ) return "-2147483648"; // minimal 32-bit integer
     *dst = '-'; ++dst;
     value = -value;
   }
-  char* to_rev = dst;
+  to_rev = dst;
   for( ; value != 0; ++dst ) { *dst = (char)(value % 10 + '0'); value = value / 10; }
   *dst = 0;
   strrev( to_rev );
@@ -108,8 +110,8 @@ int op_prec[128] = {0}; // operator precedence
 
 void op_set_prec()
 {
-  char* opchar = "=oa|^&en<>lg+-*/%";
-  for( char* p = "134567889999BBCCC"; *p; ++opchar, ++p ) op_prec[*opchar]=*p-'0';
+  char* o = "=oa|^&en<>lg+-*/%";
+  char* p = "134567889999BBCCC"; for( ; *o; ++o, ++p ) op_prec[*o] = *p-'0';
 }
 
 int find_kw( char* s )
@@ -157,24 +159,22 @@ int collisions = 0;
 
 void id_table_create( int n )
 {
-  id_table = (char**)malloc( 4*n );
-  id_table_len = n;
-  for( int i = 0; i<n; ++i ) id_table[i] = 0;
+  id_table = (char**)malloc( 4*n ); id_table_len = n;
+  for( --n; n>=0; --n ) id_table[n] = 0;
 }
 
 int id_hash( char* s )
 {
-  int h = 5381;
-  for( ; *s; ++s ) h = (h*66 + *s) % 16777216;
+  int h = 5381; for( ; *s; ++s ) h = (h*66 + *s) % 16777216;
   return h;
 }
 
 int id_index( char* s ) // looks up in the table or adds there if needed
 {
+  int h, collision = 0;
   if( IT_DEBUG ) p1( s );
   if( id_table==0 ) id_table_create( ID_TABLE_LEN );
-  int h = id_hash( s ) % id_table_len;
-  int collision = 0;
+  h = id_hash( s ) % id_table_len;
   while( id_table[h] )
   {
     if( strequ( id_table[h], s ) ) { if( IT_DEBUG ) p3( " == ", i2s(h), "\n" ); return h; }
@@ -190,8 +190,8 @@ int id_index( char* s ) // looks up in the table or adds there if needed
 
 void id_table_dump()
 {
-  int k=0;
-  for( int i=0; i<id_table_len; ++i )
+  int i,k;
+  for( k=i=0; i<id_table_len; ++i )
     if( id_table[i] ) { ++k; p4( i2s(i), " ", id_table[i], "\n" ); }
   p1( "-------------------------------------\n" );
   p2( i2s(k), " ids, " );
@@ -216,6 +216,7 @@ void sc_do_backslash()
 
 int sc_read_next()        // scan for next token
 {
+  int v,k,c; char* p;
   if( rd_char < 0 ) { rd_next(); rd_line = 1; if(RD_LINES) p3( "[", i2s(rd_line), "]" ); }
   while( rd_char==' ' || rd_char=='\n' || rd_char=='\r' )
   {
@@ -225,17 +226,17 @@ int sc_read_next()        // scan for next token
   if( rd_char<0 ) return Eof;
   if( rd_char>='0' && rd_char<='9' ) // Number
   {
-    int v = rd_char - '0';
+    v = rd_char - '0';
     for( rd_next(); rd_char>='0' && rd_char<='9'; rd_next() ) v = 10*v + rd_char - '0';
     sc_num = v;
     return Num;
   }
   if( is_abc(rd_char) ) // Id or Keyword
   {
-    char* p = sc_text;
+    p = sc_text;
     while( is_abc(rd_char) || rd_char>='0' && rd_char<='9' ) { *p = rd_char; ++p; rd_next(); }
     *p = 0;
-    int k = find_kw( sc_text );
+    k = find_kw( sc_text );
     if( k >= 0 ) return Kw+k;
     sc_num = id_index( sc_text );
     return Id;
@@ -243,7 +244,7 @@ int sc_read_next()        // scan for next token
   if( rd_char=='"' ) // String literal
   {
     rd_next();
-    char* p = sc_text;
+    p = sc_text;
     while( rd_char!='"' )
     {
       if( rd_char == '\\' ) sc_do_backslash();
@@ -267,12 +268,12 @@ int sc_read_next()        // scan for next token
       rd_char=='[' || rd_char==']' || rd_char==',' || rd_char==';' ||
       rd_char=='*' || rd_char=='%' || rd_char=='^' || rd_char=='~' )
   {
-    int c = rd_char; rd_next();
+    c = rd_char; rd_next();
     return c;
   }
   if( rd_char=='=' || rd_char=='<' || rd_char=='>' || rd_char=='!' )
   {
-    int c = rd_char; rd_next();
+    c = rd_char; rd_next();
     if( rd_char == '=' ) // == <= >= != convert to: e l g n
     {
       rd_next();
@@ -282,13 +283,13 @@ int sc_read_next()        // scan for next token
   }
   if( rd_char=='+' || rd_char=='-' )
   {
-    int c = rd_char; rd_next();
+    c = rd_char; rd_next();
     if( rd_char == c ) { rd_next(); if( c=='+' ) c = 'i'; else c = 'd'; } // ++ --
     return c;
   }
   if( rd_char=='&' || rd_char=='|' )
   {
-    int c = rd_char; rd_next();
+    c = rd_char; rd_next();
     if( rd_char == c ) { rd_next(); if( c=='&' ) c = 'a'; else c = 'o'; } // && ||
     return c;
   }
@@ -358,6 +359,7 @@ int sc_n_tokens = 0;
 
 void sc_next() // read and put token into sc_tkn
 {
+  char o[2] = ".";
   sc_tkn = sc_read_next();
   ++sc_n_tokens;
   if( SC_DEBUG )
@@ -370,7 +372,7 @@ void sc_next() // read and put token into sc_tkn
     else if( sc_tkn == Chr ) p2( "chr ", i2s(sc_num) );
     else if( sc_tkn == Eof ) p1( "eof" );
     else if( sc_tkn == Err ) p2( "err", sc_text );
-    else if( sc_tkn < Kw ) { char o[2] = "."; o[0]=sc_tkn; p2( "op/sep ", o ); }
+    else if( sc_tkn < Kw ) { o[0]=sc_tkn; p2( "op/sep ", o ); }
     else p2( "?", sc_text );
     p1("\n");
   }
@@ -417,8 +419,9 @@ void st_create( int n )
 
 int st_check( int id, int level )
 {
+  int i;
   if( st_len==0 ) st_create( ST_LEN );
-  int i = st_count;
+  i = st_count;
   if( i>= st_len ) { err( "too many names in scopes" ); before_exit(); exit(9); }
   // check if already there
   st_id[i] = id;
@@ -486,7 +489,8 @@ int st_count_at( int level )
 
 int st_find( int id )
 {
-  for( int i=st_count-1; i>=0; --i )
+  int i;
+  for( i=st_count-1; i>=0; --i )
     if( st_id[i]==id ) return i;
   return -1;
 }
@@ -537,9 +541,9 @@ void cg_begin( char* fn )
 
 void cg_end()
 {
+  char* nm[] = {"open","read","write","close","malloc","free","exit"}; int i,N=7;
   cg_n( "  .ident  \"GCC: (GNU) 5.4.0\"" );
-  char* nm[] = {"open","read","write","close","malloc","free","exit"};
-  for( int i=0; i<7; ++i ) { cg_o( "  .def _" ); cg_o( nm[i] ); cg_n( "; .scl 2; .type 32; .endef" ); }
+  for( i=0; i<N; ++i ) { cg_o( "  .def _" ); cg_o( nm[i] ); cg_n( "; .scl 2; .type 32; .endef" ); }
 }
 
 void cg_fn_begin( char* name )
@@ -582,7 +586,7 @@ void cg_fn_end( char* name, int local_sz, int ret0 )
 // Parser ----------------------------------------------------------------------
 
 int tL = 0; // indent level
-void tI() { p1("            "); int i=0; while(i<tL) { p1( "." ); ++i; } }
+void tI() { int i; p1("            "); for( i=0; i<tL; ++i ) p1( "." ); }
 void t1( char* s ) { if( PA_TRACE ) { tI(); p2( s,"\n" ); ++tL; } }
 void t2( char* s, char* s2 ) { if( PA_TRACE ) { tI(); p3( s,s2,"\n" ); ++tL; } }
 void t3( char* s, char* s2, char* s3 ) { if( PA_TRACE ) { tI(); p4( s,s2,s3,"\n" ); ++tL; } }
@@ -614,12 +618,13 @@ int pa_primary()
 
 int pa_integer() // has value at compile time
 {
+  int i;
   t1("pa_integer");
   if( sc_tkn!=Num && sc_tkn!=Chr && sc_tkn!=Id ) return t_(F);
   se_type = T_i;
   if( sc_tkn==Id ) // Id must be enum
   {
-    int i = st_find( sc_num );
+    i = st_find( sc_num );
     if( i<0 || st_kind[i] != K_enum ) { err("Can't find enum Id"); return t_(F); }
     se_value = st_value[i];
   }
@@ -669,10 +674,11 @@ int pa_unexpr()
 
 int pa_type()
 {
+  int t;
   t1("pa_type");
   if( sc_tkn==Kw+Int || sc_tkn==Kw+Char || sc_tkn==Kw+Void )
   {
-    int t = sc_tkn;
+    t = sc_tkn;
     sc_next();
     if( t==Kw+Int ) se_type = T_i;
     else if( t==Kw+Char ) se_type = T_c;
@@ -724,6 +730,7 @@ int pa_binop_na() // na = no advance, sc_next() must be called in the caller
 
 int pa_expr( int min_prec ) // precedence climbing
 {
+  int t,p;
   t2("pa_expr ",i2s(min_prec));
 
   if( !pa_term() ) return t_(F);
@@ -731,8 +738,8 @@ int pa_expr( int min_prec ) // precedence climbing
 
   while( pa_binop_na() && min_prec < op_prec[sc_tkn] )
   {
-    int t = sc_tkn;
-    int p = op_prec[t];
+    t = sc_tkn;
+    p = op_prec[t];
 
     sc_next();
 
@@ -750,11 +757,12 @@ int pa_expr( int min_prec ) // precedence climbing
 
 int pa_vardef_or_expr()
 {
+  int t;
   t1("pa_vardef_or_expr");
   if( sc_tkn == Kw + Int || sc_tkn == Kw + Char || sc_tkn == Kw + Void )
   {
     if( !pa_type() || !pa_stars() ) return t_(F);
-    int t = se_type + se_stars;
+    t = se_type + se_stars;
     if( sc_tkn != Id ) return t_(F);
     st_add_var( se_level, sc_num, t, 0 );
     sc_next(); return t_(pa_vars());
@@ -766,6 +774,7 @@ int pa_vardef_or_expr()
 
 int pa_stmt()
 {
+  int rc, nv;
   t1("pa_stmt");
   if( sc_tkn==';' ) { sc_next(); return t_(T); } // empty stmt ';'
   if( sc_tkn=='{' ) { sc_next(); return t_(pa_block()); }
@@ -830,8 +839,8 @@ int pa_stmt()
       return t_(F);
     }
     sc_next();
-    int rc = pa_stmt();
-    int nv = st_count_at( se_level );
+    rc = pa_stmt();
+    nv = st_count_at( se_level );
     if( nv>0 )
     {
       if( ST_DUMP ) { p1("for-scope\n"); st_dump_level( se_level ); }
@@ -845,10 +854,11 @@ int pa_stmt()
 
 int pa_block() // no check for '{', it's done outside; next token right away
 {
+  int nv;
   t1("pa_block");
   ++se_level;
   while( sc_tkn!='}' ) if( !pa_stmt() ) return t_(F); // error
-  int nv = st_count_at( se_level );
+  nv = st_count_at( se_level );
   if( nv>0 )
   {
     if( ST_DUMP ) { p1("block\n"); st_dump_level( se_level ); }
@@ -891,9 +901,10 @@ int pa_arrayinit()
 
 int pa_vartail()
 {
+  int t,id;
   t1("pa_vartail");
-  int t = se_type + se_stars;
-  int id = sc_num;
+  t = se_type + se_stars;
+  id = sc_num;
   if( sc_tkn=='=' )
   {
     st_add_var( se_level, id, t, 1 ); // 1 - let's mark it has value :)
@@ -959,8 +970,8 @@ int pa_argdef()
 
 int pa_args()
 {
-  t1("pa_args");
   int se_args = 0;
+  t1("pa_args");
   if( !pa_argdef() ) return t_(T);
   while( sc_tkn==',' ) { sc_next(); if( !pa_argdef() ) return t_(F); }
   return t_(T);
@@ -968,9 +979,10 @@ int pa_args()
 
 int pa_fn_or_vars()
 {
+  int id,rc,nv,local_stack_size;
   t1("pa_fn_or_vars");
   if( sc_tkn != '(' ) return t_(pa_vars());
-  int id=sc_num;
+  id=sc_num;
   st_add_fn( se_level, sc_num, T_v, 0, 0 );
   sc_next();
   ++se_level; // for args
@@ -985,15 +997,15 @@ int pa_fn_or_vars()
   if( sc_tkn == '{' ) // fn definition
   {
     cg_fn_begin( id_table[id] );
-    sc_next(); int rc = pa_block();
-    int nv = st_count_at( se_level );
+    sc_next(); rc = pa_block();
+    nv = st_count_at( se_level );
     if( nv>0 )
     {
       if( ST_DUMP ) { p1("args\n"); st_dump_level( se_level ); }
       st_clean( se_level );
     }
     --se_level;
-    int local_stack_size = 32;
+    local_stack_size = 32;
     cg_fn_end( id_table[id], local_stack_size, 1 ); // flag = ret 0
     return t_(rc);
   }
@@ -1002,9 +1014,10 @@ int pa_fn_or_vars()
 
 int pa_enumerator()
 {
+  int id;
   t1("pa_enumerator");
   if( sc_tkn != Id ) return t_(F);
-  int id = sc_num;
+  id = sc_num;
   sc_next();
   if( sc_tkn=='=' )
   {
@@ -1042,10 +1055,10 @@ int pa_decl_or_def()
 
 int pa_program( char* fn )
 {
+  int rc = T;
   t1("pa_program");
   rd_file = open( fn, O_RDONLY, 0 );
   if( rd_file<=0 ) return t_(F);
-  int rc = T;
   sc_next(); // start parsing<-scanning<-reading
   while( sc_tkn!=Eof ) if( !pa_decl_or_def() ) { rc = F; break; }
   close( rd_file );
@@ -1061,6 +1074,8 @@ void before_exit()
 
 int main( int ac, char** av )
 {
+  char* filename = 0;
+  int i,rc;
   if( ac==1 || ac==2 && (strequ( av[1], "-h" ) || strequ( av[1], "--help" )) )
   {
     p1( "c2s.exe [options] file.c\n" );
@@ -1072,8 +1087,7 @@ int main( int ac, char** av )
     p1( "-S  dump symbol table\n" );
     return 0;
   }
-  char* filename = 0;
-  for( int i=1; i<ac; ++i )
+  for( i=1; i<ac; ++i )
   {
     if( *av[i] != '-' )
       filename = av[i];
@@ -1094,7 +1108,7 @@ int main( int ac, char** av )
   cg_file = open( "a.s", O_CREAT|O_WRONLY, 511 ); // 0777 - allow all
   if( cg_file<0 ) { p1( "Can't create file 'a.s'\n" ); exit(1); }
   cg_begin( filename );
-  int rc = 0;
+  rc = 0;
   if( !pa_program( filename ) )
   {
     err( "something's wrong" );

@@ -49,7 +49,8 @@ if there's a recursion in the function calls;
 * **function definitions**; the return type can be `void` or one of the same as for the
 variables: `char`, `char*`, `char**`, `int`, `int*`, `int**`. The arguments can have the
 same set of types, except `void`. No array arguments (`T a[]`) -- they are in fact just
-pointers, so do express it explicitely (`T* a`).
+pointers, so do express it explicitely (`T* a`). In the function body, first the local
+variable definitions go, then all the statements.
 
 ### Statements
 
@@ -59,7 +60,7 @@ These statements are permitted:
 
 * **expression** (for calls, increments, assignments): `foo(1); ++i; c=(a+b)/2;`
 
-* **block** (it introduces a new scope): `{ int t=a; a=b; b=t; }`
+* **block** (it does not introduce a new scope): `{ t=a; a=b; b=t; }`
 
 * **break** (for leaving loops): `break;`
 
@@ -69,11 +70,8 @@ These statements are permitted:
 
 * **while**: `while( more_data() ) do_something();`
 
-* **for** with possibility to define variables in the first part of the header
-and with possibility to have several expressions in the last part -- the *comma*
-operator is allowed only in this place: `for( int a=N,*t=s; *t; ++t, --a ) {...}`
-
-* **variable** definition(s) -- it's also a statement and can be placed anywhere in a block;
+* **for** with possibility to have several expressions in the last part -- the *comma*
+operator is allowed only in this place: `for( a=N,*t=s; *t; ++t, --a ) {...}`
 
 ### Expressions
 
