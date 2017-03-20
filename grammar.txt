@@ -18,7 +18,7 @@ unexpr : '+''+' unexpr | '-''-' unexpr
        | '-' term | '~' term | '!' term | '*' term  // no: &x
        | postfix
 
-type : "int" | "char" | "void" // void is used only for function result
+type : "int" | "char" | "void" // void is used only for function "result"
 
 stars : [ '*' [ '*' ] ]
 
@@ -37,16 +37,12 @@ binop : '*' | '/' | '%'                  // prec. 12
 
 expr : term { binop term }
 
-vardef : type stars @Id vars   // ends with ';'
-
 stmt : ';'
-     | '{' block
+     | '{' { stmt } '}'
      | "break" ';'                | "return" [ expr ] ';'
      | "while" '(' expr ')' stmt  | "if" '(' expr ')' stmt [ "else" stmt ]
      | "for" '(' expr [ expr ] ';' [ expr { ',' expr } ] ')' stmt
      | expr // ends with ';'
-
-block : { stmt } '}'  // '{' is out of block for easier analysis
 
 arrayinit : @String                           // char a[] = "abc"; // ARRAY!
           | '{' @String { ',' @String } '}'   // char* b[] = {"ijk","mn"};
@@ -58,19 +54,21 @@ vartail : [ '=' expr ]
 
 vars : vartail { ',' stars @Id vartail } ';'
 
-argdef : type stars @Id                  // e.g. "char** argv"
+vardef : type stars @Id vars   // type can't be void; ends with ';'
+
+argdef : type stars @Id        // type can't be void; e.g. "char** argv"
 
 args : argdef { ',' argdef }             // but can't be "char* argv[]"
 
-fn_or_vars : '(' [ args ] ')' ';'                    // fn declaration
-           | '(' [ args ] ')' '{' { vardef } block  // fn definition
+fn_or_vars : '(' [ args ] ')' ';'                         // fn declaration
+           | '(' [ args ] ')' '{' { vardef } { stmt } '}' // fn definition
            | vars
 
 enumerator : @Id [ '=' integer ]
 
 enumdef : '{' enumerator { ',' enumerator } '}' ';'
 
-decl_or_def : "enum" enumdef | type stars @Id fn_or_vars
+decl_or_def : "enum" enumdef | type stars @Id fn_or_vars // type can be void
 
 program : decl_or_def { decl_or_def } @Eof  // definition/declaration
 
