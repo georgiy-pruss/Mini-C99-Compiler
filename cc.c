@@ -28,7 +28,7 @@ void free( char* ptr );
 void exit( int status );
 
 enum { O_RDONLY, O_WRONLY, O_RDWR, O_APPEND=8, O_CREAT=512, O_TRUNC=1024, O_EXCL=2048 };
-// O_TEXT=0x4000 O_BINARY=0x8000                  win: 256           512         1024
+//           win: O_TEXT=16384 O_BINARY=32768          256           512         1024
 
 int is_abc( int c ) { return c>='a' && c<='z' || c>='A' && c<='Z' || c=='_'; }
 
@@ -89,10 +89,10 @@ void p1( char* s ) { write( 1, s, strlen(s) ); }
 void p2( char* s, char* s2 ) { p1( s ); p1( s2 ); }
 void p3( char* s, char* s2, char* s3 ) { p1( s ); p1( s2 ); p1( s3 ); }
 void p4( char* s, char* s2, char* s3, char* s4 ) { p1( s ); p1( s2 ); p1( s3 ); p1( s4 ); }
-void p0l() { write( 1, "\n", 1 ); }
-void p1l( char* s ) { write( 1, s, strlen(s) ); write( 1, "\n", 1 ); }
-void p2l( char* s, char* s2 ) { p1( s ); p1( s2 ); write( 1, "\n", 1 ); }
-void p3l( char* s, char* s2, char* s3 ) { p1( s ); p1( s2 ); p1( s3 ); write( 1, "\n", 1 ); }
+void l0() { write( 1, "\n", 1 ); }
+void l1( char* s ) { write( 1, s, strlen(s) ); write( 1, "\n", 1 ); }
+void l2( char* s, char* s2 ) { p1( s ); p1( s2 ); write( 1, "\n", 1 ); }
+void l3( char* s, char* s2, char* s3 ) { p1( s ); p1( s2 ); p1( s3 ); write( 1, "\n", 1 ); }
 
 void assert( int cond, char* msg )
 {
@@ -181,12 +181,12 @@ int id_index( char* s ) // looks up in the table or adds there if needed
   h = id_hash( s ) % id_table_len;
   while( id_table[h] )
   {
-    if( strequ( id_table[h], s ) ) { if( IT_DEBUG ) p3( " == ", i2s(h), "\n" ); return h; }
+    if( strequ( id_table[h], s ) ) { if( IT_DEBUG ) l2( " == ", i2s(h) ); return h; }
     h = (h+1) % id_table_len;
     collision = 1;
   }
   if( collision ) ++collisions;
-  if( IT_DEBUG ) p3( " ++ ", i2s(h), "\n" );
+  if( IT_DEBUG ) l2( " ++ ", i2s(h) );
   id_table[h] = strdup( s );
   ++id_count;
   return h;
@@ -196,7 +196,7 @@ void id_table_dump()
 {
   int i,k;
   for( k=i=0; i<id_table_len; ++i )
-    if( id_table[i] ) { ++k; p4( i2s(i), " ", id_table[i], "\n" ); }
+    if( id_table[i] ) { ++k; l3( i2s(i), " ", id_table[i] ); }
   p1( "-------------------------------------\n" );
   p2( i2s(k), " ids, " );
   if( k!=id_count ) p3( " BUT MUST BE: ", i2s(id_count), ", " );
@@ -231,7 +231,10 @@ int sc_read_next()        // scan for next token
   if( rd_char>='0' && rd_char<='9' ) // Number
   {
     v = rd_char - '0';
-    for( rd_next(); rd_char>='0' && rd_char<='9'; rd_next() ) v = 10*v + rd_char - '0';
+    if( v==0 ) // octal
+      for( rd_next(); rd_char>='0' && rd_char<='7'; rd_next() ) v = 8*v + rd_char - '0';
+    else // decimal
+      for( rd_next(); rd_char>='0' && rd_char<='9'; rd_next() ) v = 10*v + rd_char - '0';
     sc_num = v;
     return Num;
   }
@@ -378,20 +381,20 @@ void sc_next() // read and put token into sc_tkn
     else if( sc_tkn == Err ) p2( "err", sc_text );
     else if( sc_tkn < Kw ) { o[0]=sc_tkn; p2( "op/sep ", o ); }
     else p2( "?", sc_text );
-    p1("\n");
+    l0();
   }
 }
 
 // Symbol table ----------------------------------------------------------------
 
-int st_len = 0; // symbol table length; no ST initially, create dynamically
-int* st_id;     // ref to id_table
-char* st_level; // 0 global 1 fn levels
-char* st_type;  // 0 void 1 2 3 char^ 4 5 6 int^
-char* st_kind;  // Enum    Var    Array  Arg    Func
-int* st_value;  // --value --n    --n    --n    --addr
-int* st_prop;   //         --offs --len         --nargs
-int  st_count;  // number of symbols in ST
+int   st_len = 0; // symbol table length; no ST initially, create dynamically
+int*  st_id;      // ref to id_table
+char* st_type;    // 0 void 1 2 3 char^ 4 5 6 int^
+char* st_kind;    // Enum    Var    Array  Arg    Func
+int*  st_value;   // --value --offs --offs --offs --addr
+int*  st_prop;    //                --dim         --ownst
+int   st_count;   // number of symbols in ST; the last is at st_count-1
+int   st_local;   // start of local part of symbol table
 
 enum { T_v, T_c, T_cp, T_cpp, T_i, T_ip, T_ipp }; // st_type
 enum { K_enum, K_var, K_array, K_arg, K_fn };
@@ -412,7 +415,6 @@ void st_create( int n )
 {
   // array of struct is split into set of arrays. b/c no struct in the language
   st_id = (int*)malloc( INTSZ*n );
-  st_level = malloc( n );
   st_type = malloc( n );
   st_kind = malloc( n );
   st_value = (int*)malloc( INTSZ*n );
@@ -421,75 +423,38 @@ void st_create( int n )
   st_count = 0;
 }
 
-int st_check( int id, int level )
+int* st_copy_part( int start, int nargs )
 {
-  int i;
-  if( st_len==0 ) st_create( ST_LEN );
-  i = st_count;
-  if( i>= st_len ) { err( "too many names in scopes" ); before_exit(); exit(9); }
-  // no check if already there
-  st_id[i] = id;
-  st_level[i] = level;
-  ++st_count;
-  return i;
-}
-
-void st_add_enum( int level, int id, int value )
-{
-  int i = st_check( id, level );
-  st_type[i] = T_i;
-  st_kind[i] = K_enum;
-  st_value[i] = value;
-}
-
-void st_add_var( int level, int id, int type, int addr )
-{
-  int i = st_check( id, level );
-  st_type[i] = type;
-  st_kind[i] = K_var;
-  st_value[i] = addr;
-}
-
-void st_add_array( int level, int id, int type, int addr, int dim )
-{
-  int i = st_check( id, level );
-  st_type[i] = type;
-  st_kind[i] = K_array;
-  st_value[i] = addr;
-  st_prop[i] = dim;
-}
-
-void st_add_arg( int level, int id, int type, int addr )
-{
-  int i = st_check( id, level );
-  st_type[i] = type;
-  st_kind[i] = K_arg;
-  st_value[i] = addr;
-}
-
-int st_add_fn( int level, int id, int type, int addr, int nargs )
-{
-  int i = st_check( id, level );
-  st_type[i] = type;
-  st_kind[i] = K_fn;
-  st_value[i] = addr;
-  st_prop[i] = nargs;
-  return i;
-}
-
-void st_clean( int level )
-{
-  if( level==0 ) return;
-  while( st_count>0 && st_level[st_count-1]==level )
-    --st_count;
-}
-
-int st_count_at( int level )
-{
-  int i = st_count, n = 0;
-  for( ; i>0 && st_level[i-1]==level; --i )
-    ++n;
-  return n;
+  int i, n;
+  int *id=0, *val=0, *prp=0; char *type=0, *kind=0;
+  int* litkvp;
+  if( start>st_count ) assert(0,"st_copy_part args");
+  n = st_count - start;
+  if( n>0 )
+  {
+    id = (int*)malloc( n*INTSZ );
+    type = malloc( n );
+    kind = malloc( n );
+    val = (int*)malloc( n*INTSZ );
+    prp = (int*)malloc( n*INTSZ );
+    for( i=0; start<st_count; ++i, ++start )
+    {
+      id[i] = st_id[start];
+      type[i] = st_type[start];
+      kind[i] = st_kind[start];
+      val[i] = st_value[start];
+      prp[i] = st_prop[start];
+    }
+  }
+  litkvp = (int*)malloc( 7*INTSZ );
+  litkvp[0] = n;
+  litkvp[1] = nargs;
+  litkvp[2] = (int)id;
+  litkvp[3] = (int)type;
+  litkvp[4] = (int)kind;
+  litkvp[5] = (int)val;
+  litkvp[6] = (int)prp;
+  return litkvp;
 }
 
 int st_find( int id )
@@ -500,25 +465,66 @@ int st_find( int id )
   return -1;
 }
 
-void st_dump_level( int level )
+int st_add_id( int id )
+{
+  int k;
+  if( st_len==0 ) st_create( ST_LEN );
+  k = st_count;
+  if( k>= st_len ) { err( "too many names" ); before_exit(); exit(5); }
+  st_id[k] = id;
+  ++st_count;
+  return k;
+}
+
+int st_add( int id, int type, int kind, int value )
+{
+  int i = st_add_id( id );
+  st_type[i] = type; st_kind[i] = kind; st_value[i] = value;
+  return i;
+}
+
+int st_add_aux( int id, int type, int kind, int value, int aux )
+{
+  int i = st_add_id( id );
+  st_type[i] = type; st_kind[i] = kind; st_value[i] = value; st_prop[i] = aux;
+  return i;
+}
+
+int st_count_local_sz()
+{
+  int i, s=0, words;
+  for( i=st_local; i<st_count; ++i )
+  {
+    if( st_kind[i]==K_var )
+      words = 1;
+    else if( st_kind[i]==K_array )
+    {
+      if( st_type[i]==T_c ) words = (st_prop[i] + 3) / INTSZ;
+      else words = st_prop[i];
+    }
+    else
+    {
+      assert(st_kind[i]==K_arg,"K_arg");
+      words = 0;
+    }
+    s = s + INTSZ * words;
+  }
+  return s;
+}
+
+void st_dump_part( int start )
 {
   int i;
-  for( i=0; i<st_count; ++i )
-    if( st_level[i]==level )
-      break;
-  if( level==0 )
-    p1( "globals\n" );
-  else
-    p3( "level ",i2s(level),"\n" );
-  for( ; i<st_count; ++i )
+  for( i=start; i<st_count; ++i )
   {
-    assert( st_level[i]==level, "levels !=" );
     p2( i2s(i), " - " ); p3( id_table[st_id[i]]," #", i2s( st_id[i] ) );
     p4( " ", st_type_str(st_type[i]), " ", st_kind_str(st_kind[i]) );
     p2( " v=", i2s(st_value[i]) );
-    if( st_kind[i]==K_array || st_kind[i]==K_fn )
+    if( st_kind[i]==K_array )
+      p2( " dim=", i2s(st_prop[i]));
+    if( st_kind[i]==K_fn )
       p2( " p=", i2s(st_prop[i]));
-    p1("\n");
+    l0();
   }
 }
 
@@ -532,6 +538,8 @@ int se_enum; // value of enumerator in enum
 int se_args; // number of arguments in fn
 int se_lvars = 0; // local vars
 int se_gvars = 0; // global vars
+int se_in_fn = 0; // processing stuff inside a function
+int se_items; // items in initialization array
 
 // Code generation -------------------------------------------------------------
 
@@ -569,11 +577,10 @@ void cg_fn_begin( char* name, int local_sz )
   cg_n( "  .cfi_offset 5, -8" );
   cg_n( "  mov ebp, esp" );
   cg_n( "  .cfi_def_cfa_register 5" );
-  if( strequ( name, "main" ) )
-    cg_n( "  and esp, -16" );
-  cg_o( "  sub esp, " ); cg_o( i2s(local_sz) ); cg_n( "" );
-  if( strequ( name, "main" ) )
-    cg_n( "  call ___main" );
+  if( strequ( name, "main" ) ) cg_n( "  and esp, -16" );
+  assert( local_sz%4==0, "local_sz div 4" );
+  if( local_sz > 0 ){ cg_o( "  sub esp, " ); cg_o( i2s(local_sz) ); cg_n( "" ); }
+  if( strequ( name, "main" ) ) cg_n( "  call ___main" );
   cg_n( "" );
 }
 
@@ -591,12 +598,12 @@ void cg_fn_end( int ret0 )
 
 // Parser ----------------------------------------------------------------------
 
-int tL = 0; // indent level
+int  tL = 0; // indent level
 void tI() { int i; p1("            "); for( i=0; i<tL; ++i ) p1( "." ); }
-void t1( char* s ) { if( PA_TRACE ) { tI(); p2( s,"\n" ); ++tL; } }
-void t2( char* s, char* s2 ) { if( PA_TRACE ) { tI(); p3( s,s2,"\n" ); ++tL; } }
-void t3( char* s, char* s2, char* s3 ) { if( PA_TRACE ) { tI(); p4( s,s2,s3,"\n" ); ++tL; } }
-int t_( int r )  { if( PA_TRACE ) { --tL; tI(); p3( "<< ", i2s(r), "\n" ); } return r; }
+void t1( char* s ) { if( PA_TRACE ) { tI(); l1( s ); ++tL; } }
+void t2( char* s, char* s2 ) { if( PA_TRACE ) { tI(); l2( s,s2 ); ++tL; } }
+void t3( char* s, char* s2, char* s3 ) { if( PA_TRACE ) { tI(); l3( s,s2,s3 ); ++tL; } }
+int  t_( int r ) { if( PA_TRACE ) { --tL; tI(); p2( "<< ", i2s(r) ); } return r; }
 
 enum { F, T }; // Boolean result of pa_* functions: False, True
 
@@ -624,9 +631,9 @@ int pa_primary()
 
 int pa_integer() // has value at compile time
 {
-  int i,neg=0;
+  int i,neg=F;
   t1("pa_integer");
-  if( sc_tkn=='-' ) { neg=1; sc_next(); }
+  if( sc_tkn=='-' ) { neg=T; sc_next(); }
   if( sc_tkn!=Num && sc_tkn!=Chr && sc_tkn!=Id ) return t_(F);
   se_type = T_i;
   if( sc_tkn==Id ) // Id must be enum
@@ -659,7 +666,8 @@ int pa_call_or_index()
   while( sc_tkn=='(' || sc_tkn=='[' )
   {
     if( sc_tkn=='[' ) { sc_next(); if( !pa_expr(0) || sc_tkn!=']' ) return t_(F); }
-    else /* '(' */ { sc_next(); if( sc_tkn!=')' ) { if( !pa_exprs() || sc_tkn!=')' ) return t_(F); } }
+    else /* '(' */
+      { sc_next(); if( sc_tkn!=')' ) { if( !pa_exprs() || sc_tkn!=')' ) return t_(F); } }
     sc_next();
   }
   return t_(T);
@@ -680,22 +688,19 @@ int pa_unexpr()
   return t_(pa_postfix());
 }
 
-int pa_type()
+int pa_type() // sets se_type
 {
-  int t;
   t1("pa_type");
   if( sc_tkn==Kw+Int || sc_tkn==Kw+Char )
   {
-    t = sc_tkn;
+    if( sc_tkn==Kw+Int ) se_type = T_i; else se_type = T_c;
     sc_next();
-    if( t==Kw+Int ) se_type = T_i;
-    else se_type = T_c;
     return t_(T);
   }
   return t_(F);
 }
 
-int pa_stars()
+int pa_stars() // sets se_stars
 {
   t1("pa_stars");
   se_stars = 0;
@@ -709,12 +714,12 @@ int pa_term()
   if( sc_tkn=='(' )
   {
     sc_next();
-    if( pa_type() )
+    if( pa_type() ) // cast (T)E
     {
       pa_stars(); if( sc_tkn!=')' ) return t_(F);
       sc_next(); return t_(pa_term());
     }
-    if( !pa_expr(0) || sc_tkn!=')' ) return t_(F);
+    if( !pa_expr(0) || sc_tkn!=')' ) return t_(F); // (E)
     sc_next();
     return t_(pa_call_or_index());
   }
@@ -736,24 +741,17 @@ int pa_binop_na() // na = no advance, sc_next() must be called in the caller
 
 int pa_expr( int min_prec ) // precedence climbing
 {
-  int t,p;
+  int p;
   char ops[3];
   t2("pa_expr ",i2s(min_prec));
-
   if( !pa_term() ) return t_(F);
-  // left = result of term()
-
   while( pa_binop_na() && min_prec < op_prec[sc_tkn] )
   {
-    t = sc_tkn;
-    p = op_prec[t];
-
+    p = op_prec[sc_tkn];
     sc_next();
-
     if( !pa_expr( p ) )
       // probably no need for sc_next() here
       return t_(F);
-
     //ops[0]=(char)t; ops[1]='\n'; ops[2]='\0';
     //p2( "exec ",ops ); // or some other semantics
   }
@@ -815,41 +813,52 @@ int pa_stmt()
 int pa_arrayinit()
 {
   t1("pa_arrayinit");
-  if( sc_tkn==Str ) { sc_next(); return t_(T); } // string as array of char
+  if( sc_tkn==Str ) // string as array of char
+  {
+    if( se_type!=T_c ) return t_(F);
+    se_items = strlen( sc_text ) + 1;
+    sc_next();
+    return t_(T);
+  }
+  se_items = 0;
   if( sc_tkn!='{' ) return t_(F);
   sc_next();
   if( sc_tkn==Str )
   {
-    sc_next();
-    while( sc_tkn==',' ) { sc_next(); if( sc_tkn!=Str ) return t_(F); sc_next(); }
+    sc_next();                              // TODO sc_tkn can be '0'
+    while( sc_tkn==',' ) { sc_next(); ++se_items; if( sc_tkn!=Str ) return t_(F); sc_next(); }
   }
   else
   {
     if( !pa_integer() ) return t_(F);
-    while( sc_tkn==',' ) { sc_next(); if( !pa_integer() ) return t_(F); }
+    while( sc_tkn==',' ) { sc_next(); ++se_items; if( !pa_integer() ) return t_(F); }
   }
   if( sc_tkn!='}' ) return t_(F);
-  sc_next();
+  sc_next(); ++se_items;
   return t_(T);
 }
 
 int pa_vartail()
 {
-  int t,id,k;
+  int t,id,k,rc;
+  assert(sc_tkn=='='||sc_tkn=='['||sc_tkn==','||sc_tkn==';',"var"); // right after Id
   t1("pa_vartail");
   t = se_type + se_stars;
   id = sc_num;
-  if( se_level==0 ) { ++se_gvars; k=se_gvars; }
-  else { ++se_lvars; k=se_lvars; }
+  k = st_find( id );
+  if( se_in_fn && k>=st_local || k>=0 )
+    l2( "dupl var ",id_table[id] );
+  if( se_in_fn ) { ++se_lvars;  }
+  else { ++se_gvars; }
   if( sc_tkn=='=' )
   {
-    st_add_var( se_level, id, t, k ); // 1 - let's mark it has value :)
+    st_add( id, t, K_var, 0 );
     sc_next();
     return t_(pa_expr(0)); // must be calculable for globals
   }
   if( sc_tkn!='[' )
   {
-    st_add_var( se_level, id, t, k );
+    st_add( id, t, K_var, 0 );
     return t_(T); // without initial value
   }
   sc_next();
@@ -857,15 +866,17 @@ int pa_vartail()
   {
     sc_next();
     if( sc_tkn!='=' ) return t_(F);
-    st_add_array( se_level, id, t, k, -1 ); // calc dim
+    k = st_add_aux( id, t, K_array, 0, 0 ); // calc dim from arrayinit
     sc_next();
-    return t_(pa_arrayinit());
+    rc = pa_arrayinit();
+    st_prop[k] = se_items;
+    return t_(rc);
   }
-  else // length is specified
+  else // length is specified in [N]
   {
     if( !pa_integer() ) return t_(F); // value in se_value
     if( sc_tkn!=']' ) return t_(F);
-    st_add_array( se_level, id, t, k, se_value );
+    k = st_add_aux( id, t, K_array, 0, se_value );
     sc_next();
     if( sc_tkn!='=' ) return t_(T); // no initialization
     sc_next();
@@ -894,28 +905,26 @@ int pa_vardef()
 {
   int t;
   t1("pa_vardef");
-  if( sc_tkn != Kw + Int && sc_tkn != Kw + Char ) return t_(F);
-
+  if( sc_tkn!=Kw+Int && sc_tkn!=Kw+Char ) return t_(F);
   if( !pa_type() || !pa_stars() ) return t_(F);
-  t = se_type + se_stars;
-  if( sc_tkn != Id ) return t_(F);
+  if( sc_tkn!=Id ) return t_(F);
   sc_next();
   return t_(pa_vars());
 }
 
 int pa_argdef()
 {
+  int t;
   t1("pa_argdef");
   if( !pa_type() ) return t_(F);
   pa_stars();
+  t = se_type + se_stars;
   if( sc_tkn != Id ) return t_(F);
   ++se_args;
-  st_add_arg( se_level, sc_num, T_c, se_args );
+  st_add( sc_num, t, K_arg, se_args );
   sc_next();
   return t_(T);
 }
-
-int se_args;
 
 int pa_args()
 {
@@ -930,26 +939,30 @@ int pa_args()
   return t_(T);
 }
 
-int pa_fn_or_vars()
+int pa_func()
 {
-  int id,t,nv,k;
-  t1("pa_fn_or_vars");
-  if( sc_tkn != '(' ) return t_(pa_vars());
-  id=sc_num; t=se_type+se_stars;
-  k = st_find( id );
-  if( k>=0 && se_level==st_level[k] )
-    p3( "dupl fn ",id_table[id],"\n" );
-  k = st_add_fn( se_level, id, t, 0, 0 ); // or lookup for double def
+  int id,t,local_sz,k;
+  int* local_scope;
+  assert( sc_tkn=='(', "pa_func not at '('" );
+  t1("pa_func");
+  id=sc_num;
+  t=se_type+se_stars;
+  k = st_find( id ); // we have only global defs at the moment
+  if( k>=0 )
+    l2( "dupl fn ",id_table[id] );
+  k = st_add_aux( id, t, K_fn, 0, 0 ); // or lookup for double def
   sc_next();
-  ++se_level; // args and vars inside fn are at level 1 actually
+  se_in_fn = T;
+  st_local = st_count; // start local scope
   if( !pa_args() || sc_tkn != ')' ) return t_(F);
-  st_prop[k] = se_args; // correct number of arguments
-  // also need args types
+  // also need args types -- from
   sc_next();
   if( sc_tkn == ';' ) // fn declaration
   {
-    st_clean( se_level ); // args were in vain
-    --se_level;
+    local_scope = (int*)st_copy_part( st_local, se_args );
+    st_prop[k] = (int)local_scope;
+    st_count = st_local; // clean local scope
+    se_in_fn = F;
     sc_next(); return t_(T);
   }
   if( sc_tkn == '{' ) // fn definition
@@ -958,17 +971,14 @@ int pa_fn_or_vars()
     se_lvars = 0;
     while( pa_vardef() )
       /* define local var */ ;
-    nv = st_count_at( se_level );
-    assert( nv==se_args+se_lvars, "nv==se_args+se_lvars" );
-    cg_fn_begin( id_table[id], nv*4 );
+    local_sz = st_count_local_sz();
+    cg_fn_begin( id_table[id], local_sz );
     while( sc_tkn!='}' ) if( !pa_stmt() ) return t_(F); // error
     sc_next();
-    if( nv>0 )
-    {
-      if( ST_DUMP ) { p3("fn ",id_table[id],"\n"); st_dump_level( se_level ); }
-      st_clean( se_level );
-    }
-    --se_level;
+    // if( st_local != st_count )
+    if( ST_DUMP ) { l2("fn ",id_table[id]); st_dump_part( st_local ); }
+    st_count = st_local; // clean local scope
+    se_in_fn = F;
     cg_fn_end( 1 ); // flag = ret 0; depend on last stmt in fn body
     return t_(T);
   }
@@ -987,7 +997,7 @@ int pa_enumerator()
     sc_next(); if( !pa_integer() ) return t_(F);
     se_enum = se_value;
   }
-  st_add_enum( se_level, id, se_enum );
+  st_add( id, T_i, K_enum, se_enum );
   ++se_enum;
   return t_(T);
 }
@@ -1016,13 +1026,14 @@ int pa_decl_or_def()
     if( sc_tkn != Id ) return t_(F);
     sc_next();
     if( sc_tkn != '(' ) return t_(F);
-    return t_(pa_fn_or_vars());
+    return t_(pa_func());
   }
   if( !pa_type() ) return t_(F);
   pa_stars();
   if( sc_tkn != Id ) return t_(F);
   sc_next();
-  return t_(pa_fn_or_vars());
+  if( sc_tkn != '(' ) return t_(pa_vars());
+  return t_(pa_func());
 }
 
 int pa_program( char* fn )
@@ -1074,22 +1085,22 @@ int main( int ac, char** av )
     }
   }
 
-  if( !filename ) { p1( "No file name provided\n" ); exit(1); }
+  if( !filename ) { p1( "No file name provided\n" ); exit(2); }
   // init
   op_set_prec();
-  cg_file = open( "a.s", O_CREAT|O_WRONLY, 511 ); // 0777 - allow all
-  if( cg_file<0 ) { p1( "Can't create file 'a.s'\n" ); exit(1); }
+  cg_file = open( "a.s", O_CREAT|O_TRUNC|O_WRONLY, 0666 );
+  if( cg_file<0 ) { p1( "Can't create file 'a.s'\n" ); exit(3); }
   cg_begin( filename );
   rc = 0;
   if( !pa_program( filename ) )
   {
     err( "something's wrong" );
-    rc = 2; // don't exit, print tables if requested
+    rc = 4; // don't exit, print tables if requested
   }
   cg_end();
   if( cg_file>0 ) close( cg_file );
   if( IT_DUMP ) id_table_dump();
-  if( ST_DUMP ) st_dump_level(0);
+  if( ST_DUMP ) { p1("globals\n"); st_dump_part(0); }
   if( SC_DEBUG ) p2( i2s( sc_n_tokens ), " tokens\n" );
   return rc;
 }

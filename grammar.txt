@@ -54,23 +54,23 @@ vartail : [ '=' expr ]
 
 vars : vartail { ',' stars @Id vartail } ';'
 
-vardef : type stars @Id vars   // type can't be void; ends with ';'
+vardef : type stars @Id vars   // ends with ';'
 
-argdef : type stars @Id        // type can't be void; e.g. "char** argv"
+argdef : type stars @Id        // e.g. "char** argv" but not "char* argv[]"
 
-args : argdef { ',' argdef }             // but can't be "char* argv[]"
+args : argdef { ',' argdef }
 
-fn_or_vars : '(' [ args ] ')' ';'   // TODO               // fn declaration
-           | '(' [ args ] ')' '{' { vardef } { stmt } '}' // fn definition
-           | vars                   // TODO
+func : '(' [ args ] ')' ';'                          // fn declaration
+     | '(' [ args ] ')' '{' { vardef } { stmt } '}'  // fn definition
 
 enumerator : @Id [ '=' integer ]
 
 enumdef : '{' enumerator { ',' enumerator } '}' ';'
 
 decl_or_def : "enum" enumdef
-            | type stars @Id fn_or_vars     // TODO
-            | "void" @Id fn_or_vars         // function-procedure
+            | "void" @Id func        // function-procedure
+            | type stars @Id func    // if next (in func) goes '('
+            | type stars @Id vars    // otherwise
 
 program : decl_or_def { decl_or_def } @Eof  // definition/declaration
 
