@@ -6,7 +6,7 @@
 
 primary : @Number | @Char | @String | @Id | '(' expr ')'
 
-integer : @Number | @Char | @Id  // enum id is like a number ({ binop integer }?)
+integer : [ '-' ] ( @Number | @Char | @Id ) // enum id is like a number
 
 exprs : expr { ',' expr } // args in calls and the last item in for-header
 
@@ -18,7 +18,7 @@ unexpr : '+''+' unexpr | '-''-' unexpr
        | '-' term | '~' term | '!' term | '*' term  // no: &x
        | postfix
 
-type : "int" | "char" | "void" // void is used only for function "result"
+type : "int" | "char" // void is used only for function "result"
 
 stars : [ '*' [ '*' ] ]
 
@@ -60,15 +60,17 @@ argdef : type stars @Id        // type can't be void; e.g. "char** argv"
 
 args : argdef { ',' argdef }             // but can't be "char* argv[]"
 
-fn_or_vars : '(' [ args ] ')' ';'                         // fn declaration
+fn_or_vars : '(' [ args ] ')' ';'   // TODO               // fn declaration
            | '(' [ args ] ')' '{' { vardef } { stmt } '}' // fn definition
-           | vars
+           | vars                   // TODO
 
 enumerator : @Id [ '=' integer ]
 
 enumdef : '{' enumerator { ',' enumerator } '}' ';'
 
-decl_or_def : "enum" enumdef | type stars @Id fn_or_vars // type can be void
+decl_or_def : "enum" enumdef
+            | type stars @Id fn_or_vars     // TODO
+            | "void" @Id fn_or_vars         // function-procedure
 
 program : decl_or_def { decl_or_def } @Eof  // definition/declaration
 
