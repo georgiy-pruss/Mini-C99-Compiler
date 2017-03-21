@@ -307,6 +307,7 @@ int sc_read_next()        // scan for next token
     rd_next();
     while( rd_char!='\n' && rd_char>0 )
       rd_next();
+    if( rd_char=='\n' ) { ++rd_line; if(RD_LINES) p3( "[//]\n[", i2s(rd_line), "]" ); }
     if(rd_char>0) rd_next();
     return sc_read_next();
   }
@@ -394,8 +395,8 @@ int   st_len = 0; // symbol table length; no ST initially, create dynamically
 int*  st_id;      // ref to id_table
 char* st_type;    // 0 void 1 2 3 char^ 4 5 6 int^
 char* st_kind;    // Enum    Var    Array  Arg    Func
-int*  st_value;   // --value --offs --offs --offs --addr
-int*  st_prop;    //                --dim         --ownst
+int*  st_value;   // --value --offs --offs --offs --defined
+int*  st_prop;    //                --dim         --own-s-t
 int   st_count;   // number of symbols in ST; the last is at st_count-1
 int   st_local;   // start of local part of symbol table
 
@@ -429,7 +430,7 @@ void st_create( int n )
 int* st_copy_part( int start, int nargs )
 {
   int i, n;
-  int *id=0, *val=0, *prp=0; char *type=0, *kind=0; int* litkvp;
+  int *id=0, *val=0, *prp=0; char *type=0, *kind=0; int* own_st;
   if( start>st_count ) assert(0,"st_copy_part args");
   n = st_count - start;
   if( n>0 )
@@ -448,15 +449,15 @@ int* st_copy_part( int start, int nargs )
       prp[i] = st_prop[start];
     }
   }
-  litkvp = (int*)malloc( 7*INTSZ );
-  litkvp[0] = n;
-  litkvp[1] = nargs;
-  litkvp[2] = (int)id;
-  litkvp[3] = (int)type;
-  litkvp[4] = (int)kind;
-  litkvp[5] = (int)val;
-  litkvp[6] = (int)prp;
-  return litkvp;
+  own_st = (int*)malloc( 7*INTSZ );
+  own_st[0] = n;
+  own_st[1] = nargs;
+  own_st[2] = (int)id;
+  own_st[3] = (int)type;
+  own_st[4] = (int)kind;
+  own_st[5] = (int)val;
+  own_st[6] = (int)prp;
+  return own_st;
 }
 
 void st_free_part( int* p )
@@ -570,7 +571,7 @@ void cg_begin( char* fn )
 void cg_end()
 {
   int i;
-  cg_n( "  .ident  \"GCC: (GNU) 5.4.0\"" );
+  cg_n( "  .ident  \"GCC: (GNU) 5.4.0\"\n" );
   for( i=0; i<st_count; ++i )
   {
     if( st_kind[i]==K_fn && st_value[i]==0 )
@@ -997,13 +998,27 @@ int pa_func()
   sc_next();
   if( sc_tkn == ';' ) // fn declaration
   {
-    // TODO compare args!
-    //p2n( "dupl fn ",id_table[id] );
     local_scope = (int*)st_copy_part( st_local, se_args );
-    st_prop[k] = (int)local_scope;
-    st_count = st_local; // clean local scope
-    se_in_fn = F;
-    sc_next(); return t_(T);
+    if( k2>=0 )
+    {
+      t2 = st_type[k2];
+      prp2 = (int*)st_prop[k2];
+      if( t==t2 && se_are_fns_same( prp2, local_scope ) )
+      {
+        // it's ok
+      }
+      else
+      {
+        p2n( "duplicate function declaration (not matching) ",id_table[id] );
+      }
+    }
+    else // first declaration
+    {
+      st_prop[k] = (int)local_scope;
+      st_count = st_local; // clean local scope
+      se_in_fn = F;
+      sc_next(); return t_(T);
+    }
   }
   if( sc_tkn == '{' ) // fn definition
   {
@@ -1018,6 +1033,8 @@ int pa_func()
       prp2 = (int*)st_prop[k2];
       if( t==t2 && se_are_fns_same( prp2, local_scope ) )
       {
+        if( st_value[k2]!=0 )
+          { err( "duplicate function definition " ); p1n( id_table[id] ); }
         st_free_part( prp2 );
         st_value[k2] = 1;
         st_prop[k2] = (int)local_scope;
