@@ -115,9 +115,10 @@ int op_prec[128] = {0}; // operator precedence
 
 void op_set_prec()
 {
-  char OP[] = "=oa|^&en<>lg+-*/%";
-  char PR[] = "134567889999BBCCC";
-  int i; for( i=0; OP[i]; ++i ) op_prec[OP[i]] = PR[i]-'0';
+  char *o, *p; int i;
+  o = "=oa|^&en<>lg+-*/%";
+  p = "134567889999BBCCC";
+  for( i=0; o[i]; ++i ) op_prec[o[i]] = p[i]-'0';
 }
 
 int find_kw( char* s )
@@ -154,6 +155,11 @@ void rd_next() // read next character, save it in rd_char; <0 if eof
 void err( char* msg )
 {
   p3( "\n*** Error (~line ", i2s( rd_line ), "): " ); p2( msg, " ***\n" );
+}
+
+void warn( char* msg )
+{
+  p3( "\n*** Warning (~line ", i2s( rd_line ), "): " ); p2( msg, " ***\n" );
 }
 
 // Id Table --------------------------------------------------------------------
@@ -235,6 +241,7 @@ int sc_read_next()        // scan for next token
     v = rd_char - '0';
     if( v==0 ) // octal
       for( rd_next(); rd_char>='0' && rd_char<='7'; rd_next() ) v = 8*v + rd_char - '0';
+      // hex also can be here, under 'x' etc
     else // decimal
       for( rd_next(); rd_char>='0' && rd_char<='9'; rd_next() ) v = 10*v + rd_char - '0';
     sc_num = v;
@@ -351,7 +358,7 @@ char str_repr_buf[STR_MAX_SZ];
 
 char* str_repr( char* s )
 {
-  char* d = str_repr_buf; *d = '"';
+  char* d; d = str_repr_buf; *d = '"';
   for( ++d; *s; ++d, ++s )
   {
     if( *s=='\n' ) { *d='\\'; ++d; *d='n'; }
@@ -370,7 +377,7 @@ char* KWDS[11] = { "void","char","int","enum","if","else","while","for","break",
 
 void sc_next() // read and put token into sc_tkn
 {
-  char o[2] = ".";
+  char o[2]; o[1] = '\0';
   sc_tkn = sc_read_next();
   ++sc_n_tokens;
   if( SC_DEBUG )
@@ -403,17 +410,8 @@ int   st_local;   // start of local part of symbol table
 enum { T_v, T_c, T_cp, T_cpp, T_i, T_ip, T_ipp }; // st_type
 enum { K_enum, K_var, K_array, K_arg, K_fn };
 
-char* st_type_str( int t )
-{
-  char* s[] = {"Void","Char","Char*","Char**","Int","Int*","Int**"};
-  return s[t];
-}
-
-char* st_kind_str( int k )
-{
-  char* s[] = {"Enum","Var","Array","Arg","Fn"};
-  return s[k];
-}
+char* st_type_str[] = {"Void","Char","Char*","Char**","Int","Int*","Int**"};
+char* st_kind_str[] = {"Enum","Var","Array","Arg","Fn"};
 
 void st_create( int n )
 {
@@ -531,7 +529,7 @@ void st_dump_part( int start )
   for( i=start; i<st_count; ++i )
   {
     p2( i2s(i), " - " ); p3( id_table[st_id[i]]," #", i2s( st_id[i] ) );
-    p4( " ", st_type_str(st_type[i]), " ", st_kind_str(st_kind[i]) );
+    p4( " ", st_type_str[st_type[i]], " ", st_kind_str[st_kind[i]] );
     p2( " v=", i2s(st_value[i]) );
     if( st_kind[i]==K_array )
       p2( " dim=", i2s(st_prop[i]));
@@ -553,6 +551,7 @@ int se_lvars = 0; // local vars
 int se_gvars = 0; // global vars
 int se_in_fn = 0; // processing stuff inside a function
 int se_items; // items in initialization array
+int se_last_stmt_ret; // last statement was return -- for cg_fn_end
 
 // Code generation -------------------------------------------------------------
 
@@ -572,16 +571,10 @@ void cg_end()
 {
   int i;
   cg_n( "  .ident  \"GCC: (GNU) 5.4.0\"\n" );
+  // and dump declarations of all undefined functions
   for( i=0; i<st_count; ++i )
-  {
     if( st_kind[i]==K_fn && st_value[i]==0 )
-    {
-      cg_o( "  .def _" ); cg_o( id_table[st_id[i]] ); cg_n( "; .scl 2; .type 32; .endef" );
-    }
-  }
-  // put declared but not defined functions here instead!
-  //char* nm[] = {"open","read","write","close","malloc","free","exit"}; int i,N=7;
-  //for( i=0; i<N; ++i ) { cg_o( "  .def _" ); cg_o( nm[i] ); cg_n( "; .scl 2; .type 32; .endef" ); }
+      { cg_o( "  .def _" ); cg_o( id_table[st_id[i]] ); cg_n( "; .scl 2; .type 32; .endef" ); }
 }
 
 void cg_fn_begin( char* name, int local_sz )
@@ -607,8 +600,7 @@ void cg_fn_begin( char* name, int local_sz )
 
 void cg_fn_end( int ret0 )
 {
-  if( ret0 )
-    cg_n( "  mov eax, 0" );
+  if( ret0 ) cg_n( "  mov eax, 0" );
   cg_n( "  leave" );
   cg_n( "  .cfi_restore 5" );
   cg_n( "  .cfi_def_cfa 4, 4" );
@@ -767,30 +759,23 @@ int pa_expr( int min_prec ) // precedence climbing
   while( pa_binop_na() && min_prec < op_prec[sc_tkn] )
   {
     p = op_prec[sc_tkn];
-    if( sc_tkn=='=' ) --p;
+    if( sc_tkn=='=' ) --p; // correct precedence for right-to-left operator
     sc_next();
-    if( !pa_expr( p ) )
-      // probably no need for sc_next() here
-      return t_(F);
-    //char ops[3];
-    //ops[0]=(char)t; ops[1]='\n'; ops[2]='\0';
-    //p2( "exec ",ops ); // or some other semantics
+    if( !pa_expr( p ) ) return t_(F);
   }
-  //p3( "sc_tkn: ", i2s(sc_tkn),"\n");
-  // maybe sc_next() here
   return t_(T);
 }
 
 int pa_stmt()
 {
   t1("pa_stmt");
+  se_last_stmt_ret = F;
   if( sc_tkn==';' ) { sc_next(); return t_(T); } // empty stmt ';'
   if( sc_tkn=='{' )
   {
     sc_next();
     while( sc_tkn!='}' ) if( !pa_stmt() ) return t_(F); // error
-    sc_next();
-    return t_(T);
+    sc_next(); return t_(T);
   }
   if( sc_tkn==Kw+Break )
   {
@@ -798,6 +783,7 @@ int pa_stmt()
   }
   if( sc_tkn==Kw+Return )
   {
+    se_last_stmt_ret = T;
     sc_next(); if( sc_tkn==';' ) { sc_next(); return t_(T); }
     if( !pa_expr(0) || sc_tkn!=';' ) return t_(F);
     sc_next(); return t_(T);
@@ -985,6 +971,7 @@ int pa_func()
   int id,local_sz,i,t,k,redefined=F;
   int* local_scope;
   int t2,k2; int* prp2;
+  int ret0 = F;
   assert( sc_tkn=='(', "pa_func not at '('" );
   t1("pa_func");
   id=sc_num;
@@ -1058,7 +1045,9 @@ int pa_func()
     if( redefined ) --st_local; // remove new fn itself -- we used old one
     st_count = st_local; // clean local scope
     se_in_fn = F;
-    cg_fn_end( 0 ); // flag = ret 0; depend on last stmt in fn body
+    if( !se_last_stmt_ret && t!=T_v ) { warn( "last stmt was not return!" ); ret0 = T; }
+    // ^^ it doesn't catch if(...) return ...; but it's ok for now
+    cg_fn_end( ret0 );
     return t_(T);
   }
   return t_(F);
