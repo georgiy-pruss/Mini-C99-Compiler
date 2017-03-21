@@ -32,15 +32,16 @@ enum { O_RDONLY, O_WRONLY, O_RDWR, O_APPEND=8, O_CREAT=512, O_TRUNC=1024, O_EXCL
 
 int is_abc( int c ) { return c>='a' && c<='z' || c>='A' && c<='Z' || c=='_'; }
 
-int strlen( char* s ) { char* b=s; while( *s ) ++s; return s-b; }
-char* strcpy( char* d, char* s ) { char* r=d; for( ; *s ; ++d, ++s ) *d=*s; *d=0; return r; }
+int strlen( char* s ) { char* b; b=s; while( *s ) ++s; return s-b; }
+char* strcpy( char* d, char* s ) { char* r; for( r=d; *s ; ++d, ++s ) *d=*s; *d=0; return r; }
 char* strcat( char* s, char* t ) { strcpy( s + strlen( s ), t ); return s; }
 char* strdup( char* s ) { return strcpy( malloc( strlen(s) + 1 ), s ); }
 
 char* strrev( char* s )
 {
-  char t, *b = s, *e; int n = strlen(s); if( n<=1 ) return s;
-  for( e = s + n - 1; b<e; ++b, --e ) { t = *e; *e = *b; *b = t; }
+  char t, *b, *e; int n;
+  n = strlen(s); if( n<=1 ) return s;
+  b = s; for( e = s+n-1; b<e; ++b, --e ) { t = *e; *e = *b; *b = t; }
   return s;
 }
 
@@ -89,10 +90,10 @@ void p1( char* s ) { write( 1, s, strlen(s) ); }
 void p2( char* s, char* s2 ) { p1( s ); p1( s2 ); }
 void p3( char* s, char* s2, char* s3 ) { p1( s ); p1( s2 ); p1( s3 ); }
 void p4( char* s, char* s2, char* s3, char* s4 ) { p1( s ); p1( s2 ); p1( s3 ); p1( s4 ); }
-void l0() { write( 1, "\n", 1 ); }
-void l1( char* s ) { write( 1, s, strlen(s) ); write( 1, "\n", 1 ); }
-void l2( char* s, char* s2 ) { p1( s ); p1( s2 ); write( 1, "\n", 1 ); }
-void l3( char* s, char* s2, char* s3 ) { p1( s ); p1( s2 ); p1( s3 ); write( 1, "\n", 1 ); }
+void p0n() { write( 1, "\n", 1 ); }
+void p1n( char* s ) { write( 1, s, strlen(s) ); write( 1, "\n", 1 ); }
+void p2n( char* s, char* s2 ) { p1( s ); p1( s2 ); write( 1, "\n", 1 ); }
+void p3n( char* s, char* s2, char* s3 ) { p1( s ); p1( s2 ); p1( s3 ); write( 1, "\n", 1 ); }
 
 void assert( int cond, char* msg )
 {
@@ -114,8 +115,9 @@ int op_prec[128] = {0}; // operator precedence
 
 void op_set_prec()
 {
-  char* o = "=oa|^&en<>lg+-*/%";
-  char* p = "134567889999BBCCC"; for( ; *o; ++o, ++p ) op_prec[*o] = *p-'0';
+  char OP[] = "=oa|^&en<>lg+-*/%";
+  char PR[] = "134567889999BBCCC";
+  int i; for( i=0; OP[i]; ++i ) op_prec[OP[i]] = PR[i]-'0';
 }
 
 int find_kw( char* s )
@@ -181,12 +183,12 @@ int id_index( char* s ) // looks up in the table or adds there if needed
   h = id_hash( s ) % id_table_len;
   while( id_table[h] )
   {
-    if( strequ( id_table[h], s ) ) { if( IT_DEBUG ) l2( " == ", i2s(h) ); return h; }
+    if( strequ( id_table[h], s ) ) { if( IT_DEBUG ) p2n( " == ", i2s(h) ); return h; }
     h = (h+1) % id_table_len;
     collision = 1;
   }
   if( collision ) ++collisions;
-  if( IT_DEBUG ) l2( " ++ ", i2s(h) );
+  if( IT_DEBUG ) p2n( " ++ ", i2s(h) );
   id_table[h] = strdup( s );
   ++id_count;
   return h;
@@ -196,7 +198,7 @@ void id_table_dump()
 {
   int i,k;
   for( k=i=0; i<id_table_len; ++i )
-    if( id_table[i] ) { ++k; l3( i2s(i), " ", id_table[i] ); }
+    if( id_table[i] ) { ++k; p3n( i2s(i), " ", id_table[i] ); }
   p1( "-------------------------------------\n" );
   p2( i2s(k), " ids, " );
   if( k!=id_count ) p3( " BUT MUST BE: ", i2s(id_count), ", " );
@@ -344,13 +346,12 @@ int sc_read_next()        // scan for next token
   return Err;
 }
 
-char* KWDS[11] = { "void","char","int","enum","if","else","while","for","break","return" };
-
 char str_repr_buf[STR_MAX_SZ];
+
 char* str_repr( char* s )
 {
-  char* d = str_repr_buf; *d = '"'; ++d;
-  for( ; *s; ++d, ++s )
+  char* d = str_repr_buf; *d = '"';
+  for( ++d; *s; ++d, ++s )
   {
     if( *s=='\n' ) { *d='\\'; ++d; *d='n'; }
     else if( *s==0 ) { *d='\\'; ++d; *d='0'; }
@@ -363,6 +364,8 @@ char* str_repr( char* s )
 }
 
 int sc_n_tokens = 0;
+
+char* KWDS[11] = { "void","char","int","enum","if","else","while","for","break","return" };
 
 void sc_next() // read and put token into sc_tkn
 {
@@ -381,7 +384,7 @@ void sc_next() // read and put token into sc_tkn
     else if( sc_tkn == Err ) p2( "err", sc_text );
     else if( sc_tkn < Kw ) { o[0]=sc_tkn; p2( "op/sep ", o ); }
     else p2( "?", sc_text );
-    l0();
+    p0n();
   }
 }
 
@@ -401,7 +404,7 @@ enum { K_enum, K_var, K_array, K_arg, K_fn };
 
 char* st_type_str( int t )
 {
-  char* s[] = {"Void","Char","Char*","Char**","Int","Int*","Int**","?"};
+  char* s[] = {"Void","Char","Char*","Char**","Int","Int*","Int**"};
   return s[t];
 }
 
@@ -426,8 +429,7 @@ void st_create( int n )
 int* st_copy_part( int start, int nargs )
 {
   int i, n;
-  int *id=0, *val=0, *prp=0; char *type=0, *kind=0;
-  int* litkvp;
+  int *id=0, *val=0, *prp=0; char *type=0, *kind=0; int* litkvp;
   if( start>st_count ) assert(0,"st_copy_part args");
   n = st_count - start;
   if( n>0 )
@@ -457,6 +459,16 @@ int* st_copy_part( int start, int nargs )
   return litkvp;
 }
 
+void st_free_part( int* p )
+{
+  free( (char*)p[2] );
+  free( (char*)p[3] );
+  free( (char*)p[4] );
+  free( (char*)p[5] );
+  free( (char*)p[6] );
+  free( (char*)p );
+}
+
 int st_find( int id )
 {
   int i;
@@ -478,14 +490,14 @@ int st_add_id( int id )
 
 int st_add( int id, int type, int kind, int value )
 {
-  int i = st_add_id( id );
+  int i; i = st_add_id( id );
   st_type[i] = type; st_kind[i] = kind; st_value[i] = value;
   return i;
 }
 
 int st_add_aux( int id, int type, int kind, int value, int aux )
 {
-  int i = st_add_id( id );
+  int i; i = st_add_id( id );
   st_type[i] = type; st_kind[i] = kind; st_value[i] = value; st_prop[i] = aux;
   return i;
 }
@@ -524,7 +536,7 @@ void st_dump_part( int start )
       p2( " dim=", i2s(st_prop[i]));
     if( st_kind[i]==K_fn )
       p2( " p=", i2s(st_prop[i]));
-    l0();
+    p0n();
   }
 }
 
@@ -552,15 +564,23 @@ void cg_n( char* s ) { write( cg_file, s, strlen(s) ); write( cg_file, "\n", 1 )
 void cg_begin( char* fn )
 {
   cg_o( "  .file \"" ); cg_o( fn ); cg_n( "\"" );
-  cg_n( "  .intel_syntax noprefix" );
+  cg_n( "  .intel_syntax noprefix\n" );
 }
 
 void cg_end()
 {
-  // put declared but not defined functions here instead!
-  char* nm[] = {"open","read","write","close","malloc","free","exit"}; int i,N=7;
+  int i;
   cg_n( "  .ident  \"GCC: (GNU) 5.4.0\"" );
-  for( i=0; i<N; ++i ) { cg_o( "  .def _" ); cg_o( nm[i] ); cg_n( "; .scl 2; .type 32; .endef" ); }
+  for( i=0; i<st_count; ++i )
+  {
+    if( st_kind[i]==K_fn && st_value[i]==0 )
+    {
+      cg_o( "  .def _" ); cg_o( id_table[st_id[i]] ); cg_n( "; .scl 2; .type 32; .endef" );
+    }
+  }
+  // put declared but not defined functions here instead!
+  //char* nm[] = {"open","read","write","close","malloc","free","exit"}; int i,N=7;
+  //for( i=0; i<N; ++i ) { cg_o( "  .def _" ); cg_o( nm[i] ); cg_n( "; .scl 2; .type 32; .endef" ); }
 }
 
 void cg_fn_begin( char* name, int local_sz )
@@ -592,17 +612,16 @@ void cg_fn_end( int ret0 )
   cg_n( "  .cfi_restore 5" );
   cg_n( "  .cfi_def_cfa 4, 4" );
   cg_n( "  ret" );
-  cg_n( "  .cfi_endproc" );
-  cg_n( "" );
+  cg_n( "  .cfi_endproc\n" );
 }
 
 // Parser ----------------------------------------------------------------------
 
 int  tL = 0; // indent level
 void tI() { int i; p1("            "); for( i=0; i<tL; ++i ) p1( "." ); }
-void t1( char* s ) { if( PA_TRACE ) { tI(); l1( s ); ++tL; } }
-void t2( char* s, char* s2 ) { if( PA_TRACE ) { tI(); l2( s,s2 ); ++tL; } }
-void t3( char* s, char* s2, char* s3 ) { if( PA_TRACE ) { tI(); l3( s,s2,s3 ); ++tL; } }
+void t1( char* s ) { if( PA_TRACE ) { tI(); p1n( s ); ++tL; } }
+void t2( char* s, char* s2 ) { if( PA_TRACE ) { tI(); p2n( s,s2 ); ++tL; } }
+void t3( char* s, char* s2, char* s3 ) { if( PA_TRACE ) { tI(); p3n( s,s2,s3 ); ++tL; } }
 int  t_( int r ) { if( PA_TRACE ) { --tL; tI(); p2( "<< ", i2s(r) ); } return r; }
 
 enum { F, T }; // Boolean result of pa_* functions: False, True
@@ -742,16 +761,17 @@ int pa_binop_na() // na = no advance, sc_next() must be called in the caller
 int pa_expr( int min_prec ) // precedence climbing
 {
   int p;
-  char ops[3];
   t2("pa_expr ",i2s(min_prec));
   if( !pa_term() ) return t_(F);
   while( pa_binop_na() && min_prec < op_prec[sc_tkn] )
   {
     p = op_prec[sc_tkn];
+    if( sc_tkn=='=' ) --p;
     sc_next();
     if( !pa_expr( p ) )
       // probably no need for sc_next() here
       return t_(F);
+    //char ops[3];
     //ops[0]=(char)t; ops[1]='\n'; ops[2]='\0';
     //p2( "exec ",ops ); // or some other semantics
   }
@@ -846,8 +866,8 @@ int pa_vartail()
   t = se_type + se_stars;
   id = sc_num;
   k = st_find( id );
-  if( se_in_fn && k>=st_local || k>=0 )
-    l2( "dupl var ",id_table[id] );
+  if( se_in_fn && k>=st_local || !se_in_fn && k>=0 )
+    p2n( "dupl var ",id_table[id] );
   if( se_in_fn ) { ++se_lvars;  }
   else { ++se_gvars; }
   if( sc_tkn=='=' )
@@ -939,26 +959,46 @@ int pa_args()
   return t_(T);
 }
 
+int se_are_fns_same( int* prp, int* prp2 )
+{
+  int na; char* at; char* ak;
+  int na2; char* at2; char* ak2;
+  int i;
+  na = prp[1];
+  at = (char*)prp[3];
+  ak = (char*)prp[4];
+  na2 = prp2[1];
+  at2 = (char*)prp2[3];
+  ak2 = (char*)prp2[4];
+  if( na!=na2 ) return F;
+  for( i=0; i<na; ++i )
+  {
+    if( ak[i]!=K_arg || ak2[i]!=K_arg ) return F;
+    if( at[i]!=at2[i] ) return F;
+  }
+  return T;
+}
+
 int pa_func()
 {
-  int id,t,local_sz,k;
+  int id,local_sz,i,t,k,redefined=F;
   int* local_scope;
+  int t2,k2; int* prp2;
   assert( sc_tkn=='(', "pa_func not at '('" );
   t1("pa_func");
   id=sc_num;
   t=se_type+se_stars;
-  k = st_find( id ); // we have only global defs at the moment
-  if( k>=0 )
-    l2( "dupl fn ",id_table[id] );
-  k = st_add_aux( id, t, K_fn, 0, 0 ); // or lookup for double def
+  k2 = st_find( id ); // find duplicate if any
+  k = st_add_aux( id, t, K_fn, 0, 0 ); // add this for now; maybe not needed
   sc_next();
   se_in_fn = T;
   st_local = st_count; // start local scope
   if( !pa_args() || sc_tkn != ')' ) return t_(F);
-  // also need args types -- from
   sc_next();
   if( sc_tkn == ';' ) // fn declaration
   {
+    // TODO compare args!
+    //p2n( "dupl fn ",id_table[id] );
     local_scope = (int*)st_copy_part( st_local, se_args );
     st_prop[k] = (int)local_scope;
     st_count = st_local; // clean local scope
@@ -971,15 +1011,37 @@ int pa_func()
     se_lvars = 0;
     while( pa_vardef() )
       /* define local var */ ;
+    local_scope = (int*)st_copy_part( st_local, se_args );
+    if( k2>=0 )
+    {
+      t2 = st_type[k2];
+      prp2 = (int*)st_prop[k2];
+      if( t==t2 && se_are_fns_same( prp2, local_scope ) )
+      {
+        st_free_part( prp2 );
+        st_value[k2] = 1;
+        st_prop[k2] = (int)local_scope;
+        redefined = T;
+      }
+      else
+      {
+        p2n( "duplicate function definition (not matching) ",id_table[id] );
+      }
+    }
+    else
+    {
+      st_value[k] = 1;
+      st_prop[k] = (int)local_scope;
+    }
     local_sz = st_count_local_sz();
     cg_fn_begin( id_table[id], local_sz );
     while( sc_tkn!='}' ) if( !pa_stmt() ) return t_(F); // error
     sc_next();
-    // if( st_local != st_count )
-    if( ST_DUMP ) { l2("fn ",id_table[id]); st_dump_part( st_local ); }
+    if( ST_DUMP ) { p2n("fn ",id_table[id]); st_dump_part( st_local ); }
+    if( redefined ) --st_local; // remove new fn itself -- we used old one
     st_count = st_local; // clean local scope
     se_in_fn = F;
-    cg_fn_end( 1 ); // flag = ret 0; depend on last stmt in fn body
+    cg_fn_end( 0 ); // flag = ret 0; depend on last stmt in fn body
     return t_(T);
   }
   return t_(F);
