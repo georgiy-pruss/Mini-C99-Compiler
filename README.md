@@ -14,8 +14,8 @@ present in the program text -- that's proably good for includes, but bad for def
 
 ### Number, Character, String literals
 
-The compiler accepts decimal numbers in range `-2147483648` to `2147483647`.
-Characters are probably unsigned, i.e. with the range of `0` to `255`.
+The compiler accepts decimal and octal numbers in range `-2147483648` to `2147483647`.
+Characters are probably signed, i.e. with the range of `-128` to `127`.
 Characters and strings can contain these escape sequences: `\n` (NL), `\r` (CR), `\b` (BS),
 `\0` (NUL). All the rest "escaped" characters are copied as-is. The strings can't be
 concatenated (i.e. `"abc" "def"` won't be understood.)
@@ -50,7 +50,8 @@ if there's a recursion in the function calls;
 variables: `char`, `char*`, `char**`, `int`, `int*`, `int**`. The arguments can have the
 same set of types, except `void`. No array arguments (`T a[]`) -- they are in fact just
 pointers, so do express it explicitely (`T* a`). In the function body, first the local
-variable definitions go, then all the statements.
+variable definitions should go, then all the statements. Probably no init values for
+the local variables are allowed.
 
 ### Statements
 
