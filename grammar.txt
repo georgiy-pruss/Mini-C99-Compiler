@@ -37,40 +37,41 @@ binop : '*' | '/' | '%'                  // prec. 12
 
 expr : term { binop term }
 
+vardef_or_expr : type stars @Id morevars // ends with ';'
+               | expr ';'
+
 stmt : ';'
      | '{' { stmt } '}'
      | "break" ';'                | "return" [ expr ] ';'
      | "while" '(' expr ')' stmt  | "if" '(' expr ')' stmt [ "else" stmt ]
-     | "for" '(' expr [ expr ] ';' [ expr { ',' expr } ] ')' stmt
-     | expr // ends with ';'
+     | "for" '(' vardef_or_expr [ expr ] ';' [ expr { ',' expr } ] ')' stmt
+     | vardef_or_expr // ends with ';'
 
 arrayinit : @String                           // char a[] = "abc"; // ARRAY!
           | '{' @String { ',' @String } '}'   // char* b[] = {"ijk","mn"};
           | '{' integer { ',' integer } '}'   // int c[] = {1,2,3};
 
-vartail : [ '=' expr ]                        // local vars can't have '='
+vartail : [ '=' expr ] // for global vars expr must be calculable at compile time
         | '[' ']' '=' arrayinit               // int** c[] = {0,0};
         | '[' integer ']' [ '=' arrayinit ]   // int d[100] = {0};
 
-vars : vartail { ',' stars @Id vartail } ';'
-
-vardef : type stars @Id vars   // ends with ';'
+morevars : vartail { ',' stars @Id vartail } ';'
 
 argdef : type stars @Id        // e.g. "char** argv" but not "char* argv[]"
 
 args : argdef { ',' argdef }
 
-func : '(' [ args ] ')' ';'                          // fn declaration
-     | '(' [ args ] ')' '{' { vardef } { stmt } '}'  // fn definition
+func : '(' [ args ] ')' ';'               // fn declaration
+     | '(' [ args ] ')' '{' { stmt } '}'  // fn definition
 
 enumerator : @Id [ '=' integer ]
 
 enumdef : '{' enumerator { ',' enumerator } '}' ';'
 
 decl_or_def : "enum" enumdef
-            | "void" @Id func        // function-procedure
-            | type stars @Id func    // if next (in func) goes '('
-            | type stars @Id vars    // otherwise
+            | "void" @Id func             // function-procedure
+            | type stars @Id func         // if next (in func) goes '('
+            | type stars @Id morevars     // otherwise
 
 program : decl_or_def { decl_or_def } @Eof  // definition/declaration
 
