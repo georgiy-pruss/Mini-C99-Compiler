@@ -2,13 +2,20 @@
 // gcc -fno-builtin-malloc -fno-builtin-strlen -O2 cc.c -o cc.exe
 // -std=c99 is default in gcc
 
+// TODO return scope levels; with for and block
+// TODO save only args with fns; compare only args
+// TODO global vars have offsets in .bss and .data, locals - rel. to EBP
+// TODO comments in code gen for statements
+// TODO labels for return, loop beg/end, if/else/end, stack of labels (int)
+
 // Parameters ------------------------------------------------------------------
 
 enum { INTSZ = 4,    // all this is for 32-bit architecture; int and int* is 4 bytes
   STR_MAX_SZ=260,    // max size of any string (line, name, etc.)
   ID_TABLE_LEN=1009, // for id freezing; should be prime number
   ST_LEN=500,        // symbol table; max length is 500 (it's for all scopes at a moment)
-  RD_BUF=8000 };     // buffer for reading program text
+  RD_BUF=8000,       // buffer for reading program text
+  BF_WRT_SZ=4000 };  // buffer for suspended output
 
 int SC_DEBUG=0; // -T - tokens trace
 int RD_LINES=0; // -L - lines
@@ -28,38 +35,31 @@ void free( char* ptr );
 void exit( int status );
 
 enum { O_RDONLY, O_WRONLY, O_RDWR, O_APPEND=8, O_CREAT=512, O_TRUNC=1024, O_EXCL=2048 };
-//           win: O_TEXT=16384 O_BINARY=32768          256           512         1024
+// enum { O_RDONLY, O_WRONLY, O_RDWR, O_APPEND=8, O_CREAT=256, O_TRUNC=512, O_EXCL=1024,
+//   O_TEXT=16384, O_BINARY=32768 }; // Windows
 
 int is_abc( int c ) { return c>='a' && c<='z' || c>='A' && c<='Z' || c=='_'; }
 
 void memcopy( char* d, char* s, int n ) { for( ; n>0; ++d, ++s, --n ) *d = *s; }
 
-int strlen( char* s ) { char* b; b=s; while( *s ) ++s; return s-b; }
+int strlen( char* s ) { char* b=s; while( *s ) ++s; return s-b; }
 
 char* strdup( char* s )
 {
-  int n; char* d;
-  n = strlen(s);
-  d = malloc( n + 1 );
-  memcopy( d, s, n + 1 );
+  int n = strlen(s); char* d = malloc( n + 1 ); memcopy( d, s, n + 1 );
   return d;
 }
 
 char* strrev( char* s )
 {
-  char t, *b, *e; int n;
-  n = strlen(s); if( n<=1 ) return s;
-  b = s; for( e = s+n-1; b<e; ++b, --e ) { t = *e; *e = *b; *b = t; }
+  int n = strlen(s); if( n<=1 ) return s;
+  char* b = s; char* e; for( e = s+n-1; b<e; ++b, --e ) { char t = *e; *e = *b; *b = t; }
   return s;
 }
 
 int strcmp( char* s, char* t )
 {
-  for( ; *t; ++s, ++t )
-  {
-    if( *s==0 || *s<*t ) return -1;
-    if( *s>*t ) return 1;
-  }
+  for( ; *t; ++s, ++t ) { if( *s==0 || *s<*t ) return -1; if( *s>*t ) return 1; }
   return *s!=0;
 }
 
@@ -76,16 +76,15 @@ char i2s_buf[12]; // buffer for return value of i2s(x)
 
 char* i2s( int value )
 {
-  char* dst; char* to_rev;
   if( value==0 ) return "0";
-  dst = i2s_buf;
+  char* dst = i2s_buf;
   if( value<0 )
   {
     if( value==(-2147483647-1) ) return "-2147483648"; // minimal 32-bit integer
     *dst = '-'; ++dst;
     value = -value;
   }
-  to_rev = dst;
+  char* to_rev = dst;
   for( ; value != 0; ++dst ) { *dst = (char)(value % 10 + '0'); value = value / 10; }
   *dst = 0;
   strrev( to_rev );
@@ -122,25 +121,25 @@ enum { Err, Eof, Num, Chr, Str, Id, // tokens
        // Op: = i d e n (++ -- == !=) < > l g (<= >=) + - * / % & ^ | ~ ! a o (&& ||)
        // Sep: ( ) [ ] { } , ;
        Kw=128 }; // actual tokens for keywors: Kw+k, where k is from below:
-enum { Void, Char, Int, Enum, If, Else, While, For, Break, Return }; // keywords
+
+enum { Void, Char, Int, Enum, If, Else, While, For, Break, Return, NKW }; // keywords
+
+char* KWDS[NKW] = { "void","char","int","enum","if","else","while","for","break","return" };
 
 int op_prec[128] = {0}; // operator precedence
 
 void op_set_prec()
 {
-  char *o, *p; int i;
-  o = "=oa|^&en<>lg+-*/%";
-  p = "134567889999BBCCC";
+  char* o = "=oa|^&en<>lg+-*/%";
+  char* p = "134567889999BBCCC";
+  int i;
   for( i=0; o[i]; ++i ) op_prec[o[i]] = p[i]-'0';
 }
 
 int find_kw( char* s )
 {
-  if( strequ( s, "int"    ) ) return Int;    if( strequ( s, "char"   ) ) return Char;
-  if( strequ( s, "void"   ) ) return Void;   if( strequ( s, "enum"   ) ) return Enum;
-  if( strequ( s, "if"     ) ) return If;     if( strequ( s, "else"   ) ) return Else;
-  if( strequ( s, "while"  ) ) return While;  if( strequ( s, "for"    ) ) return For;
-  if( strequ( s, "break"  ) ) return Break;  if( strequ( s, "return" ) ) return Return;
+  int i;
+  for( i=0; i<NKW; ++i ) if( strequ( s, KWDS[i] ) ) return i;
   return -1;
 }
 
@@ -382,8 +381,6 @@ char* str_repr( char* s )
 
 int sc_n_tokens = 0;
 
-char* KWDS[11] = { "void","char","int","enum","if","else","while","for","break","return" };
-
 void sc_next() // read and put token into sc_tkn
 {
   char o[2]; o[1] = '\0';
@@ -561,6 +558,8 @@ int se_gvars = 0; // global vars
 int se_in_fn = 0; // processing stuff inside a function
 int se_items; // items in initialization array
 int se_last_stmt_ret; // last statement was return -- for cg_fn_end
+int se_local_offset;
+int se_label_stack[20];
 
 // Buffer for writing ----------------------------------------------------------
 
@@ -648,7 +647,7 @@ void cg_n( char* s )
 void cg_suspend() // after this, write to buffer
 {
   assert( cg_buffer==0, "int error: already suspended!" );
-  cg_buffer = bf_alloc_min( 4000 );
+  cg_buffer = bf_alloc_min( BF_WRT_SZ );
 }
 
 void cg_resume( char* s ) // output string, then unload buffer to the file
@@ -674,7 +673,7 @@ void cg_end()
       { cg_o( "  .def _" ); cg_o( id_table[st_id[i]] ); cg_n( "; .scl 2; .type 32; .endef" ); }
 }
 
-void cg_fn_begin( char* name ) // suspend inside!
+void cg_fn_begin( char* name )
 {
   if( strequ( name, "main" ) )
     cg_n( "  .def ___main; .scl 2; .type 32; .endef" );
