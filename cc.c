@@ -577,10 +577,9 @@ int* bf_alloc_min( int n )
   return a;
 }
 
-void bf_append( int* bf, char* s )
+void bf_append( int* bf, char* s, int n )
 {
-  int n; int* last; int left; int* new_bf;
-  n = strlen( s );
+  int left; int* last; int* new_bf;
   last = (int*)bf[BF_LAST];
   left = bf[BF_MAXN]-last[BF_CURN];
   while( left < n )
@@ -627,10 +626,37 @@ void bf_free( int* bf )
 // Code generation -------------------------------------------------------------
 
 int cg_file = 0;
+int* cg_buffer = 0;
 char* cg_section = ""; // current section
 
-void cg_o( char* s ) { write( cg_file, s, strlen(s) ); }
-void cg_n( char* s ) { write( cg_file, s, strlen(s) ); write( cg_file, "\n", 1 ); }
+void cg_o( char* s )
+{
+  int n; n = strlen(s);
+  if( cg_buffer == 0 ) write( cg_file, s, n ); else
+  {
+    bf_append( cg_buffer, s, n );
+  }
+}
+void cg_n( char* s )
+{
+  int n; n = strlen(s);
+  if( cg_buffer == 0 ) { write( cg_file, s, n ); write( cg_file, "\n", 1 ); }
+  else {
+    bf_append( cg_buffer, s, n ); bf_append( cg_buffer, "\n", 1 ); }
+}
+
+void cg_suspend() // after this, write to buffer
+{
+  assert( cg_buffer==0, "int error: already suspended!" );
+  cg_buffer = bf_alloc_min( 4000 );
+}
+
+void cg_resume( char* s ) // output string, then unload buffer to the file
+{
+  assert( cg_buffer!=0, "int error: was not suspended!" );
+  write( cg_file, s, strlen(s) );
+  bf_write( cg_buffer, cg_file ); bf_free( cg_buffer ); cg_buffer = 0;
+}
 
 void cg_begin( char* fn )
 {
@@ -648,7 +674,7 @@ void cg_end()
       { cg_o( "  .def _" ); cg_o( id_table[st_id[i]] ); cg_n( "; .scl 2; .type 32; .endef" ); }
 }
 
-void cg_fn_begin( char* name, int local_sz )
+void cg_fn_begin( char* name ) // suspend inside!
 {
   if( strequ( name, "main" ) )
     cg_n( "  .def ___main; .scl 2; .type 32; .endef" );
@@ -663,10 +689,6 @@ void cg_fn_begin( char* name, int local_sz )
   cg_n( "  mov ebp, esp" );
   cg_n( "  .cfi_def_cfa_register 5" );
   if( strequ( name, "main" ) ) cg_n( "  and esp, -16" );
-  assert( local_sz%4==0, "local_sz div 4" );
-  if( local_sz > 0 ){ cg_o( "  sub esp, " ); cg_o( i2s(local_sz) ); cg_n( "" ); }
-  if( strequ( name, "main" ) ) cg_n( "  call ___main" );
-  cg_n( "" );
 }
 
 void cg_fn_end( int ret0 )
@@ -981,7 +1003,6 @@ int pa_vars()
 
 int pa_vardef()
 {
-  int t;
   t1("pa_vardef");
   if( sc_tkn!=Kw+Int && sc_tkn!=Kw+Char ) return t_(F);
   if( !pa_type() || !pa_stars() ) return t_(F);
@@ -1039,10 +1060,11 @@ int se_are_fns_same( int* prp, int* prp2 )
 
 int pa_func()
 {
-  int id,local_sz,i,t,k,redefined=F;
+  int id,local_sz,t,k,redefined=F;
   int* local_scope;
   int t2,k2; int* prp2;
   int ret0 = F;
+  char sub_esp[32]; char* number; int nn;
   assert( sc_tkn=='(', "pa_func not at '('" );
   t1("pa_func");
   id=sc_num;
@@ -1109,7 +1131,11 @@ int pa_func()
       st_prop[k] = (int)local_scope;
     }
     local_sz = st_count_local_sz();
-    cg_fn_begin( id_table[id], local_sz );
+    assert( local_sz%4==0, "local_sz div 4" );
+    cg_fn_begin( id_table[id] );
+    cg_suspend();
+    if( strequ( id_table[id], "main" ) ) cg_n( "  call ___main\n" );
+
     while( sc_tkn!='}' ) if( !pa_stmt() ) return t_(F); // error
     sc_next();
     if( ST_DUMP ) { p2n("fn ",id_table[id]); st_dump_part( st_local ); }
@@ -1118,6 +1144,17 @@ int pa_func()
     se_in_fn = F;
     if( !se_last_stmt_ret && t!=T_v ) { warn( "last stmt was not return!" ); ret0 = T; }
     // ^^ it doesn't catch if(...) return ...; but it's ok for now
+
+    if( local_sz > 0 )
+    {
+      memcopy( sub_esp, "  sub esp, ", 11 );
+      number = i2s(local_sz); nn = strlen(number);
+      memcopy( sub_esp+11, number, nn );
+      memcopy( sub_esp+11+nn, "\n", 2 ); // with ending '\0'
+      cg_resume( sub_esp );
+    }
+    else
+      cg_resume( "  # no local vars\n" );
     cg_fn_end( ret0 );
     return t_(T);
   }
