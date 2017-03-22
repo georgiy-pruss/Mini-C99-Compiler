@@ -32,10 +32,18 @@ enum { O_RDONLY, O_WRONLY, O_RDWR, O_APPEND=8, O_CREAT=512, O_TRUNC=1024, O_EXCL
 
 int is_abc( int c ) { return c>='a' && c<='z' || c>='A' && c<='Z' || c=='_'; }
 
+void memcopy( char* d, char* s, int n ) { for( ; n>0; ++d, ++s, --n ) *d = *s; }
+
 int strlen( char* s ) { char* b; b=s; while( *s ) ++s; return s-b; }
-char* strcpy( char* d, char* s ) { char* r; for( r=d; *s ; ++d, ++s ) *d=*s; *d=0; return r; }
-char* strcat( char* s, char* t ) { strcpy( s + strlen( s ), t ); return s; }
-char* strdup( char* s ) { return strcpy( malloc( strlen(s) + 1 ), s ); }
+
+char* strdup( char* s )
+{
+  int n; char* d;
+  n = strlen(s);
+  d = malloc( n + 1 );
+  memcopy( d, s, n + 1 );
+  return d;
+}
 
 char* strrev( char* s )
 {
@@ -84,16 +92,16 @@ char* i2s( int value )
   return i2s_buf;
 }
 
-void before_exit(); // to call if compilation fails, before calling exit()
-
-void p1( char* s ) { write( 1, s, strlen(s) ); }
+void p1( char* s ) { write( 1, s, strlen(s) ); } // p = print
 void p2( char* s, char* s2 ) { p1( s ); p1( s2 ); }
 void p3( char* s, char* s2, char* s3 ) { p1( s ); p1( s2 ); p1( s3 ); }
 void p4( char* s, char* s2, char* s3, char* s4 ) { p1( s ); p1( s2 ); p1( s3 ); p1( s4 ); }
-void p0n() { write( 1, "\n", 1 ); }
+void p0n() { write( 1, "\n", 1 ); } // n = new line
 void p1n( char* s ) { write( 1, s, strlen(s) ); write( 1, "\n", 1 ); }
 void p2n( char* s, char* s2 ) { p1( s ); p1( s2 ); write( 1, "\n", 1 ); }
 void p3n( char* s, char* s2, char* s3 ) { p1( s ); p1( s2 ); p1( s3 ); write( 1, "\n", 1 ); }
+
+void before_exit(); // to call if compilation fails, before calling exit()
 
 void assert( int cond, char* msg )
 {
@@ -102,6 +110,11 @@ void assert( int cond, char* msg )
   before_exit();
   exit(1);
 }
+
+void p2wLN( char* k, char* m ); // print 2 args with special msg and line number
+
+void err( char* msg ) { p2wLN( "Error", msg ); }
+void warn( char* msg ) { p2wLN( "Warning", msg ); }
 
 // Compiler Definitions --------------------------------------------------------
 
@@ -152,14 +165,10 @@ void rd_next() // read next character, save it in rd_char; <0 if eof
   rd_char = rd_buf[ rd_char_pos ]; ++rd_char_pos;
 }
 
-void err( char* msg )
+void p2wLN( char* k, char* m ) // we can define it when rd_line is defined
 {
-  p3( "\n*** Error (~line ", i2s( rd_line ), "): " ); p2( msg, " ***\n" );
-}
-
-void warn( char* msg )
-{
-  p3( "\n*** Warning (~line ", i2s( rd_line ), "): " ); p2( msg, " ***\n" );
+  p4( "\n*** ", k, " (~line ", i2s( rd_line ) ); // at or before line
+  p3( "): ", m, " ***\n" );
 }
 
 // Id Table --------------------------------------------------------------------
@@ -552,6 +561,68 @@ int se_gvars = 0; // global vars
 int se_in_fn = 0; // processing stuff inside a function
 int se_items; // items in initialization array
 int se_last_stmt_ret; // last statement was return -- for cg_fn_end
+
+// Buffer for writing ----------------------------------------------------------
+
+enum { BF_LAST, BF_NEXT, BF_MAXN, BF_CURN };
+
+int* bf_alloc_min( int n )
+{
+  // buffer (each part) starts with: last, next, maxn, curn
+  int* a = (int*)malloc( (4 + (n+INTSZ-1)/INTSZ) * INTSZ );
+  a[BF_LAST] = (int)a; // pointer to the last part (only in first!)
+  a[BF_MAXN] = n; // allocated for n chars (used only in first)
+  a[BF_NEXT] = 0; // next; 0 means it's the last one
+  a[BF_CURN] = 0; // current length (== n in all but the last one)
+  return a;
+}
+
+void bf_append( int* bf, char* s )
+{
+  int n; int* last; int left; int* new_bf;
+  n = strlen( s );
+  last = (int*)bf[BF_LAST];
+  left = bf[BF_MAXN]-last[BF_CURN];
+  while( left < n )
+  {
+    memcopy( (char*)(last+4) + last[BF_CURN], s, left );
+    last[BF_CURN] = last[BF_CURN] + left; // assert last[BF_CURN]==bf[BF_MAXN]
+    // then allocate and put it at the end, it will be the new last
+    new_bf = bf_alloc_min( bf[BF_MAXN] );
+    bf[BF_LAST] = (int)new_bf;
+    last[BF_NEXT] = (int)new_bf;
+    s = s + left;
+    n = n - left;
+    last = new_bf;
+    left = bf[BF_MAXN];
+  }
+  memcopy( (char*)(last+4) + last[BF_CURN], s, n );
+  last[BF_CURN] = last[BF_CURN] + n;
+}
+
+void bf_write( int* bf, int fd )
+{
+  int* b = bf;
+  write( fd, (char*)(b + 4), b[BF_CURN] );
+  while( b[BF_NEXT]!=0 )
+  {
+    b = (int*)b[BF_NEXT];
+    write( fd, (char*)(b + 4), b[BF_CURN] );
+  }
+}
+
+void bf_free( int* bf )
+{
+  int* buf = bf;
+  int* nxt = (int*)buf[BF_NEXT];
+  free( (char*)buf );
+  while( nxt!=0 )
+  {
+    buf = nxt;
+    nxt = (int*)buf[BF_NEXT];
+    free( (char*)buf );
+  }
+}
 
 // Code generation -------------------------------------------------------------
 

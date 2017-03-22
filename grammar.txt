@@ -48,7 +48,7 @@ arrayinit : @String                           // char a[] = "abc"; // ARRAY!
           | '{' @String { ',' @String } '}'   // char* b[] = {"ijk","mn"};
           | '{' integer { ',' integer } '}'   // int c[] = {1,2,3};
 
-vartail : [ '=' expr ]
+vartail : [ '=' expr ]                        // local vars can't have '='
         | '[' ']' '=' arrayinit               // int** c[] = {0,0};
         | '[' integer ']' [ '=' arrayinit ]   // int d[100] = {0};
 
