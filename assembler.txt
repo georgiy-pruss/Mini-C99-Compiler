@@ -2,20 +2,27 @@ gnu assembler directives
 http://linux.web.cern.ch/linux/scientific4/docs/rhel-as-en-4/tic54x-directives.html
 https://en.m.wikibooks.org/wiki/X86_Disassembly
 
-p proc nargs,nlocals
-a arg offset?
-v loc type,nwords,offset?
-  endp
-  end
-e equ value|name
-v glob type,nwords,initialvalue?
 
-  binop res,arg1,op,arg2  #  + - * / % & | < > <= >= == !=
-  unop  res,op,arg        #  - ! w b (extend to word; shrink to byte)
-  move  res,arg
-  push  arg
-  pop   res
+  ...free... | loc3 | loc2 | loc1 | ebp^ | r.a. | arg1 | arg2 | arg3 | ...
+             esp    -8     -4     ebp           +8     +12    +16
 
-# registers: sp bp ax bx cx dx si di
-# arg can be int,var,reg
-# res can be var,reg
+  push arg3
+  push arg2
+  push arg1
+  call fn
+
+    push ebp
+    mov ebp,esp
+    sub esp,12    ; for 3 local vars
+    push edi
+    push esi      ; save regs if used inside
+
+    ...           ; locals [ebp-4 8 12 etc], args [ebp+8 12 16 etc]
+
+    pop esi       ; restore regs if saved
+    pop edi
+    move esp,ebp
+    pop ebp       ; leave
+    ret           ;
+
+  add esp,12

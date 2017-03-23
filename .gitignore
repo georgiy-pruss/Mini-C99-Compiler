@@ -1,3 +1,4 @@
 *.exe
 VS/
 VSTest/
+a_exe/

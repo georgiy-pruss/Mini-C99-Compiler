@@ -14,7 +14,7 @@
 enum { INTSZ = 4,    // all this is for 32-bit architecture; int and int* is 4 bytes
   STR_MAX_SZ=260,    // max size of any string (line, name, etc.)
   ID_TABLE_LEN=1009, // for id freezing; should be prime number
-  ST_LEN=500,        // symbol table; max length is 500 (it's for all scopes at a moment)
+  ST_DIM=500,        // symbol table; max length is 500 (it's for all scopes at a moment)
   RD_BUF=8000,       // buffer for reading program text
   BF_WRT_SZ=4000 };  // buffer for suspended output
 
@@ -112,8 +112,10 @@ void assert( int cond, char* msg )
 
 void p2wLN( char* k, char* m ); // print 2 args with special msg and line number
 
-void err( char* msg ) { p2wLN( "Error", msg ); }
 void warn( char* msg ) { p2wLN( "Warning", msg ); }
+void err1( char* msg ) { p2wLN( "Error", msg ); before_exit(); exit(1); }
+void err2( char* msg, char* m2 ) { p2wLN( "Error", msg );
+                                   p2n( "*** ", m2 ); before_exit(); exit(1); }
 
 // Compiler Definitions --------------------------------------------------------
 
@@ -162,10 +164,9 @@ void rd_next() // read next character, save it in rd_char; <0 if eof
   rd_char = rd_buf[ rd_char_pos ]; ++rd_char_pos;
 }
 
-void p2wLN( char* k, char* m ) // we can define it when rd_line is defined
+void p2wLN( char* sev, char* msg ) // we can define it when rd_line is defined
 {
-  p4( "\n*** ", k, " (~line ", i2s( rd_line ) ); // at or before line
-  p3( "): ", m, " ***\n" );
+  p4( "\n*** ", sev, " at or before line ", i2s( rd_line ) ); p2n( "\n*** ", msg );
 }
 
 // Id Table --------------------------------------------------------------------
@@ -399,9 +400,8 @@ void sc_next() // read and put token into sc_tkn
 
 // Symbol table ----------------------------------------------------------------
 
-int   st_len = 0; // symbol table length; no ST initially, create dynamically
+int   st_dim = 0; // symbol table length; no ST initially, create dynamically
 int*  st_id;      // ref to id_table
-char* st_level;   // 0 global 1+ scope levels
 char* st_type;    // 0 void 1 2 3 char^ 4 5 6 int^
 char* st_kind;    // Enum    Var    Array  Arg    Func
 int*  st_value;   // --value --offs --offs --offs --0|offs
@@ -419,22 +419,21 @@ void st_create( int n )
 {
   // array of struct is split into set of arrays. b/c no struct in the language
   st_id = (int*)malloc( INTSZ*n );
-  st_level = malloc( n );
   st_type = malloc( n );
   st_kind = malloc( n );
   st_value = (int*)malloc( INTSZ*n );
   st_prop = (int*)malloc( INTSZ*n );
-  st_len = n;
+  st_dim = n;
   st_count = 0;
 }
 
-char* st_copy_args( int start, int nargs ) // we need only args actually
+char* st_copy_args( int start, int nargs )
 {
   char* args = malloc( nargs+1 );
   for( int i=0; i<nargs; ++i )
   {
     assert( start<st_count && st_kind[start+i]==K_arg, "st_copy" );
-    args[i] = st_type[start+1];
+    args[i] = st_type[start+i];
   }
   args[nargs]=0; // all types except Void >0; arg can't be Void
   return args;
@@ -448,9 +447,9 @@ int st_find( int id )
 
 int st_add_id( int id )
 {
-  if( st_len==0 ) st_create( ST_LEN );
+  if( st_dim==0 ) st_create( ST_DIM );
   int k = st_count;
-  if( k>= st_len ) { err( "too many names" ); before_exit(); exit(5); }
+  if( k>= st_dim ) err1( "too many identifiers" );
   st_id[k] = id;
   ++st_count;
   return k;
@@ -492,50 +491,55 @@ int st_count_local_sz()
   return s;
 }
 
-void st_dump_part( int start )
+void print_args( char* a )
+{
+  if( *a==0 ) p1( " ()" ); else for( ; *a; ++a ) p2( " ", st_type_str[*a] );
+}
+
+void st_dump( int start )
 {
   int i;
   for( i=start; i<st_count; ++i )
   {
-    p2( i2s(i), " - " ); p3( id_table[st_id[i]]," #", i2s( st_id[i] ) );
-    p4( " ", st_type_str[st_type[i]], " ", st_kind_str[st_kind[i]] );
+    p3( i2s(i), " - ", id_table[st_id[i]] );
+    p3( " (", i2s( st_id[i] ), ") " );
+    p3( st_type_str[st_type[i]], " ", st_kind_str[st_kind[i]] );
     p2( " v=", i2s(st_value[i]) );
     if( st_kind[i]==K_array )
       p2( " dim=", i2s(st_prop[i]));
     if( st_kind[i]==K_fn )
-      p2( " p=", i2s(st_prop[i]));
+      { p1( " args:" ); print_args( (char*)st_prop[i] ); }
     p0n();
   }
 }
 
 // Semantic variables ----------------------------------------------------------
 
-int se_type;
+int se_type;  // pa_type sets type here (Char or Int; Void is done separately)
 int se_stars; // 0, 1, 2 - number of stars in "type stars"
 int se_value; // value of constant expr, e.g. "integer"
-int se_level = 0; // 0 is global
+int se_level = 0; // 0 is global; 1+ is in function; 2+ in for/blocks
 int se_enum; // value of enumerator in enum
-int se_args; // number of arguments in fn
-int se_lvars = 0; // local vars
-int se_gvars = 0; // global vars
-int se_in_fn = 0; // processing stuff inside a function
+int se_arg_count; // number of arguments in fn
+int se_lvars = 0; // local vars -- JFYI
+int se_gvars = 0; // global vars -- JFYI
 int se_items; // items in initialization array
 int se_last_stmt_ret; // last statement was return -- for cg_fn_end
-int se_local_offset;
-int se_label_stack[20];
+int se_local_offset; // offset for local vars (positive, but will be [EBP-...]
+int se_max_l_offset; // max value of local offset == stack size to allocate
 
 // Buffer for writing ----------------------------------------------------------
 
-enum { BF_LAST, BF_NEXT, BF_MAXN, BF_CURN };
+enum { BF_LAST, BF_NEXT, BF_DIM, BF_COUNT };
 
 int* bf_alloc_min( int n )
 {
   // buffer (each part) starts with: last, next, maxn, curn
   int* a = (int*)malloc( (4 + (n+INTSZ-1)/INTSZ) * INTSZ );
   a[BF_LAST] = (int)a; // pointer to the last part (only in first!)
-  a[BF_MAXN] = n; // allocated for n chars (used only in first)
+  a[BF_DIM] = n; // allocated for n chars (used only in first)
   a[BF_NEXT] = 0; // next; 0 means it's the last one
-  a[BF_CURN] = 0; // current length (== n in all but the last one)
+  a[BF_COUNT] = 0; // current length (== n in all but the last one)
   return a;
 }
 
@@ -543,32 +547,32 @@ void bf_append( int* bf, char* s, int n )
 {
   int left; int* last; int* new_bf;
   last = (int*)bf[BF_LAST];
-  left = bf[BF_MAXN]-last[BF_CURN];
+  left = bf[BF_DIM]-last[BF_COUNT];
   while( left < n )
   {
-    memcopy( (char*)(last+4) + last[BF_CURN], s, left );
-    last[BF_CURN] = last[BF_CURN] + left; // assert last[BF_CURN]==bf[BF_MAXN]
+    memcopy( (char*)(last+4) + last[BF_COUNT], s, left );
+    last[BF_COUNT] = last[BF_COUNT] + left; // assert last[BF_COUNT]==bf[BF_DIM]
     // then allocate and put it at the end, it will be the new last
-    new_bf = bf_alloc_min( bf[BF_MAXN] );
+    new_bf = bf_alloc_min( bf[BF_DIM] );
     bf[BF_LAST] = (int)new_bf;
     last[BF_NEXT] = (int)new_bf;
     s = s + left;
     n = n - left;
     last = new_bf;
-    left = bf[BF_MAXN];
+    left = bf[BF_DIM];
   }
-  memcopy( (char*)(last+4) + last[BF_CURN], s, n );
-  last[BF_CURN] = last[BF_CURN] + n;
+  memcopy( (char*)(last+4) + last[BF_COUNT], s, n );
+  last[BF_COUNT] = last[BF_COUNT] + n;
 }
 
 void bf_write( int* bf, int fd )
 {
   int* b = bf;
-  write( fd, (char*)(b + 4), b[BF_CURN] );
+  write( fd, (char*)(b + 4), b[BF_COUNT] );
   while( b[BF_NEXT]!=0 )
   {
     b = (int*)b[BF_NEXT];
-    write( fd, (char*)(b + 4), b[BF_CURN] );
+    write( fd, (char*)(b + 4), b[BF_COUNT] );
   }
 }
 
@@ -594,17 +598,13 @@ char* cg_section = ""; // current section
 void cg_o( char* s )
 {
   int n = strlen(s);
-  if( cg_buffer == 0 ) write( cg_file, s, n ); else
-  {
-    bf_append( cg_buffer, s, n );
-  }
+  if( cg_buffer == 0 ) write( cg_file, s, n ); else bf_append( cg_buffer, s, n );
 }
 void cg_n( char* s )
 {
   int n = strlen(s);
   if( cg_buffer == 0 ) { write( cg_file, s, n ); write( cg_file, "\n", 1 ); }
-  else {
-    bf_append( cg_buffer, s, n ); bf_append( cg_buffer, "\n", 1 ); }
+  else { bf_append( cg_buffer, s, n ); bf_append( cg_buffer, "\n", 1 ); }
 }
 
 void cg_suspend() // after this, write to buffer
@@ -704,7 +704,8 @@ int pa_integer() // has value at compile time
   if( sc_tkn==Id ) // Id must be enum
   {
     int i = st_find( sc_num );
-    if( i<0 || st_kind[i] != K_enum ) { err("Can't find enum Id"); return t_(F); }
+    if( i<0 || st_kind[i] != K_enum )
+      err2( "Can't find enum Id in const expression", id_table[sc_num] );
     se_value = st_value[i];
   }
   else
@@ -853,20 +854,22 @@ int pa_vartail()
   int t = se_type + se_stars;
   int id = sc_num;
   int k = st_find( id );
-  if( se_in_fn && k>=st_local || !se_in_fn && k>=0 )
+  if( se_level>0 && k>=st_local || se_level==0 && k>=0 )
     p2n( "dupl var ",id_table[id] );
-  ///st_add_var( se_level, sc_num, t, 0 ); ?? somewhere here
-  if( se_in_fn ) { ++se_lvars;  }
-  else { ++se_gvars; }
+  if( se_level>0 ) { ++se_lvars; } else { ++se_gvars; }
   if( sc_tkn=='=' )
   {
-    st_add( id, t, K_var, 0 );
+    if( se_level>0 )
+      se_local_offset = se_local_offset + INTSZ; // it's so even for char vars
+    st_add( id, t, K_var, se_local_offset );
     sc_next();
     return t_(pa_expr(0)); // must be calculable for globals
   }
   if( sc_tkn!='[' )
   {
-    st_add( id, t, K_var, 0 );
+    if( se_level>0 )
+      se_local_offset = se_local_offset + INTSZ;
+    st_add( id, t, K_var, se_local_offset );
     return t_(T); // without initial value
   }
   sc_next();
@@ -874,17 +877,22 @@ int pa_vartail()
   {
     sc_next();
     if( sc_tkn!='=' ) return t_(F);
-    k = st_add_aux( id, t, K_array, 0, 0 ); // calc dim from arrayinit
     sc_next();
-    int rc = pa_arrayinit();
-    st_prop[k] = se_items;
-    return t_(rc);
+    if( !pa_arrayinit() ) return t_(F);
+    int itemsz=INTSZ; if( t==T_c ) itemsz=1;
+    if( se_level>0 )
+      se_local_offset = se_local_offset + se_items*itemsz;
+    st_add_aux( id, t, K_array, se_local_offset, se_items );
+    return t_(T);
   }
   else // length is specified in [N]
   {
     if( !pa_integer() ) return t_(F); // value in se_value
     if( sc_tkn!=']' ) return t_(F);
-    k = st_add_aux( id, t, K_array, 0, se_value );
+    int itemsz=INTSZ; if( t==T_c ) itemsz=1;
+    if( se_level>0 )
+      se_local_offset = se_local_offset + se_items*itemsz;
+    st_add_aux( id, t, K_array, se_local_offset, se_value );
     sc_next();
     if( sc_tkn!='=' ) return t_(T); // no initialization
     sc_next();
@@ -923,7 +931,6 @@ int pa_vardef_or_expr()
   pa_stars();
   int t = se_type + se_stars;
   if( sc_tkn!=Id ) return t_(F);
-  ///st_add_var( se_level, sc_num, t, 0 ); TODO
   sc_next();
   return t_(pa_morevars());
 }
@@ -935,8 +942,8 @@ int pa_argdef()
   pa_stars();
   int t = se_type + se_stars;
   if( sc_tkn!=Id ) return t_(F);
-  ++se_args;
-  st_add( sc_num, t, K_arg, se_args );
+  ++se_arg_count;
+  st_add( sc_num, t, K_arg, se_arg_count );
   sc_next();
   return t_(T);
 }
@@ -944,7 +951,7 @@ int pa_argdef()
 int pa_args()
 {
   t1("pa_args");
-  se_args = 0;
+  se_arg_count = 0;
   if( !pa_argdef() ) return t_(T);
   while( sc_tkn==',' )
   {
@@ -952,23 +959,6 @@ int pa_args()
     if( !pa_argdef() ) return t_(F);
   }
   return t_(T);
-}
-
-int se_are_fns_same( int* prp, int* prp2 )
-{
-  int na = prp[1];
-  char* at = (char*)prp[3];
-  char* ak = (char*)prp[4];
-  int na2 = prp2[1];
-  char* at2 = (char*)prp2[3];
-  char* ak2 = (char*)prp2[4];
-  if( na!=na2 ) return F;
-  for( int i=0; i<na; ++i )
-  {
-    if( ak[i]!=K_arg || ak2[i]!=K_arg ) return F;
-    if( at[i]!=at2[i] ) return F;
-  }
-  return T;
 }
 
 int pa_stmt()
@@ -981,18 +971,16 @@ int pa_stmt()
   {
     sc_next();
     ++se_level;
-    int locals_start = st_count; // maybe w/o se_level? TODO
+    int locals_start = st_count;
     while( sc_tkn!='}' ) if( !pa_stmt() ) return t_(F); // error
     sc_next();
-    ///int nv = st_count_at( se_level );
-    ///if( nv>0 )
-    ///{
-    ///  if( ST_DUMP ) { p1("block\n"); st_dump_level( se_level ); }
-    ///  st_clean( se_level );
-    ///}
-    st_count = locals_start;
+    if( se_local_offset>se_max_l_offset) se_max_l_offset=se_local_offset;
+    if( st_count>locals_start ) // vars were defined in block
+    {
+      if( ST_DUMP ) { p1("block\n"); st_dump( locals_start ); }
+      st_count = locals_start;
+    }
     --se_level;
-    // TODO count stack space ... with recursion or counting there and back
     return t_(T);
   }
   if( sc_tkn==Kw+Break )
@@ -1060,29 +1048,32 @@ int pa_func()
   int id=sc_num;
   int t=se_type+se_stars;
   int k2 = st_find( id ); // find duplicate if any
-  int k = st_add_aux( id, t, K_fn, 0, 0 ); // add this for now; maybe not needed
+  if( k2>=0 && st_kind[k2]!=K_fn )
+    err2( "This was defined as not function before", id_table[id] );
+  int k = st_add_aux( id, t, K_fn, 0, 0 ); // add this for now; may be gone later
   sc_next();
-  se_in_fn = T;
-  se_level = 1;
-  st_local = st_count; // start local scope
-  if( !pa_args() || sc_tkn != ')' ) return t_(F);
-  char* args = st_copy_args( st_local, se_args );
+  se_level = 1; // actually it's argument level
+  st_local = st_count; // start local scope in ST -- maybe can be local var here
+
+  if( !pa_args() || sc_tkn != ')' ) return t_(F);            // <--- agrgs
+
+  char* args = st_copy_args( st_local, se_arg_count );
   sc_next();
   if( sc_tkn == ';' ) // fn declaration
   {
-    if( k2>=0 )
+    sc_next();
+    if( k2>=0 ) // duplicate definitions -- may be the same or different
     {
       if( t!=st_type[k2] || strcmp( (char*)st_prop[k2], args ) )
-        p2n( "duplicate function declaration (not matching) ",id_table[id] );
+        err2( "duplicate function declaration (not matching)", id_table[id] );
     }
     else // first declaration
     {
       st_prop[k] = (int)args;
       st_count = st_local; // clean local scope, actually only args
-      se_in_fn = F;
       se_level = 0;
-      sc_next(); return t_(T);
     }
+    return t_(T);
   }
   if( sc_tkn == '{' ) // fn definition
   {
@@ -1090,20 +1081,13 @@ int pa_func()
     se_lvars = 0;
     if( k2>=0 )
     {
-      char* prp2 = (char*)st_prop[k2];
-      if( t==st_type[k2] && strequ( prp2, args ) )
-      {
-        if( st_value[k2]!=0 )
-          { err( "duplicate function definition " ); p1n( id_table[id] ); }
-        free( prp2 );
-        st_value[k2] = 1;
-        st_prop[k2] = (int)args;
-        redefined = T;
-      }
-      else
-      {
-        err( "duplicate function definition (not matching) " ); p1n( id_table[id] );
-      }
+      if( st_value[k2]!=0 )
+        err2( "function re-definition", id_table[id] );
+      if( t!=st_type[k2] || strcmp( (char*)st_prop[k2], args ) )
+        err2( "not matching function definition", id_table[id] );
+      st_value[k2] = 1; // will be address?
+      st_prop[k2] = (int)args;
+      redefined = T; // was declared, now it's time to define
     }
     else
     {
@@ -1111,37 +1095,36 @@ int pa_func()
       st_prop[k] = (int)args;
     }
     cg_fn_begin( id_table[id] );
-    cg_suspend(); // resume when we know local scope size on stack
+    cg_suspend(); // resume until we know local scope size on stack
     if( strequ( id_table[id], "main" ) ) cg_n( "  call ___main\n" );
+    se_local_offset = 0;
+    se_max_l_offset = 0;
 
     while( sc_tkn!='}' ) if( !pa_stmt() ) return t_(F); // error
     sc_next();
 
-    int local_sz = st_count_local_sz();
-    assert( local_sz%4==0, "local_sz div 4" );
-    if( ST_DUMP ) { p2n("fn ",id_table[id]); st_dump_part( st_local ); } // not all vars
+    if( ST_DUMP ) { p2n("fn ",id_table[id]); st_dump( st_local ); }
     if( redefined ) --st_local; // remove new fn itself -- we used old one
     st_count = st_local; // clean local scope
-    se_in_fn = F;
     se_level = 0;
     if( !se_last_stmt_ret && t!=T_v ) { warn( "last stmt was not return!" ); ret0 = T; }
-    // ^^ it doesn't catch if(...) return ...; but it's ok for now
+    // that doesn't catch all cases but it's ok for now
 
-    if( local_sz > 0 )
+    if( se_max_l_offset > 0 )
     {
       char cmd[32];
       memcopy( cmd, "  sub esp, ", 11 );
-      char* number = i2s(local_sz); int nn = strlen(number);
+      char* number = i2s(se_max_l_offset); int nn = strlen(number);
       memcopy( cmd+11, number, nn );
       memcopy( cmd+11+nn, "\n", 2 ); // with ending '\0'
       cg_resume( cmd );
     }
     else
-      cg_resume( "  # no local vars\n" );
+      cg_resume( "  # no local variables\n" );
     cg_fn_end( ret0 );
     return t_(T);
   }
-  return t_(F);
+  return t_(F); // i.e. not ';' and not '{' -- syntax error
 }
 
 int pa_enumerator()
@@ -1240,19 +1223,18 @@ int main( int ac, char** av )
       if( av[i][1] == 'S' ) ST_DUMP=1;
     }
 
-  if( !filename ) { p1( "No input file\n" ); exit(2); }
+  if( !filename ) { p1( "No input file\n" ); exit(1); }
   // init
   op_set_prec();
   char OUTFN[] = "a.s";
   cg_file = open( OUTFN, O_CREAT|O_TRUNC|O_WRONLY, 0666 );
-  if( cg_file<0 ) { p3( "Can't create file '", OUTFN, "'\n" ); exit(3); }
+  if( cg_file<0 ) { p3( "Can't create file '", OUTFN, "'\n" ); exit(1); }
   cg_begin( filename );
-  int rc = 0;
-  if( !pa_program( filename ) ) { err( "syntax" ); rc = 4; }
+  if( !pa_program( filename ) ) err1( "wrong syntax" );
   cg_end();
   if( cg_file>0 ) close( cg_file );
   if( IT_DUMP ) id_table_dump();
-  if( ST_DUMP ) { p1("globals\n"); st_dump_part(0); }
+  if( ST_DUMP ) { p1("globals\n"); st_dump(0); }
   if( SC_DEBUG ) p2( i2s( sc_n_tokens ), " tokens\n" );
-  return rc;
+  return 0;
 }
