@@ -37,16 +37,6 @@ binop : '*' | '/' | '%'                  // prec. 12
 
 expr : term { binop term }
 
-vardef_or_expr : type stars @Id morevars // ends with ';'
-               | expr ';'
-
-stmt : ';'
-     | '{' { stmt } '}'
-     | "break" ';'                | "return" [ expr ] ';'
-     | "while" '(' expr ')' stmt  | "if" '(' expr ')' stmt [ "else" stmt ]
-     | "for" '(' vardef_or_expr [ expr ] ';' [ expr { ',' expr } ] ')' stmt
-     | vardef_or_expr // ends with ';'
-
 arrayinit : @String                           // char a[] = "abc"; // ARRAY!
           | '{' @String { ',' @String } '}'   // char* b[] = {"ijk","mn"};
           | '{' integer { ',' integer } '}'   // int c[] = {1,2,3};
@@ -56,6 +46,16 @@ vartail : [ '=' expr ] // for global vars expr must be calculable at compile tim
         | '[' integer ']' [ '=' arrayinit ]   // int d[100] = {0};
 
 morevars : vartail { ',' stars @Id vartail } ';'
+
+vardef_or_expr : type stars @Id morevars // ends with ';'
+               | expr ';'
+
+stmt : ';'
+     | '{' { stmt } '}'
+     | "break" ';'                | "return" [ expr ] ';'
+     | "while" '(' expr ')' stmt  | "if" '(' expr ')' stmt [ "else" stmt ]
+     | "for" '(' vardef_or_expr [ expr ] ';' [ expr { ',' expr } ] ')' stmt
+     | vardef_or_expr // ends with ';'
 
 argdef : type stars @Id        // e.g. "char** argv" but not "char* argv[]"
 
