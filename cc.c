@@ -2,8 +2,6 @@
 // gcc -fno-builtin-malloc -fno-builtin-strlen -O2 cc.c -o cc.exe
 // -std=c99 is default in gcc
 
-// TODO return scope levels; with for and block -- still TODO levels
-// TODO in_fn/level; count stack space! e.g. save/restore in 'block' and 'for'
 // TODO save only args with fns; compare only args -- nearly done; make print
 // TODO global vars have offsets in .bss and .data, locals - rel. to EBP
 // TODO comments in code gen for statements
@@ -455,14 +453,7 @@ int st_add_id( int id )
   return k;
 }
 
-int st_add( int id, int type, int kind, int value )
-{
-  int i = st_add_id( id );
-  st_type[i] = type; st_kind[i] = kind; st_value[i] = value;
-  return i;
-}
-
-int st_add_aux( int id, int type, int kind, int value, int aux )
+int st_add( int id, int type, int kind, int value, int aux )
 {
   int i = st_add_id( id );
   st_type[i] = type; st_kind[i] = kind; st_value[i] = value; st_prop[i] = aux;
@@ -525,8 +516,11 @@ int se_lvars = 0; // local vars -- JFYI
 int se_gvars = 0; // global vars -- JFYI
 int se_items; // items in initialization array
 int se_last_stmt_ret; // last statement was return -- for cg_fn_end
-int se_local_offset; // offset for local vars (positive, but will be [EBP-...]
+int se_local_offset; // offset for local vars (negative! for [EBP-...])
 int se_max_l_offset; // max value of local offset == stack size to allocate
+                     // but locals grow down, so it's 'max negative' = 'min'
+int se_data_offset; // initialized data segment
+int se_zero_offset; // zero data segment
 
 // Buffer for writing ----------------------------------------------------------
 
@@ -847,6 +841,22 @@ int pa_arrayinit()
   return t_(T);
 }
 
+int add_var( int id, int t, int dim )
+{
+  int k = K_array;
+  if( dim<0 ) { dim=1; k = K_var; }
+  int itemsz=INTSZ; if( t==T_c ) itemsz=1;
+  int varsz = (dim*itemsz + INTSZ-1) / INTSZ * INTSZ; // align up to INTSZ bound
+  if( se_level>0 )
+  {
+    se_local_offset = se_local_offset - varsz; // negative!
+    return st_add( id, t, K_var, se_local_offset, dim ); // local var
+  }
+  int n = st_add( id, t, K_var, se_data_offset, dim ); // global var
+  se_data_offset = se_data_offset + varsz;
+  return n;
+}
+
 int pa_vartail()
 {
   assert(sc_tkn=='='||sc_tkn=='['||sc_tkn==','||sc_tkn==';',"var"); // right after Id
@@ -859,17 +869,13 @@ int pa_vartail()
   if( se_level>0 ) { ++se_lvars; } else { ++se_gvars; }
   if( sc_tkn=='=' )
   {
-    if( se_level>0 )
-      se_local_offset = se_local_offset + INTSZ; // it's so even for char vars
-    st_add( id, t, K_var, se_local_offset );
+    add_var( id, t, -1 );
     sc_next();
     return t_(pa_expr(0)); // must be calculable for globals
   }
   if( sc_tkn!='[' )
   {
-    if( se_level>0 )
-      se_local_offset = se_local_offset + INTSZ;
-    st_add( id, t, K_var, se_local_offset );
+    add_var( id, t, -1 );
     return t_(T); // without initial value
   }
   sc_next();
@@ -879,20 +885,14 @@ int pa_vartail()
     if( sc_tkn!='=' ) return t_(F);
     sc_next();
     if( !pa_arrayinit() ) return t_(F);
-    int itemsz=INTSZ; if( t==T_c ) itemsz=1;
-    if( se_level>0 )
-      se_local_offset = se_local_offset + se_items*itemsz;
-    st_add_aux( id, t, K_array, se_local_offset, se_items );
+    add_var( id, t, se_items );
     return t_(T);
   }
   else // length is specified in [N]
   {
     if( !pa_integer() ) return t_(F); // value in se_value
     if( sc_tkn!=']' ) return t_(F);
-    int itemsz=INTSZ; if( t==T_c ) itemsz=1;
-    if( se_level>0 )
-      se_local_offset = se_local_offset + se_items*itemsz;
-    st_add_aux( id, t, K_array, se_local_offset, se_value );
+    add_var( id, t, se_value );
     sc_next();
     if( sc_tkn!='=' ) return t_(T); // no initialization
     sc_next();
@@ -943,7 +943,7 @@ int pa_argdef()
   int t = se_type + se_stars;
   if( sc_tkn!=Id ) return t_(F);
   ++se_arg_count;
-  st_add( sc_num, t, K_arg, se_arg_count );
+  st_add( sc_num, t, K_arg, se_arg_count, 0 );
   sc_next();
   return t_(T);
 }
@@ -974,7 +974,7 @@ int pa_stmt()
     int locals_start = st_count;
     while( sc_tkn!='}' ) if( !pa_stmt() ) return t_(F); // error
     sc_next();
-    if( se_local_offset>se_max_l_offset) se_max_l_offset=se_local_offset;
+    if( se_local_offset<se_max_l_offset) se_max_l_offset=se_local_offset; // negative!
     if( st_count>locals_start ) // vars were defined in block
     {
       if( ST_DUMP ) { p1("block\n"); st_dump( locals_start ); }
@@ -1050,7 +1050,7 @@ int pa_func()
   int k2 = st_find( id ); // find duplicate if any
   if( k2>=0 && st_kind[k2]!=K_fn )
     err2( "This was defined as not function before", id_table[id] );
-  int k = st_add_aux( id, t, K_fn, 0, 0 ); // add this for now; may be gone later
+  int k = st_add( id, t, K_fn, 0, 0 ); // add this for now; may be gone later
   sc_next();
   se_level = 1; // actually it's argument level
   st_local = st_count; // start local scope in ST -- maybe can be local var here
@@ -1103,7 +1103,8 @@ int pa_func()
     while( sc_tkn!='}' ) if( !pa_stmt() ) return t_(F); // error
     sc_next();
 
-    if( ST_DUMP ) { p2n("fn ",id_table[id]); st_dump( st_local ); }
+    if( ST_DUMP ) { p2n("fn ",id_table[id]); st_dump( st_local );
+                    p2n("stk ",i2s(se_max_l_offset)); p0n(); }
     if( redefined ) --st_local; // remove new fn itself -- we used old one
     st_count = st_local; // clean local scope
     se_level = 0;
@@ -1138,7 +1139,7 @@ int pa_enumerator()
     sc_next(); if( !pa_integer() ) return t_(F);
     se_enum = se_value;
   }
-  st_add( id, T_i, K_enum, se_enum );
+  st_add( id, T_i, K_enum, se_enum, 0 );
   ++se_enum;
   return t_(T);
 }
@@ -1234,7 +1235,7 @@ int main( int ac, char** av )
   cg_end();
   if( cg_file>0 ) close( cg_file );
   if( IT_DUMP ) id_table_dump();
-  if( ST_DUMP ) { p1("globals\n"); st_dump(0); }
+  if( ST_DUMP ) { p1("globals\n"); st_dump(0); p2n( "data size: ", i2s(se_data_offset) ); }
   if( SC_DEBUG ) p2( i2s( sc_n_tokens ), " tokens\n" );
   return 0;
 }
