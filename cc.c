@@ -14,7 +14,8 @@ enum { INTSZ = 4,    // all this is for 32-bit architecture; int and int* is 4 b
   ID_TABLE_LEN=1009, // for id freezing; should be prime number
   ST_DIM=500,        // symbol table; max length is 500 (it's for all scopes at a moment)
   RD_BUF=8000,       // buffer for reading program text
-  BF_WRT_SZ=4000 };  // buffer for suspended output
+  BF_WRT_SZ=4000,    // buffer for suspended output
+  BSS_ORG=100000 };  // tag that data is in bss section (BSS_ORG+offset)
 
 int SC_DEBUG=0; // -T - tokens trace
 int RD_LINES=0; // -L - lines
@@ -443,21 +444,13 @@ int st_find( int id )
   return -1;
 }
 
-int st_add_id( int id )
-{
-  if( st_dim==0 ) st_create( ST_DIM );
-  int k = st_count;
-  if( k>= st_dim ) err1( "too many identifiers" );
-  st_id[k] = id;
-  ++st_count;
-  return k;
-}
-
 int st_add( int id, int type, int kind, int value, int aux )
 {
-  int i = st_add_id( id );
-  st_type[i] = type; st_kind[i] = kind; st_value[i] = value; st_prop[i] = aux;
-  return i;
+  int k = st_count;
+  if( k >= st_dim ) err1( "too many identifiers" );
+  st_id[k]=id; st_type[k]=type; st_kind[k]=kind; st_value[k]=value; st_prop[k]=aux;
+  ++st_count;
+  return k;
 }
 
 int st_count_local_sz()
@@ -487,21 +480,27 @@ void print_args( char* a )
   if( *a==0 ) p1( " ()" ); else for( ; *a; ++a ) p2( " ", st_type_str[*a] );
 }
 
-void st_dump( int start )
+int st_dump( int start, int kind ) // kind == -1 -- all, if K_var, K_array too
 {
-  int i;
-  for( i=start; i<st_count; ++i )
+  int cnt=0;
+  for( int i=start; i<st_count; ++i )
   {
-    p3( i2s(i), " - ", id_table[st_id[i]] );
-    p3( " (", i2s( st_id[i] ), ") " );
-    p3( st_type_str[st_type[i]], " ", st_kind_str[st_kind[i]] );
-    p2( " v=", i2s(st_value[i]) );
-    if( st_kind[i]==K_array )
-      p2( " dim=", i2s(st_prop[i]));
-    if( st_kind[i]==K_fn )
-      { p1( " args:" ); print_args( (char*)st_prop[i] ); }
-    p0n();
+    int k = st_kind[i]; int kk = k; if( kk==K_array ) kk==K_var;
+    if( kind==-1 || kind==kk )
+    {
+      ++cnt;
+      p3( i2s(i), " - ", id_table[st_id[i]] );
+      p3( " (", i2s( st_id[i] ), ") " );
+      p3( st_type_str[st_type[i]], " ", st_kind_str[k] );
+      p2( " v=", i2s(st_value[i]) );
+      if( k==K_array )
+        p2( " dim: ", i2s(st_prop[i]));
+      if( k==K_fn )
+        { p1( " args:" ); print_args( (char*)st_prop[i] ); }
+      p0n();
+    }
   }
+  return cnt;
 }
 
 // Semantic variables ----------------------------------------------------------
@@ -520,7 +519,7 @@ int se_local_offset; // offset for local vars (negative! for [EBP-...])
 int se_max_l_offset; // max value of local offset == stack size to allocate
                      // but locals grow down, so it's 'max negative' = 'min'
 int se_data_offset; // initialized data segment
-int se_zero_offset; // zero data segment
+int se_bss_offset;  // zero data segment -- bss section, in var: +BSS_ORG
 
 // Buffer for writing ----------------------------------------------------------
 
@@ -623,7 +622,7 @@ void cg_begin( char* fn )
 void cg_end()
 {
   cg_n( "  .ident  \"GCC: (GNU) 5.4.0\"\n" );
-  // and dump declarations of all undefined functions
+  // dump declarations of all undefined functions
   for( int i=0; i<st_count; ++i )
     if( st_kind[i]==K_fn && st_value[i]==0 )
       { cg_o( "  .def _" ); cg_o( id_table[st_id[i]] ); cg_n( "; .scl 2; .type 32; .endef" ); }
@@ -642,7 +641,6 @@ void cg_fn_begin( char* name )
   cg_n( "  .cfi_offset 5, -8" );
   cg_n( "  mov ebp, esp" );
   cg_n( "  .cfi_def_cfa_register 5" );
-  if( strequ( name, "main" ) ) cg_n( "  and esp, -16" );
 }
 
 void cg_fn_end( int ret0 )
@@ -841,7 +839,7 @@ int pa_arrayinit()
   return t_(T);
 }
 
-int add_var( int id, int t, int dim )
+int se_add_var( int id, int t, int dim, char* init )
 {
   int k = K_array;
   if( dim<0 ) { dim=1; k = K_var; }
@@ -852,8 +850,17 @@ int add_var( int id, int t, int dim )
     se_local_offset = se_local_offset - varsz; // negative!
     return st_add( id, t, K_var, se_local_offset, dim ); // local var
   }
-  int n = st_add( id, t, K_var, se_data_offset, dim ); // global var
-  se_data_offset = se_data_offset + varsz;
+  int n;
+  if( init )
+  {
+    n = st_add( id, t, K_var, se_data_offset, dim ); // global var in data section
+    se_data_offset = se_data_offset + varsz;
+  }
+  else
+  {
+    n = st_add( id, t, K_var, se_bss_offset+BSS_ORG, dim ); // global bss
+    se_bss_offset = se_bss_offset + varsz;
+  }
   return n;
 }
 
@@ -869,14 +876,14 @@ int pa_vartail()
   if( se_level>0 ) { ++se_lvars; } else { ++se_gvars; }
   if( sc_tkn=='=' )
   {
-    add_var( id, t, -1 );
+    se_add_var( id, t, -1, "..." );
     sc_next();
     return t_(pa_expr(0)); // must be calculable for globals
   }
   if( sc_tkn!='[' )
   {
-    add_var( id, t, -1 );
-    return t_(T); // without initial value
+    se_add_var( id, t, -1, 0 );
+    return t_(T);
   }
   sc_next();
   if( sc_tkn==']' ) // take length from the initial value
@@ -885,14 +892,14 @@ int pa_vartail()
     if( sc_tkn!='=' ) return t_(F);
     sc_next();
     if( !pa_arrayinit() ) return t_(F);
-    add_var( id, t, se_items );
+    se_add_var( id, t, se_items, "..." );
     return t_(T);
   }
   else // length is specified in [N]
   {
     if( !pa_integer() ) return t_(F); // value in se_value
     if( sc_tkn!=']' ) return t_(F);
-    add_var( id, t, se_value );
+    se_add_var( id, t, se_value, 0 );
     sc_next();
     if( sc_tkn!='=' ) return t_(T); // no initialization
     sc_next();
@@ -971,14 +978,19 @@ int pa_stmt()
   {
     sc_next();
     ++se_level;
-    int locals_start = st_count;
+
+    // <S>
+    int block_local_start = st_count;         // in ST
+    int block_local_offset = se_local_offset; // on stack
     while( sc_tkn!='}' ) if( !pa_stmt() ) return t_(F); // error
     sc_next();
     if( se_local_offset<se_max_l_offset) se_max_l_offset=se_local_offset; // negative!
-    if( st_count>locals_start ) // vars were defined in block
+
+    if( st_count>block_local_start ) // vars were defined in block
     {
-      if( ST_DUMP ) { p1("block\n"); st_dump( locals_start ); }
-      st_count = locals_start;
+      if( ST_DUMP ) { p1("block\n"); st_dump( block_local_start, -1 ); }
+      st_count = block_local_start;         // remove block vars
+      se_local_offset = block_local_offset;
     }
     --se_level;
     return t_(T);
@@ -1055,7 +1067,7 @@ int pa_func()
   se_level = 1; // actually it's argument level
   st_local = st_count; // start local scope in ST -- maybe can be local var here
 
-  if( !pa_args() || sc_tkn != ')' ) return t_(F);            // <--- agrgs
+  if( !pa_args() || sc_tkn != ')' ) return t_(F);            // <--- args
 
   char* args = st_copy_args( st_local, se_arg_count );
   sc_next();
@@ -1100,10 +1112,14 @@ int pa_func()
     se_local_offset = 0;
     se_max_l_offset = 0;
 
-    while( sc_tkn!='}' ) if( !pa_stmt() ) return t_(F); // error
+    // <S>
+    int block_local_start = st_count;            // in ST
+    int block_local_offset = se_local_offset; // on stack
+    while( sc_tkn!='}' ) if( !pa_stmt() ) return t_(F);      // <--- stmts
     sc_next();
+    if( se_local_offset<se_max_l_offset) se_max_l_offset=se_local_offset; // negative!
 
-    if( ST_DUMP ) { p2n("fn ",id_table[id]); st_dump( st_local );
+    if( ST_DUMP ) { p2n("fn ",id_table[id]); st_dump( st_local, -1 );
                     p2n("stk ",i2s(se_max_l_offset)); p0n(); }
     if( redefined ) --st_local; // remove new fn itself -- we used old one
     st_count = st_local; // clean local scope
@@ -1111,11 +1127,11 @@ int pa_func()
     if( !se_last_stmt_ret && t!=T_v ) { warn( "last stmt was not return!" ); ret0 = T; }
     // that doesn't catch all cases but it's ok for now
 
-    if( se_max_l_offset > 0 )
+    if( se_max_l_offset < 0 ) // it's negative!
     {
       char cmd[32];
       memcopy( cmd, "  sub esp, ", 11 );
-      char* number = i2s(se_max_l_offset); int nn = strlen(number);
+      char* number = i2s(-se_max_l_offset); int nn = strlen(number);
       memcopy( cmd+11, number, nn );
       memcopy( cmd+11+nn, "\n", 2 ); // with ending '\0'
       cg_resume( cmd );
@@ -1225,8 +1241,9 @@ int main( int ac, char** av )
     }
 
   if( !filename ) { p1( "No input file\n" ); exit(1); }
-  // init
+  // initialization
   op_set_prec();
+  st_create( ST_DIM );
   char OUTFN[] = "a.s";
   cg_file = open( OUTFN, O_CREAT|O_TRUNC|O_WRONLY, 0666 );
   if( cg_file<0 ) { p3( "Can't create file '", OUTFN, "'\n" ); exit(1); }
@@ -1235,7 +1252,16 @@ int main( int ac, char** av )
   cg_end();
   if( cg_file>0 ) close( cg_file );
   if( IT_DUMP ) id_table_dump();
-  if( ST_DUMP ) { p1("globals\n"); st_dump(0); p2n( "data size: ", i2s(se_data_offset) ); }
+  if( ST_DUMP )
+  {
+    int n;
+    p1("globals\nenums:\n"); n = st_dump(0,K_enum); p1n(i2s(n));
+    p1("vars:\n"); n = st_dump(0,K_var); p1n(i2s(n)); // also dumps K_array
+    p1("funcs:\n"); n = st_dump(0,K_fn); p1n(i2s(n));
+    p2n( "data size: ", i2s(se_data_offset) );
+    p2n( "bss size: ", i2s(se_bss_offset) );
+  }
   if( SC_DEBUG ) p2( i2s( sc_n_tokens ), " tokens\n" );
   return 0;
 }
+
