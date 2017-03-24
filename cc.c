@@ -982,10 +982,12 @@ int pa_stmt()
     // <S>
     int block_local_start = st_count;         // in ST
     int block_local_offset = se_local_offset; // on stack
+
     while( sc_tkn!='}' ) if( !pa_stmt() ) return t_(F); // error
     sc_next();
-    if( se_local_offset<se_max_l_offset) se_max_l_offset=se_local_offset; // negative!
 
+    // <R>
+    if( se_local_offset<se_max_l_offset) se_max_l_offset=se_local_offset; // negative!
     if( st_count>block_local_start ) // vars were defined in block
     {
       if( ST_DUMP ) { p1("block\n"); st_dump( block_local_start, -1 ); }
@@ -1025,24 +1027,32 @@ int pa_stmt()
     sc_next(); if( sc_tkn != '(' ) return t_(F);
     sc_next();
     ++se_level; // 'for' makes a new scope
+
+    // <S>
+    int block_local_start = st_count;         // in ST
+    int block_local_offset = se_local_offset; // on stack
+
     if( sc_tkn!=';' )
     {
-      if( !pa_vardef_or_expr() ) return t_(F); // also clean level snd --se_level;
+      if( !pa_vardef_or_expr() ) return t_(F); // also clean?
     }
     else sc_next();
     if( sc_tkn!=';' ) if( !pa_expr(0) ) return t_(F); // also ....
     sc_next();
+
     if( sc_tkn!=')' ) if( !pa_exprs() ) return t_(F); // opt. post-expressions
     if( sc_tkn!=')' ) return t_(F); // also...
     sc_next();
     int rc = pa_stmt();
-    ///int nv = st_count_at( se_level );
-    ///if( nv>0 )
-    ///{
-    ///  if( ST_DUMP ) { p1("for-scope\n"); st_dump_level( se_level ); }
-    ///  st_clean( se_level );
-    ///}
-    // st_count = locals_start; TODO
+
+    // <R>
+    if( se_local_offset<se_max_l_offset) se_max_l_offset=se_local_offset; // negative!
+    if( st_count>block_local_start ) // vars were defined in block
+    {
+      if( ST_DUMP ) { p1("for\n"); st_dump( block_local_start, -1 ); }
+      st_count = block_local_start;         // remove block vars
+      se_local_offset = block_local_offset;
+    }
     --se_level;
     return t_(rc);
   }
