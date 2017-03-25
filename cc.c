@@ -978,19 +978,14 @@ int pa_stmt()
   {
     sc_next();
     ++se_level;
-
-    // <S>
     int block_local_start = st_count;         // in ST
     int block_local_offset = se_local_offset; // on stack
-
     while( sc_tkn!='}' ) if( !pa_stmt() ) return t_(F); // error
     sc_next();
-
-    // <R>
     if( se_local_offset<se_max_l_offset) se_max_l_offset=se_local_offset; // negative!
     if( st_count>block_local_start ) // vars were defined in block
     {
-      if( ST_DUMP ) { p1("block\n"); st_dump( block_local_start, -1 ); }
+      if( ST_DUMP ) { p1n("block"); st_dump( block_local_start, -1 ); }
       st_count = block_local_start;         // remove block vars
       se_local_offset = block_local_offset;
     }
@@ -1027,11 +1022,8 @@ int pa_stmt()
     sc_next(); if( sc_tkn != '(' ) return t_(F);
     sc_next();
     ++se_level; // 'for' makes a new scope
-
-    // <S>
     int block_local_start = st_count;         // in ST
     int block_local_offset = se_local_offset; // on stack
-
     if( sc_tkn!=';' )
     {
       if( !pa_vardef_or_expr() ) return t_(F); // also clean?
@@ -1039,17 +1031,14 @@ int pa_stmt()
     else sc_next();
     if( sc_tkn!=';' ) if( !pa_expr(0) ) return t_(F); // also ....
     sc_next();
-
     if( sc_tkn!=')' ) if( !pa_exprs() ) return t_(F); // opt. post-expressions
     if( sc_tkn!=')' ) return t_(F); // also...
     sc_next();
     int rc = pa_stmt();
-
-    // <R>
     if( se_local_offset<se_max_l_offset) se_max_l_offset=se_local_offset; // negative!
     if( st_count>block_local_start ) // vars were defined in block
     {
-      if( ST_DUMP ) { p1("for\n"); st_dump( block_local_start, -1 ); }
+      if( ST_DUMP ) { p1n("for"); st_dump( block_local_start, -1 ); }
       st_count = block_local_start;         // remove block vars
       se_local_offset = block_local_offset;
     }
@@ -1107,28 +1096,24 @@ int pa_func()
         err2( "function re-definition", id_table[id] );
       if( t!=st_type[k2] || strcmp( (char*)st_prop[k2], args ) )
         err2( "not matching function definition", id_table[id] );
-      st_value[k2] = 1; // will be address?
+      st_value[k2] = 1; // will be address? now it's a flag
       st_prop[k2] = (int)args;
       redefined = T; // was declared, now it's time to define
     }
     else
     {
-      st_value[k] = 1; // will be offset
-      st_prop[k] = (int)args;
+      st_value[k] = 1; st_prop[k] = (int)args;
     }
     cg_fn_begin( id_table[id] );
     cg_suspend(); // resume until we know local scope size on stack
     if( strequ( id_table[id], "main" ) ) cg_n( "  call ___main\n" );
     se_local_offset = 0;
     se_max_l_offset = 0;
-
-    // <S>
-    int block_local_start = st_count;            // in ST
+    int block_local_start = st_count;         // in ST
     int block_local_offset = se_local_offset; // on stack
     while( sc_tkn!='}' ) if( !pa_stmt() ) return t_(F);      // <--- stmts
     sc_next();
     if( se_local_offset<se_max_l_offset) se_max_l_offset=se_local_offset; // negative!
-
     if( ST_DUMP ) { p2n("fn ",id_table[id]); st_dump( st_local, -1 );
                     p2n("stk ",i2s(se_max_l_offset)); p0n(); }
     if( redefined ) --st_local; // remove new fn itself -- we used old one
@@ -1136,7 +1121,6 @@ int pa_func()
     se_level = 0;
     if( !se_last_stmt_ret && t!=T_v ) { warn( "last stmt was not return!" ); ret0 = T; }
     // that doesn't catch all cases but it's ok for now
-
     if( se_max_l_offset < 0 ) // it's negative!
     {
       char cmd[32];
@@ -1151,7 +1135,7 @@ int pa_func()
     cg_fn_end( ret0 );
     return t_(T);
   }
-  return t_(F); // i.e. not ';' and not '{' -- syntax error
+  return t_(F); // i.e. not ';' and not '{' ==> syntax error
 }
 
 int pa_enumerator()
