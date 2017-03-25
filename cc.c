@@ -2,8 +2,6 @@
 // gcc -fno-builtin-malloc -fno-builtin-strlen -O2 cc.c -o cc.exe
 // -std=c99 is default in gcc
 
-// TODO save only args with fns; compare only args -- nearly done; make print
-// TODO global vars have offsets in .bss and .data, locals - rel. to EBP
 // TODO comments in code gen for statements
 // TODO labels for return, loop beg/end, if/else/end, stack of labels (int)
 
