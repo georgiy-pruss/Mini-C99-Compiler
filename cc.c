@@ -4,12 +4,16 @@
 
 // TODO comments in code gen for statements
 // TODO labels for return, loop beg/end, if/else/end, stack of labels (int)
+// TODO labels for && and ||
+// TODO jumps for statements
+// TODO expressions; lvalue for = ++ --; initializers, strings and arrays as values
 
 // Parameters ------------------------------------------------------------------
 
 enum { INTSZ = 4,    // all this is for 32-bit architecture; int and int* is 4 bytes
   STR_MAX_SZ=260,    // max size of any string (line, name, etc.)
-  ID_TABLE_LEN=1009, // for id freezing; should be prime number
+  ID_TABLE_DIM=1009, // for id freezing; should be prime number
+  SL_TABLE_DIM=500,  // string literal table; let's assume 500
   ST_DIM=500,        // symbol table; max length is 500 (it's for all scopes at a moment)
   RD_BUF=8000,       // buffer for reading program text
   BF_WRT_SZ=4000,    // buffer for suspended output
@@ -67,6 +71,23 @@ char* strrchr( char* s, int c )
 {
   for( int n = strlen(s); n>0; --n ) if( s[n-1] == c ) return s + (n-1);
   return 0;
+}
+
+char str_repr_buf[STR_MAX_SZ];
+
+char* str_repr( char* s )
+{
+  char* d = str_repr_buf; *d = '"';
+  for( ++d; *s; ++d, ++s )
+  {
+    if( *s=='\n' ) { *d='\\'; ++d; *d='n'; }
+    else if( *s==0 ) { *d='\\'; ++d; *d='0'; }
+    else if( *s=='\b' ) { *d='\\'; ++d; *d='b'; }
+    else if( *s=='\r' ) { *d='\\'; ++d; *d='r'; }
+    else *d=*s;
+  }
+  *d = '"'; ++d; *d = '\0';
+  return str_repr_buf;
 }
 
 char i2s_buf[12]; // buffer for return value of i2s(x)
@@ -169,13 +190,13 @@ void p2wLN( char* sev, char* msg ) // we can define it when rd_line is defined
 // Id Table --------------------------------------------------------------------
 
 char** id_table = 0;
-int id_table_len = 0;
+int id_table_dim = 0;
 int id_count = 0;
 int collisions = 0;
 
 void id_table_create( int n )
 {
-  id_table = (char**)malloc( 4*n ); id_table_len = n;
+  id_table = (char**)malloc( 4*n ); id_table_dim = n;
   for( --n; n>=0; --n ) id_table[n] = 0;
 }
 
@@ -187,13 +208,13 @@ int id_hash( char* s )
 int id_index( char* s ) // looks up in the table or adds there if needed
 {
   if( IT_DEBUG ) p1( s );
-  if( id_table==0 ) id_table_create( ID_TABLE_LEN );
-  int h = id_hash( s ) % id_table_len;
+  int h = id_hash( s ) % id_table_dim; int h0 = h;
   int collision = 0;
   while( id_table[h] )
   {
     if( strequ( id_table[h], s ) ) { if( IT_DEBUG ) p2n( " == ", i2s(h) ); return h; }
-    h = (h+1) % id_table_len;
+    h = (h+1) % id_table_dim;
+    if( h == h0 ) err1( "Too many ids; id_table is full" );
     collision = 1;
   }
   if( collision ) ++collisions;
@@ -206,12 +227,33 @@ int id_index( char* s ) // looks up in the table or adds there if needed
 void id_table_dump()
 {
   int k = 0;
-  for( int i=0; i<id_table_len; ++i )
+  for( int i=0; i<id_table_dim; ++i )
     if( id_table[i] ) { ++k; p3n( i2s(i), " ", id_table[i] ); }
   p1( "-------------------------------------\n" );
   p2( i2s(k), " ids, " );
   if( k!=id_count ) p3( " BUT MUST BE: ", i2s(id_count), ", " );
   p2( i2s(collisions), " collisions\n" );
+}
+
+// String Literal table --------------------------------------------------------
+
+char** sl_table; // ptr to array of char (string) ptrs
+int sl_count;
+
+void sl_table_create( int n ) { sl_table = (char**)malloc( n*INTSZ ); sl_count = 0; }
+
+int sl_add( char* s )
+{
+  if( sl_count==SL_TABLE_LEN ) err1( "Too many literal strings" );
+  sl_table[ sl_count ] = strdup( s );
+  ++sl_count;
+  return sl_count - 1;
+}
+
+void sl_table_dump()
+{
+  for( int i=0; i<sl_count; ++i )
+    p3n( i2s(i), " -> ", str_repr(sl_table[i]) );
 }
 
 // Scanner ---------------------------------------------------------------------
@@ -269,6 +311,7 @@ int sc_read_next()        // scan for next token
       *p = rd_char; ++p; rd_next();
     }
     *p = 0;
+    sc_num = sl_add( sc_text );
     rd_next();
     return Str;
   }
@@ -356,23 +399,6 @@ int sc_read_next()        // scan for next token
   return Err;
 }
 
-char str_repr_buf[STR_MAX_SZ];
-
-char* str_repr( char* s )
-{
-  char* d = str_repr_buf; *d = '"';
-  for( ++d; *s; ++d, ++s )
-  {
-    if( *s=='\n' ) { *d='\\'; ++d; *d='n'; }
-    else if( *s==0 ) { *d='\\'; ++d; *d='0'; }
-    else if( *s=='\b' ) { *d='\\'; ++d; *d='b'; }
-    else if( *s=='\r' ) { *d='\\'; ++d; *d='r'; }
-    else *d=*s;
-  }
-  *d = '"'; ++d; *d = '\0';
-  return str_repr_buf;
-}
-
 int sc_n_tokens = 0; // total count of tokens, JFYI
 
 void sc_next() // read and put token into sc_tkn
@@ -383,8 +409,8 @@ void sc_next() // read and put token into sc_tkn
   {
     p3( " ", i2s(sc_tkn), " - " );
     if (sc_tkn >= Kw)        p2( "kw ", KWDS[ sc_tkn - Kw ] );
-    else if( sc_tkn == Id )  p4( "id ", sc_text, " #",i2s(sc_num) );
-    else if( sc_tkn == Str ) p2( "str ", str_repr(sc_text) );
+    else if( sc_tkn == Id )  p4( "id ", id_table[sc_num], " #",i2s(sc_num) );
+    else if( sc_tkn == Str ) p2( "str ", str_repr(sl_table[sc_num]) );
     else if( sc_tkn == Num ) p2( "num ", i2s(sc_num) );
     else if( sc_tkn == Chr ) p2( "chr ", i2s(sc_num) );
     else if( sc_tkn == Eof ) p1( "eof" );
@@ -521,12 +547,12 @@ int se_bss_offset;  // zero data segment -- bss section, in var: +BSS_ORG
 
 // Buffer for writing ----------------------------------------------------------
 
-enum { BF_LAST, BF_NEXT, BF_DIM, BF_COUNT };
+enum { BF_LAST, BF_NEXT, BF_DIM, BF_COUNT, BF_HEADSZ };
 
 int* bf_alloc_min( int n )
 {
   // buffer (each part) starts with: last, next, maxn, curn
-  int* a = (int*)malloc( (4 + (n+INTSZ-1)/INTSZ) * INTSZ );
+  int* a = (int*)malloc( (BF_HEADSZ + (n+INTSZ-1)/INTSZ) * INTSZ );
   a[BF_LAST] = (int)a; // pointer to the last part (only in first!)
   a[BF_DIM] = n; // allocated for n chars (used only in first)
   a[BF_NEXT] = 0; // next; 0 means it's the last one
@@ -536,15 +562,14 @@ int* bf_alloc_min( int n )
 
 void bf_append( int* bf, char* s, int n )
 {
-  int left; int* last; int* new_bf;
-  last = (int*)bf[BF_LAST];
-  left = bf[BF_DIM]-last[BF_COUNT];
+  int* last = (int*)bf[BF_LAST];
+  int left = bf[BF_DIM]-last[BF_COUNT];
   while( left < n )
   {
-    memcopy( (char*)(last+4) + last[BF_COUNT], s, left );
+    memcopy( (char*)(last+BF_HEADSZ) + last[BF_COUNT], s, left );
     last[BF_COUNT] = last[BF_COUNT] + left; // assert last[BF_COUNT]==bf[BF_DIM]
     // then allocate and put it at the end, it will be the new last
-    new_bf = bf_alloc_min( bf[BF_DIM] );
+    int* new_bf = bf_alloc_min( bf[BF_DIM] );
     bf[BF_LAST] = (int)new_bf;
     last[BF_NEXT] = (int)new_bf;
     s = s + left;
@@ -552,32 +577,19 @@ void bf_append( int* bf, char* s, int n )
     last = new_bf;
     left = bf[BF_DIM];
   }
-  memcopy( (char*)(last+4) + last[BF_COUNT], s, n );
+  memcopy( (char*)(last+BF_HEADSZ) + last[BF_COUNT], s, n );
   last[BF_COUNT] = last[BF_COUNT] + n;
 }
 
 void bf_write( int* bf, int fd )
 {
-  int* b = bf;
-  write( fd, (char*)(b + 4), b[BF_COUNT] );
-  while( b[BF_NEXT]!=0 )
-  {
-    b = (int*)b[BF_NEXT];
-    write( fd, (char*)(b + 4), b[BF_COUNT] );
-  }
+  while( bf ) { write( fd, (char*)(bf + BF_HEADSZ), bf[BF_COUNT] ); bf = (int*)bf[BF_NEXT]; }
 }
 
 void bf_free( int* bf )
 {
-  int* buf = bf;
-  int* nxt = (int*)buf[BF_NEXT];
-  free( (char*)buf );
-  while( nxt!=0 )
-  {
-    buf = nxt;
-    nxt = (int*)buf[BF_NEXT];
-    free( (char*)buf );
-  }
+  int* next = (int*)bf[BF_NEXT]; free( (char*)bf );
+  while( next!=0 ) { bf = next; next = (int*)bf[BF_NEXT]; free( (char*)bf ); }
 }
 
 // Code generation -------------------------------------------------------------
@@ -670,17 +682,22 @@ int pa_primary()
   t1("pa_primary");
   if( sc_tkn==Num || sc_tkn==Chr || sc_tkn==Str || sc_tkn==Id )
   {
-    // if( sc_tkn==Num || sc_tkn==Chr ) p3( "=number ",i2s(sc_num),"\n");
-    // else if( sc_tkn==Str ) p3( "=str ",str_repr(sc_text),"\n");
-    // else if( sc_tkn==Id ) p3( "=id ",sc_text,"\n");
-
+    if( sc_tkn==Num || sc_tkn==Chr )
+      //{ cg_o( "  # primary - num "); cg_n(i2s(sc_num)); }
+      ;
+    else if( sc_tkn==Str )
+      //{ cg_o( "  # primary - str "); cg_n(str_repr(sc_text)); }
+      ;
+    else if( sc_tkn==Id )
+      //{ cg_o( "  # primary - id "); cg_n(sc_text); }
+      ;
     sc_next(); return t_(T);
   }
   if( sc_tkn!='(' ) return t_(F);
   sc_next(); if( !pa_expr(0) ) return t_(F);
   if( sc_tkn!=')' ) return t_(F);
   sc_next();
-  se_type = T_i; // elaborate!...
+  se_type = T_i; // TODO elaborate! calculate type
   return t_(T);
 }
 
@@ -1215,7 +1232,7 @@ int main( int ac, char** av )
     p1( "-L  show line numbers\n" );
     p1( "-P  show parser trace\n" );
     p1( "-I  show id table trace\n" );
-    p1( "-D  dump id table data\n" );
+    p1( "-D  dump id table data and string literal table\n" );
     p1( "-S  dump symbol table\n" );
     return 0;
   }
@@ -1236,6 +1253,8 @@ int main( int ac, char** av )
   // initialization
   op_set_prec();
   st_create( ST_DIM );
+  id_table_create( ID_TABLE_DIM );
+  sl_table_create( SL_TABLE_DIM );
   char OUTFN[] = "a.s";
   cg_file = open( OUTFN, O_CREAT|O_TRUNC|O_WRONLY, 0666 );
   if( cg_file<0 ) { p3( "Can't create file '", OUTFN, "'\n" ); exit(1); }
@@ -1243,7 +1262,7 @@ int main( int ac, char** av )
   if( !pa_program( filename ) ) err1( "wrong syntax" );
   cg_end();
   if( cg_file>0 ) close( cg_file );
-  if( IT_DUMP ) id_table_dump();
+  if( IT_DUMP ) { id_table_dump(); sl_table_dump(); }
   if( ST_DUMP )
   {
     int n;

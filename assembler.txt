@@ -26,3 +26,25 @@ https://en.m.wikibooks.org/wiki/X86_Disassembly
     ret           ;
 
   add esp,12
+
+
+char c            movsx eax, BYTE PTR [esp+15]
+
+c = ...           mov BYTE PTR [esp+15], al
+
+-a  ~a            neg eax    not eax
+
+!a                cmp DWORD PTR [esp+4], 0
+                  sete al
+                  movzx eax, al
+
+a + b             add eax, edx     sub    and   or
+
+a * b             imul eax, DWORD PTR [esp+4]  ; eax
+
+a / b             cdq
+                  idiv DWORD PTR [esp+4]       ; eax
+
+a % b             cdq
+                  idiv DWORD PTR [esp+4]       ; edx
+
