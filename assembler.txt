@@ -28,6 +28,16 @@ https://en.m.wikibooks.org/wiki/X86_Disassembly
   add esp,12
 
 
+Sxx:  string literal
+Exx:  else part of if-else
+Ixx:  end of if-else
+Lxx:  loop start (condition) \ Stack inside
+Kxx:  loop end               / function
+Rxx:  return from function
+Axx:  for &&
+Oxx:  for ||
+
+
 char c            movsx eax, BYTE PTR [esp+15]
 
 c = ...           mov BYTE PTR [esp+15], al
