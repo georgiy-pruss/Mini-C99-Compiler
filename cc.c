@@ -7,6 +7,7 @@
 // TODO labels for && and ||
 // TODO jumps for statements
 // TODO expressions; lvalue for = ++ --; initializers, strings and arrays as values
+// TODO exprs in vardef_of_expr to allow for( i=1,j=2; ... ) and ++i, f(i), a=b;
 
 // Parameters ------------------------------------------------------------------
 
@@ -25,6 +26,7 @@ int PA_TRACE=0; // -P - parser trace
 int IT_DEBUG=0; // -I - id table trace
 int IT_DUMP=0;  // -D - id table dump
 int ST_DUMP=0;  // -S - symbol table dump
+int ET_TRACE=0; // -E - trace expressions
 
 // stdlib ----------------------------------------------------------------------
 
@@ -509,7 +511,7 @@ int st_dump( int start, int kind ) // kind == -1 -- all, if K_var, K_array too
   int cnt=0;
   for( int i=start; i<st_count; ++i )
   {
-    int k = st_kind[i]; int kk = k; if( kk==K_array ) kk==K_var;
+    int k = st_kind[i]; int kk = k; if( kk==K_array ) kk=K_var;
     if( kind==-1 || kind==kk )
     {
       ++cnt;
@@ -663,49 +665,84 @@ void cg_fn_end( int ret0 )
   cg_n( "  .cfi_endproc\n" );
 }
 
-// Expression AST --------------------------------------------------------------
+void cg_spec_and_nl( char* str, int next )
+{
+  cg_o( str ); if( next>='0' && next<='9' ) cg_o( "\"\n  .ascii \"" );
+}
 
-enum { A_num  = Num, A_char = Chr,  // + int; enum also gives A_num
-  A_str  = Str,  // + sl-id
-  A_var,   // + id (id checked and it's var or array or arg)
-  A_fn,    // + id (id checked and it's fn)
-  A_call,  // + fn-expr 0 | expr ptr-to-list
-  A_index, // + array-expr expr
-  A_cast,  // + type expr (type is from st_type enum, i.e. 1..3 char, 4..6 int)
-  A_star,  // + expr  (*E)
-  A_neg }; // + expr  (-E)
+void cg_sl_table()
+{
+  cg_n( "  .section .rdata,\"dr\"" );
+  for( int i=0; i<sl_count; ++i )
+  {
+    // each string w/o align
+    cg_o( "S" ); cg_o( i2s(i) ); cg_n( ":" );
+    char c[2],cc[3]; cc[2]=c[1]='\0'; cc[0]='\\';
+    cg_o( "  .ascii \"" );
+    for( char* s = sl_table[i]; *s; ++s )
+    {
+      if( *s=='\n' ) cg_spec_and_nl( "\\12", s[1] );
+      else if( *s=='\r' ) cg_spec_and_nl( "\\15", s[1] );
+      else if( *s=='\b' ) cg_spec_and_nl( "\\10", s[1] );
+      else if( *s=='\\' || *s=='"' ) { cc[1] = *s; cg_o( cc ); }
+      else { c[0] = *s; cg_o( c ); }
+    }
+    cg_n( "\\0\"" );
+  }
+}
+
+//char test[] = "a123\\a\"a\'a  \r11\n22\b33\0aa";  // \0 inside ends the string!
+
+// Expression tree -------------------------------------------------------------
+
+enum { ET_num  = Num, ET_char = Chr,  // + int; enum also gives ET_num
+  ET_str  = Str,  // + sl-id
+  ET_var,   // + id (id checked and it's var or array or arg)
+  ET_fn,    // + id (id checked and it's fn)
+  ET_call,  // + fn-expr 0 | expr ptr-to-list
+  ET_index, // + array-expr expr
+  ET_cast,  // + type expr (type is from st_type enum, i.e. 1..3 char, 4..6 int)
+  ET_star,  // + expr  (*E)
+  ET_neg }; // + expr  (-E)
 // other nodes are marked with these chars (from tokens enum):
 // 'i' 'd'    // + expr  -- incr, decr
 // '~' '!'    // + expr  -- not-bin, not-log
 // '*' '/' '%' '+' '-' '<' '>' 'l' 'g' 'e' 'n' '&' '^' '|' 'a' 'o' '=' // + expr1 expr2
 
-int* A_1( int tag, int value )
+int* ET_1( int tag, int value )
 {
   int* r = (int*)malloc( 2*INTSZ ); r[0] = tag; r[1] = value; return r;
 }
 
-int* A_2( int tag, int value1, int value2 )
+int* ET_2( int tag, int value1, int value2 )
 {
   int* r = (int*)malloc( 3*INTSZ ); r[0] = tag; r[1] = value1; r[2] = value2; return r;
 }
 
-char* A_TAG[] = {"","","Num","Chr","Str","Var","Fn","Call","Idx","Cast","Deref","Neg"};
+char* ET_TAG[] = {"","","Num","Chr","Str","Var","Fn","Call","Idx","Cast","Deref","Neg"};
 
-void a_print( int* e )
+void et_print( int* e )
 {
-  char s[2]; s[0] = (char)e[0]; s[1]='\0';
-  if( e[0]<' ' ) p3("(",A_TAG[e[0]],":"); else p3("(",s,":");
-  if( e[0]==A_num || e[0]==A_char ) p1(i2s(e[1]));
-  else if( e[0]==A_str ) p1(str_repr(sl_table[e[1]]));
-  else if( e[0]==A_fn ) p1(str_repr(id_table[e[1]]));
-  else if( e[0]==A_var ) p1(str_repr(id_table[e[1]]));
-  else if( e[0]==A_call ) p1( "...call..." );
-  else if( e[0]==A_index ) { a_print( (int*)e[1] ); p1( ":" ); a_print( (int*)e[2] ); }
-  else if( e[0]==A_cast ) { p1( st_type_str[e[1]] ); p1( ":" ); a_print( (int*)e[2] ); }
-  else if( e[0]==A_star ) a_print( (int*)e[1] );
-  else if( e[0]==A_neg ) a_print( (int*)e[1] );
-  else if( e[0]=='i'||e[0]=='d'||e[0]=='~'||e[0]=='!' ) a_print( (int*)e[1] );
-  else { a_print( (int*)e[1] ); p1( ":" ); a_print( (int*)e[2] ); }
+  if( e[0]<' ' ) p3("(",ET_TAG[e[0]]," ");
+  else if( e[0]=='i' ) p1( "(++ " ); else if( e[0]=='d' ) p1( "(-- " );
+  else if( e[0]=='a' ) p1( "(&& " ); else if( e[0]=='o' ) p1( "(|| " );
+  else if( e[0]=='e' ) p1( "(== " ); else if( e[0]=='n' ) p1( "(!= " );
+  else if( e[0]=='l' ) p1( "(<= " ); else if( e[0]=='g' ) p1( "(>= " );
+  else { char s[2]; s[0]=(char)e[0]; s[1]='\0'; p3("(",s," "); }
+  if( e[0]==ET_num || e[0]==ET_char ) p1(i2s(e[1]));
+  else if( e[0]==ET_str ) p1(str_repr(sl_table[e[1]]));
+  else if( e[0]==ET_fn ) p1(id_table[st_id[e[1]]]);
+  else if( e[0]==ET_var ) p1(id_table[st_id[e[1]]]);
+  else if( e[0]==ET_call ) { et_print( (int*)e[1] ); p1( " [" );
+    for( int n=0, x=e[2]; x; ++n, x=((int*)x)[1] )
+      { if(n>0)p1(" "); et_print( (int*)((int*)x)[0] ); }
+    p1("]"); }
+  else if( e[0]==ET_index ) { et_print( (int*)e[1] ); p1( " " ); et_print( (int*)e[2] ); }
+  else if( e[0]==ET_cast ) { p1( st_type_str[e[1]] ); p1( " " ); et_print( (int*)e[2] ); }
+  else if( e[0]==ET_star ) et_print( (int*)e[1] );
+  else if( e[0]==ET_neg ) et_print( (int*)e[1] );
+  else if( e[0]=='i'||e[0]=='d'||e[0]=='~'||e[0]=='!' ) et_print( (int*)e[1] );
+  else { et_print( (int*)e[1] ); p1( " " ); et_print( (int*)e[2] ); }
   p1(")");
 }
 
@@ -729,14 +766,16 @@ int pa_primary()
   int* r;
   if( sc_tkn==Num || sc_tkn==Chr || sc_tkn==Str )
   {
-    r = A_1( sc_tkn, sc_num );
+    r = ET_1( sc_tkn, sc_num );
     sc_next(); return t_((int)r);
   }
   if( sc_tkn==Id )
   {
-    if( st_kind[sc_num]==K_enum ) r = A_1( A_num, st_value[sc_num] );
-    else if( st_kind[sc_num]==K_fn ) r = A_1( A_fn, sc_num );
-    else r = A_1( A_var, sc_num ); // var array arg
+    int varid = st_find(sc_num);
+    if( varid < 0 ) err2( "Name is not defined: ", id_table[sc_num] );
+    if( st_kind[varid]==K_enum ) r = ET_1( ET_num, st_value[varid] );
+    else if( st_kind[varid]==K_fn ) r = ET_1( ET_fn, varid );
+    else r = ET_1( ET_var, varid ); // var array arg
     sc_next(); return t_((int)r);
   }
   if( sc_tkn!='(' ) return t_(F);
@@ -774,13 +813,13 @@ int pa_exprs()
 {
   t1("pa_exprs");
   int r = pa_expr(0); if( !r ) return t_(F);
-  int* first = A_1( r, 0 ); // use it just as a pair - an item of a list of exprs
+  int* first = ET_1( r, 0 ); // use it just as a pair - an item of a list of exprs
   int* last = first;
   while( sc_tkn==',' )
   {
     sc_next();
     if( !(r = pa_expr(0)) ) return t_(F);
-    last[1] = (int)A_1( r, 0 );
+    last[1] = (int)ET_1( r, 0 );
     last = (int*)last[1];
   }
   return t_( (int)first );
@@ -796,19 +835,19 @@ int pa_call_or_index(int e)
     {
       sc_next();
       if( !(r = pa_expr(0)) || sc_tkn!=']' ) return t_(F);
-      e = (int)A_2( A_index, e, r );
+      e = (int)ET_2( ET_index, e, r );
     }
     else /* '(' */
     {
       sc_next();
       if( sc_tkn==')' )
       {
-        e = (int)A_2( A_call, e, 0 ); // call with no args
+        e = (int)ET_2( ET_call, e, 0 ); // call with no args
       }
       else
       {
         if( !(r = pa_exprs()) || sc_tkn!=')' ) return t_(F);
-        e = (int)A_2( A_call, e, r ); // r is list of args
+        e = (int)ET_2( ET_call, e, r ); // r is list of args
       }
     }
     sc_next();
@@ -831,14 +870,14 @@ int pa_unexpr()
   {
     int t = sc_tkn;
     sc_next();
-    return t_( (int)A_1( t, pa_unexpr() ) );
+    return t_( (int)ET_1( t, pa_unexpr() ) );
   }
   if( sc_tkn=='-' || sc_tkn=='!' || sc_tkn=='*' || sc_tkn=='~')
   {
     int t = sc_tkn;
-    if( t=='-' ) t = A_neg; else if( t=='*' ) t = A_star;
+    if( t=='-' ) t = ET_neg; else if( t=='*' ) t = ET_star;
     sc_next();
-    return t_( (int)A_1( t, pa_term() ) );
+    return t_( (int)ET_1( t, pa_term() ) );
   }
   return t_( pa_postfix() );
 }
@@ -874,7 +913,7 @@ int pa_term()
       pa_stars(); if( sc_tkn!=')' ) return t_(F);
       int t = se_type + se_stars;
       sc_next();
-      return t_( (int)A_2( A_cast, t, pa_term() ) );
+      return t_( (int)ET_2( ET_cast, t, pa_term() ) );
     }
     int r = pa_expr(0);
     if( !r || sc_tkn!=')' ) return t_(F); // (E)
@@ -910,14 +949,12 @@ int pa_expr( int min_prec ) // precedence climbing
     sc_next();
     int q = pa_expr( p );
     if( !q ) return t_(F);
-    r = (int)A_2( t, r, q );
+    r = (int)ET_2( t, r, q );
   }
-  a_print( (int*)r );
-  p0n();
   return t_( r );
 }
 
-int pa_arrayinit()
+int pa_arrayinit()            // TODO can be any expression?
 {
   t1("pa_arrayinit");
   if( sc_tkn==Str ) // string as array of char
@@ -985,6 +1022,9 @@ int pa_vartail()
     se_add_var( id, t, -1, "..." );
     sc_next();
     int e = pa_expr(0);
+
+    if( ET_TRACE && e ) { p1("E:vt "); et_print( (int*)e ); p0n(); }
+
     if( 0 )
     {
       // must be calculable for globals
@@ -1047,6 +1087,9 @@ int pa_vardef_or_expr()
   {
     int e = pa_expr(0);
     if( !e || sc_tkn!=';' ) return t_(F); // expr ';'
+
+    if( ET_TRACE && e ) { p1("E:ex "); et_print( (int*)e ); p0n(); }
+
     sc_next();
     // cg_... for e --- or at least print it out first
     return t_(T);
@@ -1118,6 +1161,9 @@ int pa_stmt()
     se_last_stmt_ret = T;
     sc_next(); if( sc_tkn==';' ) { sc_next(); return t_(T); }
     int e = pa_expr(0);
+
+    if( ET_TRACE && e ) { p1("E:rt "); et_print( (int*)e ); p0n(); }
+
     if( !e || sc_tkn!=';' ) return t_(F);
     sc_next(); return t_(T);
   }
@@ -1126,6 +1172,9 @@ int pa_stmt()
     int c; // condition
     sc_next(); if( sc_tkn!='(' ) return t_(F);
     sc_next(); if( !(c = pa_expr(0)) || sc_tkn!=')' ) return t_(F);
+
+    if( ET_TRACE && c ) { p1( "E:wh " ); et_print( (int*)c ); p0n(); }
+
     sc_next(); return t_(pa_stmt());
   }
   if( sc_tkn==Kw+If )
@@ -1133,6 +1182,9 @@ int pa_stmt()
     int c; // condition
     sc_next(); if( sc_tkn!='(' ) return t_(F);
     sc_next(); if( !(c = pa_expr(0)) || sc_tkn!=')' ) return t_(F);
+
+    if( ET_TRACE && c ) { p1( "E:if " ); et_print( (int*)c ); p0n(); }
+
     sc_next(); if( !pa_stmt() ) return t_(F);
     if( sc_tkn==Kw+Else ) { sc_next(); if( !pa_stmt() ) return t_(F); }
     return t_(T);
@@ -1151,8 +1203,18 @@ int pa_stmt()
     }
     else sc_next();
     if( sc_tkn!=';' ) if( !(e2 = pa_expr(0)) ) return t_(F); // also ....
+
+    if( ET_TRACE && e2 ) { p1( "E:fc " ); et_print( (int*)e2 ); p0n(); }
+
     sc_next();
     if( sc_tkn!=')' ) if( !(e3 = pa_exprs()) ) return t_(F); // opt. post-expressions
+
+    if( ET_TRACE && e3 )
+      { p1( "E:fp [" );
+      int** ee = (int**)e3; int n=0;
+      while( ee ) { if(n>0)p1(" "); et_print( ee[0] ); ++n; ee = (int**)ee[1]; }
+      p1("]\n"); }
+
     if( sc_tkn!=')' ) return t_(F); // also...
     sc_next();
     int rc = pa_stmt();
@@ -1341,6 +1403,7 @@ int main( int ac, char** av )
     p1( "-I  show id table trace\n" );
     p1( "-D  dump id table data and string literal table\n" );
     p1( "-S  dump symbol table\n" );
+    p1( "-E  trace expressions\n" );
     return 0;
   }
   for( int i=1; i<ac; ++i )
@@ -1354,6 +1417,7 @@ int main( int ac, char** av )
       if( av[i][1] == 'I' ) IT_DEBUG=1;
       if( av[i][1] == 'D' ) IT_DUMP=1;
       if( av[i][1] == 'S' ) ST_DUMP=1;
+      if( av[i][1] == 'E' ) ET_TRACE=1;
     }
 
   if( !filename ) { p1( "No input file\n" ); exit(1); }
@@ -1367,6 +1431,7 @@ int main( int ac, char** av )
   if( cg_file<0 ) { p3( "Can't create file '", OUTFN, "'\n" ); exit(1); }
   cg_begin( filename );
   if( !pa_program( filename ) ) err1( "wrong syntax" );
+  cg_sl_table();
   cg_end();
   if( cg_file>0 ) close( cg_file );
   if( IT_DUMP ) { id_table_dump(); sl_table_dump(); }
@@ -1376,8 +1441,8 @@ int main( int ac, char** av )
     p1("globals\nenums:\n"); n = st_dump(0,K_enum); p1n(i2s(n));
     p1("vars:\n"); n = st_dump(0,K_var); p1n(i2s(n)); // also dumps K_array
     p1("funcs:\n"); n = st_dump(0,K_fn); p1n(i2s(n));
-    p2n( "data size: ", i2s(se_data_offset) );
-    p2n( "bss size: ", i2s(se_bss_offset) );
+    p2n("data size: ", i2s(se_data_offset));
+    p2n("bss size: ", i2s(se_bss_offset));
   }
   if( SC_DEBUG ) p2( i2s( sc_n_tokens ), " tokens\n" );
   return 0;

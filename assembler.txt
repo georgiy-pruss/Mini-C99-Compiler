@@ -28,6 +28,26 @@ https://en.m.wikibooks.org/wiki/X86_Disassembly
   add esp,12
 
 
+strings:
+
+# char a[] = "a123\\a\"a\'a  \r11\n22\b33\0aa";
+
+  .globl  _a
+  .data
+  .align 4
+_a:
+  .ascii "a123\\a\"a'a  \15"
+  .ascii "11\12"
+  .ascii "22\10"
+  .ascii "33\0aa\0"   # but we won't do \0 inside
+
+  .section .rdata,"dr"
+LC0:
+  .ascii "%d \0"
+
+
+labels:
+
 Sxx:  string literal
 Exx:  else part of if-else
 Ixx:  end of if-else
