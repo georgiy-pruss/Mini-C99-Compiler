@@ -1,0 +1,27 @@
+primary   @A_num int   @A_char int   @A_str s-id   // enum is also A_num
+          @A_fn f-id                               // if id is function
+          @A_var v-id                              // var, array, arg
+
+call      @A_call fn 0
+          @A_call fn expr-list  -->  expr;0
+          @A_call fn expr-list  -->  expr;next --> expr;0
+          @A_call fn expr-list  -->  expr;next --> expr;next --> expr;0
+
+index     @A_index e1 e2
+
+unexpr    'i' expr   'd' expr       // ++x --x
+          'N' expr                  // -x
+          'D' expr                  // *x
+          '~' expr   '!' expr
+
+term      @A_cast type+stars expr
+
+binop     '*' '/' '%' '+' '-' '<' '>' 'l' 'g' 'e' 'n' '&' '^' '|' 'a' 'o' '='
+
+expr      binop e1 e2
+
+
+vardef_or_expr can return list of exprs or expr... hm make difference!
+
+
+# vim: set syntax=ANTLR :

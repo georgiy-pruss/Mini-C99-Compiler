@@ -244,7 +244,7 @@ void sl_table_create( int n ) { sl_table = (char**)malloc( n*INTSZ ); sl_count =
 
 int sl_add( char* s )
 {
-  if( sl_count==SL_TABLE_LEN ) err1( "Too many literal strings" );
+  if( sl_count==SL_TABLE_DIM ) err1( "Too many literal strings" );
   sl_table[ sl_count ] = strdup( s );
   ++sl_count;
   return sl_count - 1;
@@ -663,6 +663,33 @@ void cg_fn_end( int ret0 )
   cg_n( "  .cfi_endproc\n" );
 }
 
+// Expression AST --------------------------------------------------------------
+
+enum { A_num  = Num, A_char = Chr,  // + int; enum also gives A_num
+  A_str  = Str,  // + sl-id
+  A_enum,  // + int (value) -- or mayb just int
+  A_var,   // + id (id checked and it's var or array or arg)
+  A_fn,    // + id (id checked and it's fn)
+  A_call,  // + fn-expr 0 | expr ptr-to-list
+  A_index, // + array-expr expr
+  A_cast,  // + type expr (type is from st_type enum, i.e. 1..3 char, 4..6 int)
+  A_neg,   // + expr  (-E)
+  A_star}; // + expr  (*E)
+// other nodes are marked with these chars (from tokens enum):
+// 'i' 'd'    // + expr  -- incr, decr
+// '~' '!'    // + expr  -- not-bin, not-log
+// '*' '/' '%' '+' '-' '<' '>' 'l' 'g' 'e' 'n' '&' '^' '|' 'a' 'o' '=' // + expr1 expr2
+
+int* A_1( int tag, int value )
+{
+  int* r = (int*)malloc( 2*INTSZ ); r[0] = tag; r[1] = value; return r;
+}
+
+int* A_2( int tag, int value1, int value2 )
+{
+  int* r = (int*)malloc( 3*INTSZ ); r[0] = tag; r[1] = value1; r[2] = value2; return r;
+}
+
 // Parser ----------------------------------------------------------------------
 
 int  tL = 0; // indent level
@@ -680,25 +707,24 @@ int pa_expr(int min_prec); int pa_term();
 int pa_primary()
 {
   t1("pa_primary");
-  if( sc_tkn==Num || sc_tkn==Chr || sc_tkn==Str || sc_tkn==Id )
+  int* r;
+  if( sc_tkn==Num || sc_tkn==Chr || sc_tkn==Str )
   {
-    if( sc_tkn==Num || sc_tkn==Chr )
-      //{ cg_o( "  # primary - num "); cg_n(i2s(sc_num)); }
-      ;
-    else if( sc_tkn==Str )
-      //{ cg_o( "  # primary - str "); cg_n(str_repr(sc_text)); }
-      ;
-    else if( sc_tkn==Id )
-      //{ cg_o( "  # primary - id "); cg_n(sc_text); }
-      ;
-    sc_next(); return t_(T);
+    r = A_1( sc_tkn, sc_num );
+    sc_next(); return t_((int)r);
+  }
+  if( sc_tkn==Id )
+  {
+    if( st_kind[sc_num]==K_enum ) r = A_1( A_num, st_value[sc_num] );
+    else if( st_kind[sc_num]==K_fn ) r = A_1( A_fn, sc_num );
+    else r = A_1( A_var, sc_num ); // var array arg
+    sc_next(); return t_((int)r);
   }
   if( sc_tkn!='(' ) return t_(F);
-  sc_next(); if( !pa_expr(0) ) return t_(F);
+  sc_next(); if( !(r = (int*)pa_expr(0)) ) return t_(F);
   if( sc_tkn!=')' ) return t_(F);
   sc_next();
-  se_type = T_i; // TODO elaborate! calculate type
-  return t_(T);
+  return t_((int)r);
 }
 
 int pa_integer() // has value at compile time
@@ -728,37 +754,74 @@ int pa_integer() // has value at compile time
 int pa_exprs()
 {
   t1("pa_exprs");
-  if( !pa_expr(0) ) return t_(F);
-  while( sc_tkn==',' ) { sc_next(); if( !pa_expr(0) ) return t_(F); }
-  return t_(T);
+  int r = pa_expr(0); if( !r ) return t_(F);
+  int* first = A_1( r, 0 ); // use it just as a pair - an item of a list of exprs
+  int* last = first;
+  while( sc_tkn==',' )
+  {
+    sc_next();
+    if( !(r = pa_expr(0)) ) return t_(F);
+    last[1] = (int)A_1( r, 0 );
+    last = (int*)last[1];
+  }
+  return t_( (int)first );
 }
 
-int pa_call_or_index()
+int pa_call_or_index(int e)
 {
   t1("pa_call_or_index");
+  int r;
   while( sc_tkn=='(' || sc_tkn=='[' )
   {
-    if( sc_tkn=='[' ) { sc_next(); if( !pa_expr(0) || sc_tkn!=']' ) return t_(F); }
+    if( sc_tkn=='[' )
+    {
+      sc_next();
+      if( !(r = pa_expr(0)) || sc_tkn!=']' ) return t_(F);
+      e = (int)A_2( A_index, e, r );
+    }
     else /* '(' */
-      { sc_next(); if( sc_tkn!=')' ) { if( !pa_exprs() || sc_tkn!=')' ) return t_(F); } }
+    {
+      sc_next();
+      if( sc_tkn==')' )
+      {
+        e = (int)A_2( A_call, e, 0 ); // call with no args
+      }
+      else
+      {
+        if( !(r = pa_exprs()) || sc_tkn!=')' ) return t_(F);
+        e = (int)A_2( A_call, e, r ); // r is list of args
+      }
+    }
     sc_next();
   }
-  return t_(T);
+  return t_(e);
 }
 
 int pa_postfix()
 {
   t1("pa_postfix");
-  if( !pa_primary() ) return t_(F);
-  return t_(pa_call_or_index());
+  int r;
+  if( !(r = pa_primary()) ) return t_(F);
+  return t_( pa_call_or_index(r) );
 }
 
 int pa_unexpr()
 {
   t1("pa_unexpr");
-  if( sc_tkn=='i' || sc_tkn=='d' ) { sc_next(); return t_(pa_unexpr()); }
-  if( sc_tkn=='-' || sc_tkn=='!' || sc_tkn=='*' || sc_tkn=='~') { sc_next(); return t_(pa_term()); }
-  return t_(pa_postfix());
+  if( sc_tkn=='i' || sc_tkn=='d' )
+  {
+    int t = sc_tkn;
+    sc_next();
+    return t_( (int)A_1( t, pa_unexpr() ) );
+  }
+  if( sc_tkn=='-' || sc_tkn=='!' || sc_tkn=='*' || sc_tkn=='~')
+  {
+    int t = sc_tkn;
+    if( t=='-' ) t = A_neg; else if( t=='*' ) t = A_star;
+    sc_next();
+    return t_( (int)A_1( t, pa_term() ) );
+  }
+  return t_( pa_postfix() );
 }
 
 int pa_type() // sets se_type
@@ -790,13 +853,16 @@ int pa_term()
     if( pa_type() ) // cast (T)E
     {
       pa_stars(); if( sc_tkn!=')' ) return t_(F);
-      sc_next(); return t_(pa_term());
+      int t = se_type + se_stars;
+      sc_next();
+      return t_( (int)A_2( A_cast, t, pa_term() ) );
     }
-    if( !pa_expr(0) || sc_tkn!=')' ) return t_(F); // (E)
+    int r = pa_expr(0);
+    if( !r || sc_tkn!=')' ) return t_(F); // (E)
     sc_next();
-    return t_(pa_call_or_index());
+    return t_( pa_call_or_index( r ) );
   }
-  return t_(pa_unexpr());
+  return t_( pa_unexpr() );
 }
 
 int pa_binop_na() // na = no advance, sc_next() must be called in the caller
@@ -815,15 +881,19 @@ int pa_binop_na() // na = no advance, sc_next() must be called in the caller
 int pa_expr( int min_prec ) // precedence climbing
 {
   t2("pa_expr ",i2s(min_prec));
-  if( !pa_term() ) return t_(F);
+  int r = pa_term();
+  if( !r ) return t_(F);
   while( pa_binop_na() && min_prec < op_prec[sc_tkn] )
   {
     int p = op_prec[sc_tkn];
     if( sc_tkn=='=' ) --p; // correct precedence for right-to-left operator
+    int t = sc_tkn;
     sc_next();
-    if( !pa_expr( p ) ) return t_(F);
+    int q = pa_expr( p );
+    if( !q ) return t_(F);
+    r = (int)A_2( t, r, q );
   }
-  return t_(T);
+  return t_( r );
 }
 
 int pa_arrayinit()
@@ -893,7 +963,13 @@ int pa_vartail()
   {
     se_add_var( id, t, -1, "..." );
     sc_next();
-    return t_(pa_expr(0)); // must be calculable for globals
+    int e = pa_expr(0);
+    if( 0 )
+    {
+      // must be calculable for globals
+      // so, calculate it
+    }
+    return t_(e);
   }
   if( sc_tkn!='[' )
   {
@@ -942,11 +1018,16 @@ int pa_morevars()
 
 int pa_vardef_or_expr()
 {
+  // TODO if it's expr, return expr AST
+  // TODO if it's vardef, perform var definitions, return exprs (list!)
+  // TODO e.g. int* a,b=c,*d=o+2; === int* a,b,*d; { b=c; d=o+2; }
   t1("pa_vardef_or_expr");
   if( sc_tkn!=Kw+Int && sc_tkn!=Kw+Char )
   {
-    if( !pa_expr(0) || sc_tkn!=';' ) return t_(F); // expr ';'
+    int e = pa_expr(0);
+    if( !e || sc_tkn!=';' ) return t_(F); // expr ';'
     sc_next();
+    // cg_... for e --- or at least print it out first
     return t_(T);
   }
   if( !pa_type() ) return t_(F);
@@ -1015,25 +1096,29 @@ int pa_stmt()
   {
     se_last_stmt_ret = T;
     sc_next(); if( sc_tkn==';' ) { sc_next(); return t_(T); }
-    if( !pa_expr(0) || sc_tkn!=';' ) return t_(F);
+    int e = pa_expr(0);
+    if( !e || sc_tkn!=';' ) return t_(F);
     sc_next(); return t_(T);
   }
   if( sc_tkn==Kw+While )
   {
+    int c; // condition
     sc_next(); if( sc_tkn!='(' ) return t_(F);
-    sc_next(); if( !pa_expr(0) || sc_tkn!=')' ) return t_(F);
+    sc_next(); if( !(c = pa_expr(0)) || sc_tkn!=')' ) return t_(F);
     sc_next(); return t_(pa_stmt());
   }
   if( sc_tkn==Kw+If )
   {
+    int c; // condition
     sc_next(); if( sc_tkn!='(' ) return t_(F);
-    sc_next(); if( !pa_expr(0) || sc_tkn!=')' ) return t_(F);
+    sc_next(); if( !(c = pa_expr(0)) || sc_tkn!=')' ) return t_(F);
     sc_next(); if( !pa_stmt() ) return t_(F);
     if( sc_tkn==Kw+Else ) { sc_next(); if( !pa_stmt() ) return t_(F); }
     return t_(T);
   }
   if( sc_tkn==Kw+For )
   {
+    int e1,e2,e3; // e1 can be definition! uffffffffff  e3 is exprs! list!!!
     sc_next(); if( sc_tkn != '(' ) return t_(F);
     sc_next();
     ++se_level; // 'for' makes a new scope
@@ -1041,12 +1126,12 @@ int pa_stmt()
     int block_local_offset = se_local_offset; // on stack
     if( sc_tkn!=';' )
     {
-      if( !pa_vardef_or_expr() ) return t_(F); // also clean?
+      if( !(e1 = pa_vardef_or_expr()) ) return t_(F); // also clean?
     }
     else sc_next();
-    if( sc_tkn!=';' ) if( !pa_expr(0) ) return t_(F); // also ....
+    if( sc_tkn!=';' ) if( !(e2 = pa_expr(0)) ) return t_(F); // also ....
     sc_next();
-    if( sc_tkn!=')' ) if( !pa_exprs() ) return t_(F); // opt. post-expressions
+    if( sc_tkn!=')' ) if( !(e3 = pa_exprs()) ) return t_(F); // opt. post-expressions
     if( sc_tkn!=')' ) return t_(F); // also...
     sc_next();
     int rc = pa_stmt();
@@ -1062,7 +1147,8 @@ int pa_stmt()
   }
   //was: if( !pa_vardef_or_expr(0) || sc_tkn != ';' ) return t_(F); // expr ';'
   //was: sc_next(); ret T
-  return t_( pa_vardef_or_expr() ); // vardef | expr ';'
+  int e = pa_vardef_or_expr(); // can be definition!!! ufffff
+  return t_( e ); // vardef | expr ';'
 }
 
 int pa_func()
