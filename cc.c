@@ -667,14 +667,13 @@ void cg_fn_end( int ret0 )
 
 enum { A_num  = Num, A_char = Chr,  // + int; enum also gives A_num
   A_str  = Str,  // + sl-id
-  A_enum,  // + int (value) -- or mayb just int
   A_var,   // + id (id checked and it's var or array or arg)
   A_fn,    // + id (id checked and it's fn)
   A_call,  // + fn-expr 0 | expr ptr-to-list
   A_index, // + array-expr expr
   A_cast,  // + type expr (type is from st_type enum, i.e. 1..3 char, 4..6 int)
-  A_neg,   // + expr  (-E)
-  A_star}; // + expr  (*E)
+  A_star,  // + expr  (*E)
+  A_neg }; // + expr  (-E)
 // other nodes are marked with these chars (from tokens enum):
 // 'i' 'd'    // + expr  -- incr, decr
 // '~' '!'    // + expr  -- not-bin, not-log
@@ -688,6 +687,26 @@ int* A_1( int tag, int value )
 int* A_2( int tag, int value1, int value2 )
 {
   int* r = (int*)malloc( 3*INTSZ ); r[0] = tag; r[1] = value1; r[2] = value2; return r;
+}
+
+char* A_TAG[] = {"","","Num","Chr","Str","Var","Fn","Call","Idx","Cast","Deref","Neg"};
+
+void a_print( int* e )
+{
+  char s[2]; s[0] = (char)e[0]; s[1]='\0';
+  if( e[0]<' ' ) p3("(",A_TAG[e[0]],":"); else p3("(",s,":");
+  if( e[0]==A_num || e[0]==A_char ) p1(i2s(e[1]));
+  else if( e[0]==A_str ) p1(str_repr(sl_table[e[1]]));
+  else if( e[0]==A_fn ) p1(str_repr(id_table[e[1]]));
+  else if( e[0]==A_var ) p1(str_repr(id_table[e[1]]));
+  else if( e[0]==A_call ) p1( "...call..." );
+  else if( e[0]==A_index ) { a_print( (int*)e[1] ); p1( ":" ); a_print( (int*)e[2] ); }
+  else if( e[0]==A_cast ) { p1( st_type_str[e[1]] ); p1( ":" ); a_print( (int*)e[2] ); }
+  else if( e[0]==A_star ) a_print( (int*)e[1] );
+  else if( e[0]==A_neg ) a_print( (int*)e[1] );
+  else if( e[0]=='i'||e[0]=='d'||e[0]=='~'||e[0]=='!' ) a_print( (int*)e[1] );
+  else { a_print( (int*)e[1] ); p1( ":" ); a_print( (int*)e[2] ); }
+  p1(")");
 }
 
 // Parser ----------------------------------------------------------------------
@@ -893,6 +912,8 @@ int pa_expr( int min_prec ) // precedence climbing
     if( !q ) return t_(F);
     r = (int)A_2( t, r, q );
   }
+  a_print( (int*)r );
+  p0n();
   return t_( r );
 }
 
