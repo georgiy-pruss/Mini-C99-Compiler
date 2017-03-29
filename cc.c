@@ -2,12 +2,11 @@
 // gcc -fno-builtin-malloc -fno-builtin-strlen -O2 cc.c -o cc.exe
 // -std=c99 is default in gcc
 
-// TODO comments in code gen for statements
-// TODO labels for return, loop beg/end, if/else/end, stack of labels (int)
 // TODO labels for && and ||
-// TODO jumps for statements
 // TODO expressions; lvalue for = ++ --; initializers, strings and arrays as values
 // TODO exprs in vardef_of_expr to allow for( i=1,j=2; ... ) and ++i, f(i), a=b;
+
+char* TITLE = "Georgiy Pruss CC 0.0.1";
 
 // Parameters ------------------------------------------------------------------
 
@@ -20,8 +19,7 @@ enum { INTSZ = 4,    // all this is for 32-bit architecture; int and int* is 4 b
   BF_WRT_SZ=4000,    // buffer for suspended output
   BSS_ORG=100000 };  // tag that data is in bss section (BSS_ORG+offset)
 
-int SC_DEBUG=0; // -T - tokens trace
-int RD_LINES=0; // -L - lines
+int SC_DEBUG=0; // -T - tokens trace, including lines
 int PA_TRACE=0; // -P - parser trace
 int IT_DEBUG=0; // -I - id table trace
 int IT_DUMP=0;  // -D - id table dump
@@ -264,6 +262,8 @@ int  sc_tkn;              // current token
 char sc_text[STR_MAX_SZ]; // for Id, Kw, Num, Str
 int  sc_num;              // for Num and Chr, also id_number for Id
 
+void cg_line(); // put line nr (rd_line) in assembler output
+
 void sc_do_backslash()
 {
   rd_next();
@@ -275,10 +275,10 @@ void sc_do_backslash()
 
 int sc_read_next()        // scan for next token
 {
-  if( rd_char < 0 ) { rd_next(); rd_line = 1; if(RD_LINES) p3( "[", i2s(rd_line), "]" ); }
+  if( rd_char < 0 ) { rd_next(); rd_line = 1; cg_line(); }
   while( rd_char==' ' || rd_char=='\n' || rd_char=='\r' )
   {
-    if( rd_char=='\n' ) { ++rd_line; if(RD_LINES) p3( "\n[", i2s(rd_line), "]" ); }
+    if( rd_char=='\n' ) { ++rd_line; cg_line(); }
     rd_next();
   }
   if( rd_char<0 ) return Eof;
@@ -361,7 +361,7 @@ int sc_read_next()        // scan for next token
     rd_next();
     while( rd_char!='\n' && rd_char>0 )
       rd_next();
-    if( rd_char=='\n' ) { ++rd_line; if(RD_LINES) p3( "[//]\n[", i2s(rd_line), "]" ); }
+    if( rd_char=='\n' ) { ++rd_line; cg_line(); }
     if(rd_char>0) rd_next();
     return sc_read_next();
   }
@@ -373,20 +373,20 @@ int sc_read_next()        // scan for next token
       rd_next();
       while( rd_char!='\n' && rd_char>0 )
         rd_next();
-      if( rd_char=='\n' ) { ++rd_line; if(RD_LINES) p3( "[//]\n[", i2s(rd_line), "]" ); }
+      if( rd_char=='\n' ) { ++rd_line; cg_line(); }
       if(rd_char>0) rd_next();
       return sc_read_next();
     }
     if( rd_char == '*' ) // /*...*/
     {
       rd_next();
-      if( rd_char=='\n' ) { ++rd_line; if(RD_LINES) p3( "[/*]\n[", i2s(rd_line), "]" ); }
+      if( rd_char=='\n' ) { ++rd_line; cg_line(); }
       while(1)
       {
         while( rd_char!='*' && rd_char>0 )
         {
           rd_next();
-          if( rd_char=='\n' ) { ++rd_line; if(RD_LINES) p3( "[**]\n[", i2s(rd_line), "]" ); }
+          if( rd_char=='\n' ) { ++rd_line; cg_line(); }
         }
         if(rd_char>0) rd_next();
         if( rd_char == '/' )
@@ -402,6 +402,7 @@ int sc_read_next()        // scan for next token
 }
 
 int sc_n_tokens = 0; // total count of tokens, JFYI
+int sc_prev_line;
 
 void sc_next() // read and put token into sc_tkn
 {
@@ -409,13 +410,14 @@ void sc_next() // read and put token into sc_tkn
   ++sc_n_tokens;
   if( SC_DEBUG )
   {
-    p3( " ", i2s(sc_tkn), " - " );
+    if( rd_line != sc_prev_line ) { p0n(); sc_prev_line = rd_line; }
+    p2( i2s(rd_line), "| " ); p2( i2s(sc_tkn), " - " );
     if (sc_tkn >= Kw)        p2( "kw ", KWDS[ sc_tkn - Kw ] );
     else if( sc_tkn == Id )  p4( "id ", id_table[sc_num], " #",i2s(sc_num) );
     else if( sc_tkn == Str ) p2( "str ", str_repr(sl_table[sc_num]) );
     else if( sc_tkn == Num ) p2( "num ", i2s(sc_num) );
     else if( sc_tkn == Chr ) p2( "chr ", i2s(sc_num) );
-    else if( sc_tkn == Eof ) p1( "eof" );
+    else if( sc_tkn == Eof ) p1( "eof\n" );
     else if( sc_tkn == Err ) p2( "err", sc_text );
     else if( sc_tkn < Kw ) { char o[2]; o[0]=sc_tkn; o[1]='\0'; p2( "op/sep ", o ); }
     else p2( "???", sc_text );
@@ -599,6 +601,8 @@ void bf_free( int* bf )
 int cg_file = 0;
 int* cg_buffer = 0;
 char* cg_section = ""; // current section
+int cg_data_at_4 = 0; // aligned
+int cg_bss_at_4 = 0;
 
 int cg_label;    // general label number, for fns, if/then, etc
 int cg_fn_label; // current function exit label
@@ -635,6 +639,8 @@ void cg_n( char* s )
   else { bf_append( cg_buffer, s, n ); bf_append( cg_buffer, "\n", 1 ); }
 }
 
+void cg_line() { cg_o( "  # " ); cg_n( i2s(rd_line) ); } // may be mov [...], nr
+
 void cg_suspend() // after this, write to buffer
 {
   assert( cg_buffer==0, "int error: already suspended!" );
@@ -651,12 +657,14 @@ void cg_resume( char* s ) // output string, then unload buffer to the file
 void cg_begin( char* fn )
 {
   cg_o( "  .file \"" ); cg_o( fn ); cg_n( "\"" );
-  cg_n( "  .intel_syntax noprefix\n" );
+  cg_n( "  .intel_syntax noprefix" );
+  cg_n( "  # compile with: gcc -masm=intel a.s -o a.exe\n" );
 }
 
 void cg_end()
 {
-  cg_n( "\n  .ident  \"GCC: (GNU) 5.4.0\"\n" );
+  // http://www.trilithium.com/johan/2004/12/gcc-ident-strings/
+  cg_o( "\n  .ident  \"" ); cg_o( TITLE ); cg_n( "\"\n" );
   // dump declarations of all undefined functions
   for( int i=0; i<st_count; ++i )
     if( st_kind[i]==K_fn && st_value[i]==0 )
@@ -715,6 +723,10 @@ void cg_sl_table()
   }
 }
 
+void cg_vars()
+{
+}
+
 //char test[] = "a123\\a\"a\'a  \r11\n22\b33\0aa";  // \0 inside ends the string!
 
 // Expression tree -------------------------------------------------------------
@@ -758,7 +770,7 @@ void et_print( int* e )
   else if( e[0]==ET_fn ) p1(id_table[st_id[e[1]]]);
   else if( e[0]==ET_var ) p1(id_table[st_id[e[1]]]);
   else if( e[0]==ET_call ) { et_print( (int*)e[1] ); p1( " [" );
-    for( int n=0, x=e[2]; x; ++n, x=((int*)x)[1] )
+    for( int n=0, x=e[2]; x; ++n, x=((int*)x)[1] ) // = et_print_exprs
       { if(n>0)p1(" "); et_print( (int*)((int*)x)[0] ); }
     p1("]"); }
   else if( e[0]==ET_index ) { et_print( (int*)e[1] ); p1( " " ); et_print( (int*)e[2] ); }
@@ -768,6 +780,11 @@ void et_print( int* e )
   else if( e[0]=='i'||e[0]=='d'||e[0]=='~'||e[0]=='!' ) et_print( (int*)e[1] );
   else { et_print( (int*)e[1] ); p1( " " ); et_print( (int*)e[2] ); }
   p1(")");
+}
+
+void et_print_exprs( int** x )
+{
+  for( int n=0; x; ++n, x = (int**)x[1] ) { if(n>0)p1(" "); et_print( x[0] ); } p1("]");
 }
 
 // Parser ----------------------------------------------------------------------
@@ -1011,7 +1028,8 @@ int se_add_var( int id, int t, int dim, char* init )
   int k = K_array;
   if( dim<0 ) { dim=1; k = K_var; }
   int itemsz=INTSZ; if( t==T_c ) itemsz=1;
-  int varsz = (dim*itemsz + INTSZ-1) / INTSZ * INTSZ; // align up to INTSZ bound
+  int idealsz = dim*itemsz;
+  int varsz = (idealsz + INTSZ-1) / INTSZ * INTSZ; // align up to INTSZ bound
   if( se_level>0 )
   {
     se_local_offset = se_local_offset - varsz; // negative!
@@ -1022,11 +1040,25 @@ int se_add_var( int id, int t, int dim, char* init )
   {
     n = st_add( id, t, K_var, se_data_offset, dim ); // global var in data section
     se_data_offset = se_data_offset + varsz;
+    cg_o( "  .globl  _" ); cg_n( id_table[id] );
+    if( strcmp( cg_section, ".data" ) ) { cg_section = ".data"; cg_n( "  .data" ); }
+    if( !cg_data_at_4 ) { cg_n( "  .align 4" ); cg_data_at_4=1; }
+    cg_o( "_" ); cg_o( id_table[id] ); cg_n( ":" );
+    cg_n( "  .long 1" ); // TODO value; cg_data_at_4 if chars; etc
   }
   else
   {
     n = st_add( id, t, K_var, se_bss_offset+BSS_ORG, dim ); // global bss
     se_bss_offset = se_bss_offset + varsz;
+    cg_section = ".bss";
+    // TODO alignment? formats?
+    cg_o( "  .comm _" ); cg_o( id_table[id] ); cg_o( ", " );
+    // or "  .bss" "  space 4" etc
+    cg_o( i2s(idealsz) );
+    // TODO ...
+    if( idealsz==1 ) cg_n( ", 0" );
+    else if( idealsz==4 ) cg_n( ", 2" );
+    else cg_n( ", 5" );
   }
   return n;
 }
@@ -1181,7 +1213,7 @@ int pa_stmt()
     int loop_label = cg_current_loop_label();
     if( loop_label < 0 ) err1( "break outside loop" );
     sc_next(); if( sc_tkn!=';' ) return t_(F); sc_next();
-    cg_o( "  jmp K" ); cg_n( i2s(loop_label) );
+    cg_o( "  jmp E" ); cg_n( i2s(loop_label) );
     return t_(T);
   }
   if( sc_tkn==Kw+Return )
@@ -1194,6 +1226,7 @@ int pa_stmt()
       sc_next(); return t_(T);
     }
     int e = pa_expr(0);
+    cg_n( "  # return-expr" );
 
     if( ET_TRACE && e ) { p1("E:rt "); et_print( (int*)e ); p0n(); }
 
@@ -1206,56 +1239,93 @@ int pa_stmt()
     int c; // condition
     int loop_label = cg_new_loop_label();
     sc_next(); if( sc_tkn!='(' ) return t_(F);
+    cg_o( "L" ); cg_o( i2s( loop_label ) ); cg_n( ":" );
+    cg_n( "  # while-cond" );
     sc_next(); if( !(c = pa_expr(0)) || sc_tkn!=')' ) return t_(F);
+    cg_o( "  jz E" ); cg_n( i2s( loop_label ) );
 
     if( ET_TRACE && c ) { p1( "E:wh " ); et_print( (int*)c ); p0n(); }
 
     sc_next();
-    cg_o( "L" ); cg_o( i2s( loop_label ) ); cg_n( ":" );
+    cg_n( "  # while-stmt" );
     int r = pa_stmt();
-    cg_o( "K" ); cg_o( i2s( loop_label ) ); cg_n( ":" );
+    cg_o( "  jmp L" ); cg_n( i2s( loop_label ) );
+    cg_o( "E" ); cg_o( i2s( loop_label ) ); cg_n( ":" );
+    cg_pop_loop_label();
     return t_(r);
   }
   if( sc_tkn==Kw+If )
   {
     int c; // condition
+    int if_label = cg_new_label();
     sc_next(); if( sc_tkn!='(' ) return t_(F);
+    cg_n( "  # if-cond" );
     sc_next(); if( !(c = pa_expr(0)) || sc_tkn!=')' ) return t_(F);
+    cg_o( "  jz J" ); cg_n( i2s( if_label ) ); // jump if false
 
     if( ET_TRACE && c ) { p1( "E:if " ); et_print( (int*)c ); p0n(); }
 
+    cg_n( "  # then-stmt" );
     sc_next(); if( !pa_stmt() ) return t_(F);
-    if( sc_tkn==Kw+Else ) { sc_next(); if( !pa_stmt() ) return t_(F); }
+    if( sc_tkn==Kw+Else )
+    {
+      cg_o( "  jmp K" ); cg_n( i2s( if_label ) );
+      cg_o( "J" ); cg_o( i2s( if_label ) ); cg_n( ":" );
+      sc_next();
+      cg_n( "  # else-stmt" );
+      if( !pa_stmt() ) return t_(F);
+      cg_o( "K" ); cg_o( i2s( if_label ) ); cg_n( ":" );
+    }
+    else // no else part
+    {
+      cg_o( "J" ); cg_o( i2s( if_label ) ); cg_n( ":" );
+    }
     return t_(T);
   }
   if( sc_tkn==Kw+For )
   {
     int e1,e2,e3; // e1 can be definition! uffffffffff  e3 is exprs! list!!!
+    int loop_label = cg_new_loop_label();
     sc_next(); if( sc_tkn != '(' ) return t_(F);
     sc_next();
     ++se_level; // 'for' makes a new scope
     int block_local_start = st_count;         // in ST
     int block_local_offset = se_local_offset; // on stack
+
     if( sc_tkn!=';' )
     {
       if( !(e1 = pa_vardef_or_expr()) ) return t_(F); // also clean?
     }
-    else sc_next();
-    if( sc_tkn!=';' ) if( !(e2 = pa_expr(0)) ) return t_(F); // also ....
+    else { e1 = 0; sc_next(); } // e1=0 means no init part
+
+    if( sc_tkn!=';' )
+    {
+      if( !(e2 = pa_expr(0)) ) return t_(F); // also ....
+    }
+    else e2 = 0; // it means no condition expr
 
     if( ET_TRACE && e2 ) { p1( "E:fc " ); et_print( (int*)e2 ); p0n(); }
 
     sc_next();
-    if( sc_tkn!=')' ) if( !(e3 = pa_exprs()) ) return t_(F); // opt. post-expressions
+    if( sc_tkn!=')' )
+    {
+      if( !(e3 = pa_exprs()) ) return t_(F); // opt. post-expressions
+    }
+    else e3 = 0; // it means no post exprs
 
-    if( ET_TRACE && e3 )
-      { p1( "E:fp [" );
-      int** ee = (int**)e3; int n=0;
-      while( ee ) { if(n>0)p1(" "); et_print( ee[0] ); ++n; ee = (int**)ee[1]; }
-      p1("]\n"); }
+    if( ET_TRACE && e3 ) { p1( "E:fp [" ); et_print_exprs( (int**)e3 ); }
 
     if( sc_tkn!=')' ) return t_(F); // also...
     sc_next();
+
+    if( e1 ) cg_n( "  # for-init" ); // e1
+    if( e3 ) { cg_o( "  jmp C" ); cg_n( i2s( loop_label ) ); }
+    cg_o( "P" ); cg_o( i2s( loop_label ) ); cg_n( ":" );
+    if( e3 ) cg_n( "  # for-post" ); // e3
+    cg_o( "C" ); cg_o( i2s( loop_label ) ); cg_n( ":" );
+    if( e2 ) cg_n( "  # for-cond" ); // e2
+    if( e2 ) { cg_o( "  jz E" ); cg_n( i2s( loop_label ) ); }
+
     int rc = pa_stmt();
     if( se_local_offset<se_max_l_offset) se_max_l_offset=se_local_offset; // negative!
     if( st_count>block_local_start ) // vars were defined in block
@@ -1265,11 +1335,16 @@ int pa_stmt()
       se_local_offset = block_local_offset;
     }
     --se_level;
+
+    cg_o( "  jmp P" ); cg_n( i2s( loop_label ) );
+    cg_o( "E" ); cg_o( i2s( loop_label ) ); cg_n( ":" );
+    cg_pop_loop_label();
     return t_(rc);
   }
   //was: if( !pa_vardef_or_expr(0) || sc_tkn != ';' ) return t_(F); // expr ';'
   //was: sc_next(); ret T
   int e = pa_vardef_or_expr(); // can be definition!!! ufffff
+  cg_n( "  # expr-or-def-stmt" );
   return t_( e ); // vardef | expr ';'
 }
 
@@ -1438,7 +1513,6 @@ int main( int ac, char** av )
   {
     p1( "c2s.exe [options] file.c\n" );
     p1( "-T  show tokens\n" );
-    p1( "-L  show line numbers\n" );
     p1( "-P  show parser trace\n" );
     p1( "-I  show id table trace\n" );
     p1( "-D  dump id table data and string literal table\n" );
@@ -1452,7 +1526,6 @@ int main( int ac, char** av )
     else
     {
       if( av[i][1] == 'T' ) SC_DEBUG=1;
-      if( av[i][1] == 'L' ) RD_LINES=1;
       if( av[i][1] == 'P' ) PA_TRACE=1;
       if( av[i][1] == 'I' ) IT_DEBUG=1;
       if( av[i][1] == 'D' ) IT_DUMP=1;
@@ -1478,7 +1551,7 @@ int main( int ac, char** av )
   if( ST_DUMP )
   {
     int n;
-    p1("globals\nenums:\n"); n = st_dump(0,K_enum); p1n(i2s(n));
+    p1("** globals **\nenums:\n"); n = st_dump(0,K_enum); p1n(i2s(n));
     p1("vars:\n"); n = st_dump(0,K_var); p1n(i2s(n)); // also dumps K_array
     p1("funcs:\n"); n = st_dump(0,K_fn); p1n(i2s(n));
     p2n("data size: ", i2s(se_data_offset));

@@ -49,13 +49,31 @@ LC0:
 labels:
 
 Sxx:  string literal
-Exx:  else part of if-else
-Ixx:  end of if-else
-Lxx:  loop start (condition) \ Stack inside
-Kxx:  loop end               / function
+Jxx:  else part of if-else
+Kxx:  end of if-else
+Lxx:  loop start (condition) | Stack
+Exx:  loop end               | of loops
+Cxx:  for-loop condition     |
+Pxx:  for-loop post-exprs    |
 Rxx:  return from function
 Axx:  for &&
 Oxx:  for ||
+
+
+for( [I]; [C]; [P] ) S
+
+generates this code:
+
+     [I]
+     [jmp Cxx] absent if no P
+Pxx:
+     [P]
+Cxx:
+     [C]
+     [jz Exx] absent if no C
+     S
+     jmp Pxx
+Exx:
 
 
 char c            movsx eax, BYTE PTR [esp+15]
