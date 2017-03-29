@@ -64,7 +64,7 @@ argdef : type stars @Id        // e.g. "char** argv" but not "char* argv[]"
 
 args : argdef { ',' argdef }
 
-func : '(' [ args ] ')' ';'               // cfn declaration
+func : '(' [ args ] ')' ';'               // fn declaration
      | '(' [ args ] ')' '{' { stmt } '}'  // fn definition
 
 enumerator : @Id [ '=' integer ]

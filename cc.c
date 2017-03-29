@@ -600,6 +600,29 @@ int cg_file = 0;
 int* cg_buffer = 0;
 char* cg_section = ""; // current section
 
+int cg_label;    // general label number, for fns, if/then, etc
+int cg_fn_label; // current function exit label
+
+int cg_loop_label[20]; // stack of labels for loops/breaks
+int cg_loop_level;     // stack "pointer"
+
+int cg_new_label() { ++cg_label; return cg_label; }
+
+int cg_new_loop_label()
+{
+  ++cg_label;
+  cg_loop_label[cg_loop_level] = cg_label; ++cg_loop_level;
+  return cg_label;
+}
+
+int cg_current_loop_label()
+{
+  if( cg_loop_level<=0 ) return -1;
+  return cg_loop_label[cg_loop_level-1];
+}
+
+void cg_pop_loop_label() { --cg_loop_level; }
+
 void cg_o( char* s )
 {
   int n = strlen(s);
@@ -658,6 +681,7 @@ void cg_fn_begin( char* name )
 void cg_fn_end( int ret0 )
 {
   if( ret0 ) cg_n( "  mov eax, 0" );
+  cg_o( "R" ); cg_o( i2s( cg_fn_label ) ); cg_n( ":" );
   cg_n( "  leave" );
   cg_n( "  .cfi_restore 5" );
   cg_n( "  .cfi_def_cfa 4, 4" );
@@ -1154,28 +1178,43 @@ int pa_stmt()
   }
   if( sc_tkn==Kw+Break )
   {
-    sc_next(); if( sc_tkn!=';' ) return t_(F); sc_next(); return t_(T);
+    int loop_label = cg_current_loop_label();
+    if( loop_label < 0 ) err1( "break outside loop" );
+    sc_next(); if( sc_tkn!=';' ) return t_(F); sc_next();
+    cg_o( "  jmp K" ); cg_n( i2s(loop_label) );
+    return t_(T);
   }
   if( sc_tkn==Kw+Return )
   {
     se_last_stmt_ret = T;
-    sc_next(); if( sc_tkn==';' ) { sc_next(); return t_(T); }
+    sc_next();
+    if( sc_tkn==';' )
+    {
+      cg_o( "  jmp R" ); cg_n( i2s(cg_fn_label) );
+      sc_next(); return t_(T);
+    }
     int e = pa_expr(0);
 
     if( ET_TRACE && e ) { p1("E:rt "); et_print( (int*)e ); p0n(); }
 
     if( !e || sc_tkn!=';' ) return t_(F);
+    cg_o( "  jmp R" ); cg_n( i2s(cg_fn_label) );
     sc_next(); return t_(T);
   }
   if( sc_tkn==Kw+While )
   {
     int c; // condition
+    int loop_label = cg_new_loop_label();
     sc_next(); if( sc_tkn!='(' ) return t_(F);
     sc_next(); if( !(c = pa_expr(0)) || sc_tkn!=')' ) return t_(F);
 
     if( ET_TRACE && c ) { p1( "E:wh " ); et_print( (int*)c ); p0n(); }
 
-    sc_next(); return t_(pa_stmt());
+    sc_next();
+    cg_o( "L" ); cg_o( i2s( loop_label ) ); cg_n( ":" );
+    int r = pa_stmt();
+    cg_o( "K" ); cg_o( i2s( loop_label ) ); cg_n( ":" );
+    return t_(r);
   }
   if( sc_tkn==Kw+If )
   {
@@ -1288,6 +1327,7 @@ int pa_func()
     {
       st_value[k] = 1; st_prop[k] = (int)args;
     }
+    cg_fn_label = cg_new_label();
     cg_fn_begin( id_table[id] );
     cg_suspend(); // resume until we know local scope size on stack
     if( strequ( id_table[id], "main" ) ) cg_n( "  call ___main\n" );
