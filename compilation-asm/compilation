@@ -2,6 +2,122 @@
 // gcc -masm=intel x.s -o x.exe
 
 
+gcc -Wa,-adhln -g main.c >main.s
+    -Wa,-ahls yourfile.cpp -o yourfile.o >yourfile.asm
+-masm=intel
+# ... -g -c -Wa,-alh
+-g: Produce debugging information
+-Wa,option: Pass option as an option to the assembler
+-adhln:
+a: turn on listings
+d: omit debugging directives; n: omit forms processing
+h: include high-level source
+l: include assembly
+
+
+https://sourceware.org/binutils/docs/as/index.html#Top
+
+
+gnu assembler directives
+http://linux.web.cern.ch/linux/scientific4/docs/rhel-as-en-4/tic54x-directives.html
+https://en.m.wikibooks.org/wiki/X86_Disassembly
+
+
+  ...free... | loc3 | loc2 | loc1 | ebp^ | r.a. | arg1 | arg2 | arg3 | ...
+             esp    -8     -4     ebp           +8     +12    +16
+
+  push arg3
+  push arg2
+  push arg1
+  call fn
+
+    push ebp
+    mov ebp,esp
+    sub esp,12    ; for 3 local vars
+    push edi
+    push esi      ; save regs if used inside
+
+    ...           ; locals [ebp-4 8 12 etc], args [ebp+8 12 16 etc]
+
+    pop esi       ; restore regs if saved
+    pop edi
+    move esp,ebp
+    pop ebp       ; leave
+    ret           ;
+
+  add esp,12
+
+
+strings:
+
+# char a[] = "a123\\a\"a\'a  \r11\n22\b33\0aa";
+
+  .globl  _a
+  .data
+  .align 4
+_a:
+  .ascii "a123\\a\"a'a  \15"
+  .ascii "11\12"
+  .ascii "22\10"
+  .ascii "33\0aa\0"   # but we won't do \0 inside
+
+  .section .rdata,"dr"
+LC0:
+  .ascii "%d \0"
+
+
+labels:
+
+Sxx:  string literal
+Jxx:  else part of if-else
+Kxx:  end of if-else
+Lxx:  loop start (condition) | Stack
+Exx:  loop end               | of loops
+Cxx:  for-loop condition     |
+Pxx:  for-loop post-exprs    |
+Rxx:  return from function
+Axx:  for &&
+Oxx:  for ||
+
+
+for( [I]; [C]; [P] ) S
+
+generates this code:
+
+     [I]
+     [jmp Cxx] absent if no P
+Pxx:
+     [P]
+Cxx:
+     [C]
+     [jz Exx] absent if no C
+     S
+     jmp Pxx
+Exx:
+
+
+char c            movsx eax, BYTE PTR [esp+15]
+
+c = ...           mov BYTE PTR [esp+15], al
+
+-a  ~a            neg eax    not eax
+
+!a                cmp DWORD PTR [esp+4], 0
+                  sete al
+                  movzx eax, al
+
+a + b             add eax, edx     sub    and   or
+
+a * b             imul eax, DWORD PTR [esp+4]  ; eax
+
+a / b             cdq
+                  idiv DWORD PTR [esp+4]       ; eax
+
+a % b             cdq
+                  idiv DWORD PTR [esp+4]       ; edx
+
+
+
 BEGIN
                       .file   "intmain.c"
                       .intel_syntax noprefix
