@@ -246,6 +246,7 @@ void sl_table_create( int n ) { sl_table = (char**)malloc( n*INTSZ ); sl_count =
 
 int sl_add( char* s )
 {
+  for( int i=0; i<sl_count; ++i ) if( strequ( s, sl_table[i] ) ) return i; // 237->199
   if( sl_count==SL_TABLE_DIM ) err1( "Too many literal strings" );
   sl_table[ sl_count ] = strdup( s );
   ++sl_count;
@@ -254,8 +255,7 @@ int sl_add( char* s )
 
 void sl_table_dump()
 {
-  for( int i=0; i<sl_count; ++i )
-    p3n( i2s(i), " -> ", str_repr(sl_table[i]) );
+  for( int i=0; i<sl_count; ++i ) p3n( i2s(i), " -> ", str_repr(sl_table[i]) );
 }
 
 // Scanner ---------------------------------------------------------------------
@@ -633,7 +633,7 @@ void cg_begin( char* fn )
 
 void cg_end()
 {
-  cg_n( "  .ident  \"GCC: (GNU) 5.4.0\"\n" );
+  cg_n( "\n  .ident  \"GCC: (GNU) 5.4.0\"\n" );
   // dump declarations of all undefined functions
   for( int i=0; i<st_count; ++i )
     if( st_kind[i]==K_fn && st_value[i]==0 )

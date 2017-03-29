@@ -4,6 +4,9 @@
 // comments are inline and multi-line C comments /*...*/ and end-of-line
 // C++ comments //... Also #... is treated as a comment, to ignore #include etc
 
+// String literals can't contain \0 inside. That is they can, but they end at it.
+// Strings and chars can have \r \n \b. No other escapes.
+
 primary : @Number | @Char | @String | @Id | '(' expr ')'
 
 integer : [ '-' ] ( @Number | @Char | @Id ) // enum id is like a number
@@ -27,13 +30,13 @@ term : '(' type stars ')' term
      | unexpr
 
 binop : '*' | '/' | '%'                  // prec. 12
-      | '+' | '-'                        // prec. 11   10: << >>
+      | '+' | '-'                        // prec. 11    10: << >>
       | '<' | '>' | '<''=' | '>''='      // prec. 9
       | '=''=' | '!''='                  // prec. 8
       | '&' | '^' | '|'                  // prec. 7 6 5
       | '&''&'                           // prec. 4
-      | '|''|'                           // prec. 3    2: ?:
-      | '='                              // prec. 1    also: += -= <<= ...
+      | '|''|'                           // prec. 3     2: ?:
+      | '='                              // prec. 1     also: += -= <<= ...
 
 expr : term { binop term }
 
@@ -48,31 +51,32 @@ vartail : [ '=' expr ] // for global vars expr must be calculable at compile tim
 morevars : vartail { ',' stars @Id vartail } ';'
 
 vardef_or_expr : type stars @Id morevars // ends with ';'
-               | expr ';'
+               | expr ';'                // going to change to exprs
 
 stmt : ';'
      | '{' { stmt } '}'
-     | "break" ';'                | "return" [ expr ] ';'
+     | "break" ';'                | "return" [ expr ] ';'   // maybe exprs here
      | "while" '(' expr ')' stmt  | "if" '(' expr ')' stmt [ "else" stmt ]
-     | "for" '(' vardef_or_expr [ expr ] ';' [ expr { ',' expr } ] ')' stmt
-     | vardef_or_expr // ends with ';'
+     | "for" '(' vardef_or_expr [ expr ] ';' [ exprs ] ')' stmt
+     | vardef_or_expr // ends with ';' maybe expr will be exprs
 
 argdef : type stars @Id        // e.g. "char** argv" but not "char* argv[]"
 
 args : argdef { ',' argdef }
 
-func : '(' [ args ] ')' ';'               // fn declaration
+func : '(' [ args ] ')' ';'               // cfn declaration
      | '(' [ args ] ')' '{' { stmt } '}'  // fn definition
 
 enumerator : @Id [ '=' integer ]
 
 enumdef : '{' enumerator { ',' enumerator } '}' ';'
 
-decl_or_def : "enum" enumdef
+decl_or_def : "enum" enumdef              // enums are unnamed
             | "void" @Id func             // function-procedure
             | type stars @Id func         // if next (in func) goes '('
             | type stars @Id morevars     // otherwise
 
 program : decl_or_def { decl_or_def } @Eof  // definition/declaration
+
 
 # vim: set syntax=ANTLR :
