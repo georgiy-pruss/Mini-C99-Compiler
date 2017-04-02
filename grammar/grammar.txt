@@ -12,8 +12,6 @@
 
 primary : @Number | @Char | @String | @Id | '(' expr ')'
 
-integer : [ '-' ] ( @Number | @Char | @Id ) // enum id is like a number
-
 exprs : expr { ',' expr } // args in calls and the last item in for-header
 
 call_or_index : { '[' expr ']' | '(' [ exprs ] ')' }
@@ -43,18 +41,23 @@ binop : '*' | '/' | '%'                  // prec. 12
 
 expr : term { binop term }
 
+integer : [ '-' ] ( @Number | @Char | @Id )   // enum id is like a number
+
+str_or_0 : @String | 0                        // can be null pointer, see below
+
 arrayinit : @String                           // char a[] = "abc"; // ARRAY!
-          | '{' @String { ',' @String } '}'   // char* b[] = {"ijk","mn"};
+          | '{' str_or_0 { ',' str_or_0 } '}' // char* b[] = {"ijk","mn",0};
           | '{' integer { ',' integer } '}'   // int c[] = {1,2,3};
 
-vartail : [ '=' expr ] // for global vars expr must be calculable at compile time
+vartail : [ '=' integer | '=' @String ]       // for global vars
+        | [ '=' expr ]                        // for local vars - any expr.
         | '[' ']' '=' arrayinit               // int** c[] = {0,0};
         | '[' integer ']' [ '=' arrayinit ]   // int d[100] = {0};
 
 morevars : vartail { ',' stars @Id vartail } ';'
 
-vardef_or_expr : type stars @Id morevars // ends with ';'
-               | expr ';'                // going to change to exprs
+vardef_or_expr : type stars @Id morevars      // ends with ';'
+               | expr ';'                     // going to change to exprs
 
 stmt : ';'
      | '{' { stmt } '}'

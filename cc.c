@@ -596,15 +596,73 @@ void bf_free( int* bf )
   while( next!=0 ) { bf = next; next = (int*)bf[BF_NEXT]; free( (char*)bf ); }
 }
 
+// Expression tree -------------------------------------------------------------
+
+enum { ET_num  = Num, ET_char = Chr,  // + int; enum also gives ET_num
+  ET_str  = Str,  // + sl-id
+  ET_var,   // + id (id checked and it's var or array or arg)
+  ET_fn,    // + id (id checked and it's fn)
+  ET_call,  // + fn-expr 0 | expr ptr-to-list
+  ET_index, // + array-expr expr
+  ET_cast,  // + type expr (type is from st_type enum, i.e. 1..3 char, 4..6 int)
+  ET_star,  // + expr  (*E)
+  ET_neg }; // + expr  (-E)
+// other nodes are marked with these chars (from tokens enum):
+// 'i' 'd'    // + expr  -- incr, decr
+// '~' '!'    // + expr  -- not-bin, not-log
+// '*' '/' '%' '+' '-' '<' '>' 'l' 'g' 'e' 'n' '&' '^' '|' 'a' 'o' '=' // + expr1 expr2
+
+int* ET_1( int tag, int value )
+{
+  int* r = (int*)malloc( 2*INTSZ ); r[0] = tag; r[1] = value; return r;
+}
+
+int* ET_2( int tag, int value1, int value2 )
+{
+  int* r = (int*)malloc( 3*INTSZ ); r[0] = tag; r[1] = value1; r[2] = value2; return r;
+}
+
+char* ET_TAG[] = {"","","Num","Chr","Str","Var","Fn","Call","Idx","Cast","Deref","Neg"};
+
+void et_print( int* e )
+{
+  if( e[0]<' ' ) p3("(",ET_TAG[e[0]]," ");
+  else if( e[0]=='i' ) p1( "(++ " ); else if( e[0]=='d' ) p1( "(-- " );
+  else if( e[0]=='a' ) p1( "(&& " ); else if( e[0]=='o' ) p1( "(|| " );
+  else if( e[0]=='e' ) p1( "(== " ); else if( e[0]=='n' ) p1( "(!= " );
+  else if( e[0]=='l' ) p1( "(<= " ); else if( e[0]=='g' ) p1( "(>= " );
+  else { char s[2]; s[0]=(char)e[0]; s[1]='\0'; p3("(",s," "); }
+  if( e[0]==ET_num || e[0]==ET_char ) p1(i2s(e[1]));
+  else if( e[0]==ET_str ) p1(str_repr(sl_table[e[1]]));
+  else if( e[0]==ET_fn ) p1(id_table[st_id[e[1]]]);
+  else if( e[0]==ET_var ) p1(id_table[st_id[e[1]]]);
+  else if( e[0]==ET_call ) { et_print( (int*)e[1] ); p1( " [" );
+    for( int n=0, x=e[2]; x; ++n, x=((int*)x)[1] ) // = et_print_exprs
+      { if(n>0)p1(" "); et_print( (int*)((int*)x)[0] ); }
+    p1("]"); }
+  else if( e[0]==ET_index ) { et_print( (int*)e[1] ); p1( " " ); et_print( (int*)e[2] ); }
+  else if( e[0]==ET_cast ) { p1( st_type_str[e[1]] ); p1( " " ); et_print( (int*)e[2] ); }
+  else if( e[0]==ET_star ) et_print( (int*)e[1] );
+  else if( e[0]==ET_neg ) et_print( (int*)e[1] );
+  else if( e[0]=='i'||e[0]=='d'||e[0]=='~'||e[0]=='!' ) et_print( (int*)e[1] );
+  else { et_print( (int*)e[1] ); p1( " " ); et_print( (int*)e[2] ); }
+  p1(")");
+}
+
+void et_print_exprs( int** x )
+{
+  for( int n=0; x; ++n, x = (int**)x[1] ) { if(n>0)p1(" "); et_print( x[0] ); } p1("]");
+}
+
 // Code generation -------------------------------------------------------------
 
-enum { S_NONE, S_CODE, S_DATA, S_BSS }; // sections
+enum { S_NONE, S_CODE, S_DATA, S_BSS }; // sections; bss = zero-init data
 
 int cg_file = 0;
 int* cg_buffer = 0;
 int cg_section = S_NONE; // current section
-int cg_data_at_4 = 0; // aligned
-int cg_bss_at_4 = 0;
+int cg_data_align = 0; // current data align 0 to 3 (we don't alignt to 32)
+int cg_bss_align = 0; // current bss align
 
 int cg_label;    // general label number, for fns, if/then, etc
 int cg_fn_label; // current function exit label
@@ -725,68 +783,24 @@ void cg_sl_table()
   }
 }
 
-void cg_vars()
+void cg_expr( int* e )
 {
-}
-
-//char test[] = "a123\\a\"a\'a  \r11\n22\b33\0aa";  // \0 inside ends the string!
-
-// Expression tree -------------------------------------------------------------
-
-enum { ET_num  = Num, ET_char = Chr,  // + int; enum also gives ET_num
-  ET_str  = Str,  // + sl-id
-  ET_var,   // + id (id checked and it's var or array or arg)
-  ET_fn,    // + id (id checked and it's fn)
-  ET_call,  // + fn-expr 0 | expr ptr-to-list
-  ET_index, // + array-expr expr
-  ET_cast,  // + type expr (type is from st_type enum, i.e. 1..3 char, 4..6 int)
-  ET_star,  // + expr  (*E)
-  ET_neg }; // + expr  (-E)
-// other nodes are marked with these chars (from tokens enum):
-// 'i' 'd'    // + expr  -- incr, decr
-// '~' '!'    // + expr  -- not-bin, not-log
-// '*' '/' '%' '+' '-' '<' '>' 'l' 'g' 'e' 'n' '&' '^' '|' 'a' 'o' '=' // + expr1 expr2
-
-int* ET_1( int tag, int value )
-{
-  int* r = (int*)malloc( 2*INTSZ ); r[0] = tag; r[1] = value; return r;
-}
-
-int* ET_2( int tag, int value1, int value2 )
-{
-  int* r = (int*)malloc( 3*INTSZ ); r[0] = tag; r[1] = value1; r[2] = value2; return r;
-}
-
-char* ET_TAG[] = {"","","Num","Chr","Str","Var","Fn","Call","Idx","Cast","Deref","Neg"};
-
-void et_print( int* e )
-{
-  if( e[0]<' ' ) p3("(",ET_TAG[e[0]]," ");
-  else if( e[0]=='i' ) p1( "(++ " ); else if( e[0]=='d' ) p1( "(-- " );
-  else if( e[0]=='a' ) p1( "(&& " ); else if( e[0]=='o' ) p1( "(|| " );
-  else if( e[0]=='e' ) p1( "(== " ); else if( e[0]=='n' ) p1( "(!= " );
-  else if( e[0]=='l' ) p1( "(<= " ); else if( e[0]=='g' ) p1( "(>= " );
-  else { char s[2]; s[0]=(char)e[0]; s[1]='\0'; p3("(",s," "); }
-  if( e[0]==ET_num || e[0]==ET_char ) p1(i2s(e[1]));
-  else if( e[0]==ET_str ) p1(str_repr(sl_table[e[1]]));
-  else if( e[0]==ET_fn ) p1(id_table[st_id[e[1]]]);
-  else if( e[0]==ET_var ) p1(id_table[st_id[e[1]]]);
-  else if( e[0]==ET_call ) { et_print( (int*)e[1] ); p1( " [" );
-    for( int n=0, x=e[2]; x; ++n, x=((int*)x)[1] ) // = et_print_exprs
-      { if(n>0)p1(" "); et_print( (int*)((int*)x)[0] ); }
-    p1("]"); }
-  else if( e[0]==ET_index ) { et_print( (int*)e[1] ); p1( " " ); et_print( (int*)e[2] ); }
-  else if( e[0]==ET_cast ) { p1( st_type_str[e[1]] ); p1( " " ); et_print( (int*)e[2] ); }
-  else if( e[0]==ET_star ) et_print( (int*)e[1] );
-  else if( e[0]==ET_neg ) et_print( (int*)e[1] );
-  else if( e[0]=='i'||e[0]=='d'||e[0]=='~'||e[0]=='!' ) et_print( (int*)e[1] );
-  else { et_print( (int*)e[1] ); p1( " " ); et_print( (int*)e[2] ); }
-  p1(")");
-}
-
-void et_print_exprs( int** x )
-{
-  for( int n=0; x; ++n, x = (int**)x[1] ) { if(n>0)p1(" "); et_print( x[0] ); } p1("]");
+  if( e[0]==ET_num || e[0]==ET_char )
+  {
+    cg_o( "  mov eax, " );
+    cg_n( i2s(e[1]) );
+  }
+  else if( e[0]==ET_str )
+  {
+    cg_o( "  mov eax, OFFSET FLAT:S" );
+    cg_n( i2s(e[1]) );
+  }
+  else if( e[0]==ET_call && ((int*)e[1])[0]==ET_fn )
+  {
+    cg_o( "  call _" ); cg_n( id_table[st_id[((int*)e[1])[1]]] );
+  }
+  else
+    cg_n( "  mov eax, 0 # ...expr..." );
 }
 
 // Parser ----------------------------------------------------------------------
@@ -1027,6 +1041,7 @@ int pa_arrayinit()            // TODO can be any expression?
 
 int se_add_var( int id, int t, int dim, char* init )
 {
+  // init == 0 -- no init
   int k = K_array;
   if( dim<0 ) { dim=1; k = K_var; }
   int itemsz=INTSZ; if( t==T_c ) itemsz=1;
@@ -1035,18 +1050,20 @@ int se_add_var( int id, int t, int dim, char* init )
   if( se_level>0 )
   {
     se_local_offset = se_local_offset - varsz; // negative!
+    // TODO init
     return st_add( id, t, K_var, se_local_offset, dim ); // local var
   }
   int n;
-  if( init ) // && value != 0
+  if( init ) // TODO && value != 0
   {
     n = st_add( id, t, K_var, se_data_offset, dim ); // global var in data section
     se_data_offset = se_data_offset + varsz;
     cg_o( "  .globl  _" ); cg_n( id_table[id] );
     if( cg_section != S_DATA ) { cg_section = S_DATA; cg_n( "  .data" ); }
-    if( !cg_data_at_4 ) { cg_n( "  .align 4" ); cg_data_at_4=1; } // TODO 1/4/32
+    if( idealsz>=4 && cg_data_align!=0 ) { cg_n( "  .align 4" ); cg_data_align=0; }
+    cg_data_align = (cg_data_align+idealsz) % 4;
     cg_o( "_" ); cg_o( id_table[id] ); cg_n( ":" );
-    cg_n( "  .long 1" ); // TODO value; cg_data_at_4 if chars; etc
+    cg_n( "  .long 1" ); // TODO value; cg_data_   if chars; etc
     // maybe .space ...
   }
   else
@@ -1055,10 +1072,8 @@ int se_add_var( int id, int t, int dim, char* init )
     se_bss_offset = se_bss_offset + varsz;
     cg_o( "  .globl  _" ); cg_n( id_table[id] );
     if( cg_section != S_BSS ) { cg_section = S_BSS; cg_n( "  .bss" ); }
-    if( !cg_bss_at_4 ) { cg_n( "  .align 4" ); cg_bss_at_4=1; } // TODO 1/4/32
-    //else if( idealsz==4 ) cg_n( ", 2" );
-    //else cg_n( ", 5" );
-    if( idealsz==1 ) cg_bss_at_4=1; // TDO 1/4/32
+    if( idealsz>=4 && cg_bss_align!=0 ) { cg_n( "  .align 4" ); cg_bss_align=0; }
+    cg_bss_align = (cg_bss_align+idealsz) % 4;
     cg_o( "_" ); cg_o( id_table[id] ); cg_n( ":" );
     cg_o( "  .space " ); cg_n( i2s(idealsz) );
   }
@@ -1073,8 +1088,8 @@ int pa_vartail()
   int id = sc_num;
   int k = st_find( id );
   if( se_level>0 && k>=st_local || se_level==0 && k>=0 )
-    p2n( "dupl var ",id_table[id] );
-  if( se_level>0 ) { ++se_lvars; } else { ++se_gvars; }
+    p2n( "duplicate var ",id_table[id] );
+  if( se_level>0 ) ++se_lvars; else ++se_gvars;
   if( sc_tkn=='=' )
   {
     se_add_var( id, t, -1, "..." );
@@ -1149,12 +1164,11 @@ int pa_vardef_or_expr()
     if( ET_TRACE && e ) { p1("E:ex "); et_print( (int*)e ); p0n(); }
 
     sc_next();
-    // cg_... for e --- or at least print it out first
+    cg_expr( (int*)e );
     return t_(T);
   }
   if( !pa_type() ) return t_(F);
   pa_stars();
-  int t = se_type + se_stars;
   if( sc_tkn!=Id ) return t_(F);
   sc_next();
   return t_(pa_morevars());
@@ -1228,11 +1242,11 @@ int pa_stmt()
       sc_next(); return t_(T);
     }
     int e = pa_expr(0);
-    cg_n( "  # return-expr" );
 
     if( ET_TRACE && e ) { p1("E:rt "); et_print( (int*)e ); p0n(); }
 
     if( !e || sc_tkn!=';' ) return t_(F);
+    if( e ) cg_expr( (int*)e );
     cg_o( "  jmp R" ); cg_n( i2s(cg_fn_label) );
     sc_next(); return t_(T);
   }
@@ -1242,8 +1256,8 @@ int pa_stmt()
     int loop_label = cg_new_loop_label();
     sc_next(); if( sc_tkn!='(' ) return t_(F);
     cg_o( "L" ); cg_o( i2s( loop_label ) ); cg_n( ":" );
-    cg_n( "  # while-cond" );
     sc_next(); if( !(c = pa_expr(0)) || sc_tkn!=')' ) return t_(F);
+    cg_expr( (int*)c );
     cg_o( "  jz E" ); cg_n( i2s( loop_label ) );
 
     if( ET_TRACE && c ) { p1( "E:wh " ); et_print( (int*)c ); p0n(); }
@@ -1261,8 +1275,8 @@ int pa_stmt()
     int c; // condition
     int if_label = cg_new_label();
     sc_next(); if( sc_tkn!='(' ) return t_(F);
-    cg_n( "  # if-cond" );
     sc_next(); if( !(c = pa_expr(0)) || sc_tkn!=')' ) return t_(F);
+    cg_expr( (int*)c );
     cg_o( "  jz J" ); cg_n( i2s( if_label ) ); // jump if false
 
     if( ET_TRACE && c ) { p1( "E:if " ); et_print( (int*)c ); p0n(); }
@@ -1325,7 +1339,7 @@ int pa_stmt()
     cg_o( "P" ); cg_o( i2s( loop_label ) ); cg_n( ":" );
     if( e3 ) cg_n( "  # for-post" ); // e3
     cg_o( "C" ); cg_o( i2s( loop_label ) ); cg_n( ":" );
-    if( e2 ) cg_n( "  # for-cond" ); // e2
+    if( e2 ) cg_expr( (int*)e2 ); // e2 - condition
     if( e2 ) { cg_o( "  jz E" ); cg_n( i2s( loop_label ) ); }
 
     int rc = pa_stmt();
@@ -1345,8 +1359,7 @@ int pa_stmt()
   }
   //was: if( !pa_vardef_or_expr(0) || sc_tkn != ';' ) return t_(F); // expr ';'
   //was: sc_next(); ret T
-  int e = pa_vardef_or_expr(); // can be definition!!! ufffff
-  cg_n( "  # expr-or-def-stmt" );
+  int e = pa_vardef_or_expr(); // can be definition!!! ufffff <-- generates code
   return t_( e ); // vardef | expr ';'
 }
 
