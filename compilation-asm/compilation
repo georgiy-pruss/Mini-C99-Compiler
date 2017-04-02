@@ -96,6 +96,29 @@ Cxx:
 Exx:
 
 
+Global vars
+
+int a;            // In C99, it's var declaration. If it's not *defined* in file,
+                  // GCC compiles it to .comm and allocates memory during linkage
+                  // if they are not defined in this(!) or other file.
+                  .comm _a, 4, 2   // 2 is the power of alignment.
+                                   // 1 to 3 - 0 (2^0=1), 4 to 31 - 2 (2^2=4),
+                                   // 32+ - 5 (2^5=32) big arrays aligned to 32
+int b=0;          // Definition for zero memory
+                  .globl _b
+                  .bss             // if not already in bss
+                  .align 4         // if not already aligned (rules as above!)
+            _b:
+                  .space 4         // size of data
+int c=1;          // Definition for non-zero memory
+                  .globl _c
+                  .data            // if not already in data
+                  .align 4         // as above
+            _c:
+                  .long 1          // .long N or .ascii "S"
+                  .space M         // fill the tail if not all initialized
+
+
 char c            movsx eax, BYTE PTR [esp+15]
 
 c = ...           mov BYTE PTR [esp+15], al
@@ -127,9 +150,6 @@ int i0;
 
 char c01;
                       .comm _c01, 1, 0
-
-char c02;
-                      .comm _c02, 1, 0
 
 int gl[24];
                       .comm _gl, 96, 5      // 96 = 4*24

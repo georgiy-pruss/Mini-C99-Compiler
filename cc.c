@@ -598,9 +598,11 @@ void bf_free( int* bf )
 
 // Code generation -------------------------------------------------------------
 
+enum { S_NONE, S_CODE, S_DATA, S_BSS }; // sections
+
 int cg_file = 0;
 int* cg_buffer = 0;
-char* cg_section = ""; // current section
+int cg_section = S_NONE; // current section
 int cg_data_at_4 = 0; // aligned
 int cg_bss_at_4 = 0;
 
@@ -674,7 +676,7 @@ void cg_end()
 void cg_fn_begin( char* name )
 {
   if( strequ( name, "main" ) ) cg_n( "  .def ___main; .scl 2; .type 32; .endef" );
-  if( strcmp( cg_section, ".text" ) ) { cg_section = ".text"; cg_n( "  .text" ); }
+  if( cg_section != S_CODE ) { cg_section = S_CODE; cg_n( "  .text" ); }
   cg_o( "  .globl _" ); cg_n( name );
   cg_o( "  .def  _" ); cg_o( name ); cg_n( "; .scl 2; .type 32; .endef" );
   cg_o( "_" ); cg_o( name ); cg_n( ":" );
@@ -1036,29 +1038,29 @@ int se_add_var( int id, int t, int dim, char* init )
     return st_add( id, t, K_var, se_local_offset, dim ); // local var
   }
   int n;
-  if( init )
+  if( init ) // && value != 0
   {
     n = st_add( id, t, K_var, se_data_offset, dim ); // global var in data section
     se_data_offset = se_data_offset + varsz;
     cg_o( "  .globl  _" ); cg_n( id_table[id] );
-    if( strcmp( cg_section, ".data" ) ) { cg_section = ".data"; cg_n( "  .data" ); }
-    if( !cg_data_at_4 ) { cg_n( "  .align 4" ); cg_data_at_4=1; }
+    if( cg_section != S_DATA ) { cg_section = S_DATA; cg_n( "  .data" ); }
+    if( !cg_data_at_4 ) { cg_n( "  .align 4" ); cg_data_at_4=1; } // TODO 1/4/32
     cg_o( "_" ); cg_o( id_table[id] ); cg_n( ":" );
     cg_n( "  .long 1" ); // TODO value; cg_data_at_4 if chars; etc
+    // maybe .space ...
   }
   else
   {
     n = st_add( id, t, K_var, se_bss_offset+BSS_ORG, dim ); // global bss
     se_bss_offset = se_bss_offset + varsz;
-    cg_section = ".bss";
-    // TODO alignment? formats?
-    cg_o( "  .comm _" ); cg_o( id_table[id] ); cg_o( ", " );
-    // or "  .bss" "  space 4" etc
-    cg_o( i2s(idealsz) );
-    // TODO ...
-    if( idealsz==1 ) cg_n( ", 0" );
-    else if( idealsz==4 ) cg_n( ", 2" );
-    else cg_n( ", 5" );
+    cg_o( "  .globl  _" ); cg_n( id_table[id] );
+    if( cg_section != S_BSS ) { cg_section = S_BSS; cg_n( "  .bss" ); }
+    if( !cg_bss_at_4 ) { cg_n( "  .align 4" ); cg_bss_at_4=1; } // TODO 1/4/32
+    //else if( idealsz==4 ) cg_n( ", 2" );
+    //else cg_n( ", 5" );
+    if( idealsz==1 ) cg_bss_at_4=1; // TDO 1/4/32
+    cg_o( "_" ); cg_o( id_table[id] ); cg_n( ":" );
+    cg_o( "  .space " ); cg_n( i2s(idealsz) );
   }
   return n;
 }
