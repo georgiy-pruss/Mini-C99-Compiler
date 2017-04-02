@@ -7,6 +7,9 @@
 // String literals can't contain \0 inside. That is they can, but they end at it.
 // Strings and chars can have \r \n \b. No other escapes.
 
+// Global var declarations are understood as var definitions. int a; === int a=0;
+// No multiple var declarations (fn declarations are ok).
+
 primary : @Number | @Char | @String | @Id | '(' expr ')'
 
 integer : [ '-' ] ( @Number | @Char | @Id ) // enum id is like a number
