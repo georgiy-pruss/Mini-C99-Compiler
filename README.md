@@ -32,7 +32,9 @@ can have their value specified: `enum { Zero, One, Two, Four=4, Eight=8 };`
 `int`, `int*`, `int**`, and arrays of types: `char`, `char*`, `int`, `int*`; they can have
 initial values, that must be constants (literals), maybe simple expressions; arrays can be
 initialized with strings (for `char*` and `char[]`) and with array values (for `char*[]`,
-`int[]`, `int*[]`):
+`int[]`, `int*[]`); *note:* Global variables can be only defined, not declared, i.e.
+if the compiler sees a variable declaration (i.e. without initial value), it treats it as
+a definition with the zero value. There cannot be multiple declarations and definition of the same variable.
 
     ```
     char* a = "012345";
@@ -41,10 +43,8 @@ initialized with strings (for `char*` and `char[]`) and with array values (for `
     int d[] = {1,2,3};
     int e[100] = {0};
     int* f[] = {0,0,0};
+    int g; // actually defines g with initial value 0; it can't be defined later with explicit value
     ```
-**note:** Global variables can be only defined, not declared, i.e. if the compiler sees a variable declaration
-(i.e. without initial value), it treats it as a definition with the zero value. There cannot be
-multiple declarations and definition of the same variable.
 
 * **function declaration**; can be used for external functions (see [Library functions](#library-functions))
 and for preliminary declarations of the functions defined later -- it can be necessary
