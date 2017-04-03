@@ -6,7 +6,7 @@
 // TODO expressions; lvalue for = ++ --; initializers, strings and arrays as values
 // TODO exprs in vardef_of_expr to allow for( i=1,j=2; ... ) and ++i, f(i), a=b;
 
-char* TITLE = "Georgiy Pruss CC 0.0.3";
+char* TITLE = "Georgiy Pruss CC 0.0.3+";
 
 // Parameters ------------------------------------------------------------------
 
@@ -25,6 +25,7 @@ int IT_DEBUG=0; // -I - id table trace
 int IT_DUMP=0;  // -D - id table dump
 int ST_DUMP=0;  // -S - symbol table dump
 int ET_TRACE=0; // -E - trace expressions
+int CG_LINES=1; // -L - output line numbers (default: yes)
 
 // stdlib ----------------------------------------------------------------------
 
@@ -232,7 +233,7 @@ void id_table_dump()
     if( id_table[i] ) { ++k; p3n( i2s(i), " ", id_table[i] ); }
   p1( "-------------------------------------\n" );
   p2( i2s(k), " ids, " );
-  if( k!=id_count ) p3( " BUT MUST BE: ", i2s(id_count), ", " );
+  assert( k==id_count, "Errors in id_table (negative hash?)" );
   p2( i2s(collisions), " collisions\n" );
 }
 
@@ -700,7 +701,7 @@ void cg_n( char* s )
   else { bf_append( cg_buffer, s, n ); bf_append( cg_buffer, "\n", 1 ); }
 }
 
-void cg_line() { cg_o( "  # " ); cg_n( i2s(rd_line) ); } // may be mov [...], nr
+void cg_line() { if( CG_LINES ) { cg_o( "  # " ); cg_n( i2s(rd_line) ); } }
 
 void cg_suspend() // after this, write to buffer
 {
@@ -1544,6 +1545,7 @@ void before_exit()
 int main( int ac, char** av )
 {
   char* filename = 0;
+  char* outputfn = 0;
   if( ac==1 || ac==2 && (strequ( av[1], "-h" ) || strequ( av[1], "--help" )) )
   {
     p1( "c2s.exe [options] file.c\n" );
@@ -1553,6 +1555,8 @@ int main( int ac, char** av )
     p1( "-D  dump id table data and string literal table\n" );
     p1( "-S  dump symbol table\n" );
     p1( "-E  trace expressions\n" );
+    p1( "-L  output line numbers in assembler (default)\n" );
+    p1( "-o  specify output file name\n" );
     return 0;
   }
   for( int i=1; i<ac; ++i )
@@ -1566,6 +1570,8 @@ int main( int ac, char** av )
       if( av[i][1] == 'D' ) IT_DUMP=1;
       if( av[i][1] == 'S' ) ST_DUMP=1;
       if( av[i][1] == 'E' ) ET_TRACE=1;
+      if( av[i][1] == 'L' ) CG_LINES=1;
+      if( av[i][1] == 'o' ) { outputfn = av[++i]; }
     }
 
   if( !filename ) { p1( "No input file\n" ); exit(1); }
@@ -1574,9 +1580,9 @@ int main( int ac, char** av )
   st_create( ST_DIM );
   id_table_create( ID_TABLE_DIM );
   sl_table_create( SL_TABLE_DIM );
-  char OUTFN[] = "a.s";
-  cg_file = open( OUTFN, O_CREAT|O_TRUNC|O_WRONLY, 0666 );
-  if( cg_file<0 ) { p3( "Can't create file '", OUTFN, "'\n" ); exit(1); }
+  if( !outputfn ) outputfn = "a.s";
+  cg_file = open( outputfn, O_CREAT|O_TRUNC|O_WRONLY, 0666 );
+  if( cg_file<0 ) { p3( "Can't create file '", outputfn, "'\n" ); exit(1); }
   cg_begin( filename );
   if( !pa_program( filename ) ) err1( "wrong syntax" );
   cg_sl_table();

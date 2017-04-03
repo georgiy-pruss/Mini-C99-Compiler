@@ -41,6 +41,8 @@ binop : '*' | '/' | '%'                  // prec. 12
 
 expr : term { binop term }
 
+lvalue : @Id | '*' term | primary '[' expr ']'   // only these are for = ++ --
+
 integer : [ '-' ] ( @Number | @Char | @Id )   // enum id is like a number
 
 str_or_0 : @String | 0                        // can be null pointer, see below
