@@ -6,7 +6,7 @@
 // TODO expressions; lvalue for = ++ --; initializers, strings and arrays as values
 // TODO exprs in vardef_of_expr to allow for( i=1,j=2; ... ) and ++i, f(i), a=b;
 
-char* TITLE = "Georgiy Pruss CC 0.0.1";
+char* TITLE = "Georgiy Pruss CC 0.0.3";
 
 // Parameters ------------------------------------------------------------------
 
@@ -180,6 +180,7 @@ void rd_next() // read next character, save it in rd_char; <0 if eof
     rd_char_pos = 0;
   }
   rd_char = rd_buf[ rd_char_pos ]; ++rd_char_pos;
+  if( rd_char<0 ) rd_char = rd_char + 256; // transfer chars -128..-1 to 128..255
 }
 
 void p2wLN( char* sev, char* msg ) // we can define it when rd_line is defined
@@ -783,6 +784,8 @@ void cg_sl_table()
   }
 }
 
+int cg_exprs( int** x, int backwards_with_push );
+
 void cg_expr( int* e )
 {
   if( e[0]==ET_num || e[0]==ET_char )
@@ -797,10 +800,27 @@ void cg_expr( int* e )
   }
   else if( e[0]==ET_call && ((int*)e[1])[0]==ET_fn )
   {
+    int n = cg_exprs( (int**)e[2], 1 );
     cg_o( "  call _" ); cg_n( id_table[st_id[((int*)e[1])[1]]] );
+    if( n>0 ) { cg_o( "  add esp, " ); cg_n( i2s( INTSZ*n ) ); }
   }
   else
     cg_n( "  mov eax, 0 # ...expr..." );
+}
+
+int cg_exprs( int** x, int backwards_with_push ) // return number of exprs
+{
+  int n=0;
+  if( backwards_with_push )
+  {
+    if( !x ) return 0;
+    n = cg_exprs( (int**)x[1], 1 ); // first tail (via recursion), then head
+    cg_expr( x[0] );
+    cg_n( "  push eax" );
+    return n + 1;
+  }
+  for( ; x; ++n, x = (int**)x[1] ) cg_expr( x[0] );
+  return n;
 }
 
 // Parser ----------------------------------------------------------------------

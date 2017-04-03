@@ -1,0 +1,65 @@
+► gcc cc.c -o cc.exe
+
+► cc.exe HelloWorld.c # the output file is a.s
+
+► gcc a.s -o HelloWorld.exe # can be w/o -masm=intel
+
+► HelloWorld.exe
+Hello world!
+
+► wc -c a.s
+748
+
+► cat a.s
+  .file "HelloWorld.c"
+  .intel_syntax noprefix
+  # compile with: gcc -masm=intel a.s -o a.exe
+
+  # 1
+  # 2
+  # 3
+  # 4
+  # 5
+  .def ___main; .scl 2; .type 32; .endef
+  .text
+  .globl _main
+  .def  _main; .scl 2; .type 32; .endef
+_main:
+  .cfi_startproc
+  push  ebp
+  .cfi_def_cfa_offset 8
+  .cfi_offset 5, -8
+  mov ebp, esp
+  .cfi_def_cfa_register 5
+  # no local variables
+  call ___main
+
+  # 6
+  mov eax, 13
+  push eax
+  mov eax, OFFSET FLAT:S0
+  push eax
+  mov eax, 1
+  push eax
+  call _write
+  add esp, 12
+  mov eax, 0
+  jmp R1
+  # 7
+  # 8
+R1:
+  leave
+  .cfi_restore 5
+  .cfi_def_cfa 4, 4
+  ret
+  .cfi_endproc
+
+  .section .rdata,"dr"
+S0:
+  .ascii "Hello world!\12\0"
+
+  .ident  "Georgiy Pruss CC 0.0.2"
+
+  .def _write; .scl 2; .type 32; .endef
+
+►
