@@ -1,21 +1,22 @@
-## Yet another tiny C compiler (c2s/s2exe)
+## Mini-C99-Compiler — Yet another C99 subset compiler
 
 ### Description
 
-The input file is compiled with `c2s` into assembler file `a.s`.
-The GNU can compile it into an executable (`gcc -masm=intel a.s -o a.exe`), or `s2exe` can do it (in the future).
+The input file is compiled with `cc` into assembler file (default name is `a.s`).
+The GNU compiler or rather assembler can compile it into an executable (`gcc a.s -o a.exe`),
+or later `cc` will be able to translate it into an executable file (that's the plan).
 
 ### Comments, Preprocessor (#include, #define, #pragma etc)
 
 Comments can be both the C comments (inline and multi-line `/*...*/`) and the C++
-end-of-line comments (`//...`) Any text starting with `#` is also treated as a
+end-of-line comments (`//...`). Any text starting with `#` is also treated as a
 a comment, that is all the preprocessor directives are ignored, although they can be
-present in the program text -- that's proably good for includes, but bad for defines.
+present in the program text — that's proably good for includes, but bad for defines.
 
 ### Number, Character, String literals
 
-The compiler accepts decimal and octal numbers in range `-2147483648` to `2147483647`.
-Characters are probably signed, i.e. with the range of `-128` to `127`.
+The compiler accepts decimal and octal integer (32-bit) numbers in range `-2147483648` to `2147483647`.
+Characters are signed, i.e. with the range of `-128` to `127`.
 Characters and strings can contain these escape sequences: `\n` (NL), `\r` (CR), `\b` (BS),
 `\0` (NUL). All the rest "escaped" characters are copied as-is. The strings can't be
 concatenated (i.e. `"abc" "def"` won't be understood.)
@@ -41,6 +42,9 @@ initialized with strings (for `char*` and `char[]`) and with array values (for `
     int e[100] = {0};
     int* f[] = {0,0,0};
     ```
+**note:** Global variables can be only defined, not declared, i.e. if the compiler sees a variable declaration
+(i.e. without initial value), it treats it as a definition with the zero value. There cannot be
+multiple declarations and definition of the same variable.
 
 * **function declaration**; can be used for external functions (see [Library functions](#library-functions))
 and for preliminary declarations of the functions defined later -- it can be necessary
@@ -57,7 +61,7 @@ These statements are permitted:
 
 * **empty** statement: `;`
 
-* **expression** (for calls, increments, assignments): `foo(1); ++i; c=(a+b)/2;`
+* **expression** (used for calls, increments, assignments): `foo(1); ++i; c=(a+b)/2;`
 
 * **block** (it introduces a new scope): `{ int t=a; a=b; b=t; }`
 
@@ -69,9 +73,10 @@ These statements are permitted:
 
 * **while**: `while( more_data() ) do_something();`
 
-* **for** with possibility to define variables in the first part of the header
-and with possibility to have several expressions in the last part -- the *comma*
-operator is allowed only in this place: `for( int a=N,*t=s; *t; ++t, --a ) {...}`
+* **for** with the possibility to define variables in the first part of the header
+and with the possibility to have several expressions in the last part -- the *comma*
+operator is allowed only in this place: `for( int a=N,*t=s; *t; ++t, --a ) {...}`.
+(In plans: allow comma in the first part, as well as in expr-stmt and return-stmt.)
 
 * **variable** definition(s) -- it's also a statement and can be placed anywhere in a block.
 
@@ -81,6 +86,7 @@ operator is allowed only in this place: `for( int a=N,*t=s; *t; ++t, --a ) {...}
 
 * Binary operators: `* / %`, `+ -`, `< > <= >=`, `== !=`, `&`, `^`, `|`, `&&`, `||`, `=`.
 No shifts (`<<` `>>`), no conditional (`?:`), no operators with assignment (`+=` `-=` etc).
+Maybe these will be added later.
 
 * Calls, indexing, prefix `++` and `--`, type cast.
 
@@ -104,5 +110,6 @@ values: `enum { O_RDONLY, O_WRONLY, O_RDWR, O_APPEND=8, O_CREAT=512, O_TRUNC=102
 ### Limits
 
 All the strings and lines are limited to less than 260 characters; No more than 1000 names
-in a program, no more than 500 variables in all "active" scopes at any given place.
+in a program, no more than 500 variables in all "active" scopes at any given place. The loops can't
+be nested more than 20 levels. Some other limits may apply.
 
