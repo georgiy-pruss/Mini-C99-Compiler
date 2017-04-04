@@ -107,6 +107,16 @@ These functions can be used:
 In the `open` function, `oflag` is system-dependent. For cygwin-32 it accepts these
 values: `enum { O_RDONLY, O_WRONLY, O_RDWR, O_APPEND=8, O_CREAT=512, O_TRUNC=1024, O_EXCL=2048 };`
 
+Actually, other functions can work too. Even printf :)
+
+    // There's no '...' but we can declare one particular prototype, e.g. this:
+    int printf( char* fmt, char* msg );
+    
+    // Use printf with two strings. Currently there's no argument check at all,
+    // but it's going to be implemented soon, so then number and type of arguments
+    // of a call must match the declaration
+    int main() { printf( "%s\n", "Hello World!" ); return 0; }
+
 ### Limits
 
 All the strings and lines are limited to less than 260 characters; No more than 1000 names
