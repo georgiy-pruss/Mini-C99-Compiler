@@ -805,6 +805,26 @@ void cg_expr( int* e )
     cg_o( "  call _" ); cg_n( id_table[st_id[((int*)e[1])[1]]] );
     if( n>0 ) { cg_o( "  add esp, " ); cg_n( i2s( INTSZ*n ) ); }
   }
+  else if( e[0]=='=' )
+  {
+    // left side e[1] can be ET_var, ET_star, ET_index; the same for 'i' 'd'
+  }
+  else if( e[0]==ET_var )
+  {
+    int id = st_id[e[1]];
+    int k = st_kind[e[1]]; // TODO must be K_var, type...
+    int v = st_value[e[1]];
+    p2( "e[1] ",i2s(e[1]) ); p2( "  st_count ",i2s(st_count) ); p2n( "  st_local ",i2s(st_local) );
+    if( e[1]>=st_local ) // local var
+    {
+      cg_o( "  mov eax, DWORD PTR [ebp" ); cg_o( i2s(v) ); cg_o( "] # " );
+      cg_n( id_table[id] );
+    }
+    else // global var
+    {
+      cg_o( "  mov eax, DWORD PTR _" ); cg_n( id_table[id] );
+    }
+  }
   else
     cg_n( "  mov eax, 0 # ...expr..." );
 }
@@ -1084,7 +1104,8 @@ int se_add_var( int id, int t, int dim, char* init )
     if( idealsz>=4 && cg_data_align!=0 ) { cg_n( "  .align 4" ); cg_data_align=0; }
     cg_data_align = (cg_data_align+idealsz) % 4;
     cg_o( "_" ); cg_o( id_table[id] ); cg_n( ":" );
-    cg_n( "  .long 1" ); // TODO value; cg_data_   if chars; etc
+    cg_o( "  .long " ); cg_n( i2s((int)init) );
+    // TODO value; cg_data_   if chars; etc
     // maybe .space ...
   }
   else
@@ -1113,18 +1134,27 @@ int pa_vartail()
   if( se_level>0 ) ++se_lvars; else ++se_gvars;
   if( sc_tkn=='=' )
   {
-    se_add_var( id, t, -1, "..." );
     sc_next();
-    int e = pa_expr(0);
+    int* e = (int*)pa_expr(0);
 
-    if( ET_TRACE && e ) { p1("E:vt "); et_print( (int*)e ); p0n(); }
+    if( ET_TRACE && e ) { p1("E:vt "); et_print( e ); p0n(); }
 
-    if( 0 )
+    if( se_level==0 ) // must be calculable for globals
     {
-      // must be calculable for globals
-      // so, calculate it
+      if( e[0]==ET_num )
+        if( e[1]==0 ) // .bss
+          se_add_var( id, t, -1, 0 );
+        else
+          se_add_var( id, t, -1, (char*)e[1] );
     }
-    return t_(e);
+    else
+    {
+      int idx = se_add_var( id, t, -1, 0 );
+      cg_expr( e );
+      cg_o( "  mov DWORD PTR [ebp" ); cg_o( i2s(st_value[idx]) ); cg_o( "], eax # " );
+      cg_n( id_table[id] );
+    }
+    return t_((int)e);
   }
   if( sc_tkn!='[' )
   {
@@ -1548,7 +1578,7 @@ int main( int ac, char** av )
   char* outputfn = 0;
   if( ac==1 || ac==2 && (strequ( av[1], "-h" ) || strequ( av[1], "--help" )) )
   {
-    p1( "c2s.exe [options] file.c\n" );
+    p1( "cc.exe [options] file.c [options]\n" );
     p1( "-T  show tokens\n" );
     p1( "-P  show parser trace\n" );
     p1( "-I  show id table trace\n" );
@@ -1556,7 +1586,7 @@ int main( int ac, char** av )
     p1( "-S  dump symbol table\n" );
     p1( "-E  trace expressions\n" );
     p1( "-L  output line numbers in assembler (default)\n" );
-    p1( "-o  specify output file name\n" );
+    p1( "-o FILE  specify output file name\n" );
     return 0;
   }
   for( int i=1; i<ac; ++i )
