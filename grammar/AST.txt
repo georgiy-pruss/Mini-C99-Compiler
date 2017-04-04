@@ -1,27 +1,27 @@
-primary   @A_num int   @A_char int   @A_str s-id   // enum is also A_num
-          @A_fn f-id                               // if id is function
-          @A_var v-id                              // var, array, arg
+// AST is only for expressions, so it's expression tree (ET)
 
-call      @A_call fn 0
-          @A_call fn expr-list  -->  expr;0
-          @A_call fn expr-list  -->  expr;next --> expr;0
-          @A_call fn expr-list  -->  expr;next --> expr;next --> expr;0
+primary   @ET_num i-val   @ET_char i-val   @ET_str s-id   // enum is also ET_num
+          @ET_fn f-id                                     // if id is function
+          @ET_var v-id                                    // var, array, arg
 
-index     @A_index e1 e2
+call      @ET_call fn 0          // fn is @ET_fn f-id
+          @ET_call fn exprs
 
-unexpr    'i' expr   'd' expr       // ++x --x
-          'N' expr                  // -x
-          'D' expr                  // *x
+exprs     expr;0                 // i.e. a simple linked list of expr's
+          expr;exprs
+
+index     @ET_index e1 e2        // e1 can be var or expr giving T*
+
+unexpr    'i' expr   'd' expr    // ++x --x -- expr must be var or *x or x[y]
           '~' expr   '!' expr
+          @ET_neg expr           // -x
+          @ET_star expr          // *x
 
-term      @A_cast type+stars expr
+term      @ET_cast type+stars expr
 
 binop     '*' '/' '%' '+' '-' '<' '>' 'l' 'g' 'e' 'n' '&' '^' '|' 'a' 'o' '='
 
-expr      binop e1 e2
-
-
-vardef_or_expr can return list of exprs or expr... hm make difference!
+expr      binop e1 e2            // for '=' e1 must be var or *x or x[y]
 
 
 # vim: set syntax=ANTLR :
