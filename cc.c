@@ -808,13 +808,28 @@ void cg_expr( int* e )
   else if( e[0]=='=' )
   {
     // left side e[1] can be ET_var, ET_star, ET_index; the same for 'i' 'd'
+    int* e1 = (int*)e[1];
+    if( e1[0]==ET_var )
+    {
+      cg_expr( (int*)e[2] );
+      int id = st_id[e1[1]];
+      int v = st_value[e1[1]];
+      if( e1[1]>=st_local ) // local var
+      {
+        cg_o( "  mov DWORD PTR [ebp" ); cg_o( i2s(v) ); cg_o( "], eax # " );
+        cg_n( id_table[id] );
+      }
+      else // global var
+      {
+        cg_o( "  mov DWORD PTR _" ); cg_o( id_table[id] ); cg_n( ", eax" );
+      }
+    }
   }
   else if( e[0]==ET_var )
   {
     int id = st_id[e[1]];
     int k = st_kind[e[1]]; // TODO must be K_var, type...
     int v = st_value[e[1]];
-    p2( "e[1] ",i2s(e[1]) ); p2( "  st_count ",i2s(st_count) ); p2n( "  st_local ",i2s(st_local) );
     if( e[1]>=st_local ) // local var
     {
       cg_o( "  mov eax, DWORD PTR [ebp" ); cg_o( i2s(v) ); cg_o( "] # " );
@@ -1080,7 +1095,7 @@ int pa_arrayinit()            // TODO can be any expression?
   return t_(T);
 }
 
-int se_add_var( int id, int t, int dim, char* init )
+int se_add_var( int id, int t, int dim, int* init_exprs )
 {
   // init == 0 -- no init
   int k = K_array;
@@ -1091,26 +1106,35 @@ int se_add_var( int id, int t, int dim, char* init )
   if( se_level>0 )
   {
     se_local_offset = se_local_offset - varsz; // negative!
-    // TODO init
+    if( init_exprs )
+    {
+      if( k==K_var )
+      {
+        cg_expr( init_exprs );
+        cg_o( "  mov DWORD PTR [ebp" ); cg_o( i2s( se_local_offset ) );
+        cg_o( ", eax # init " ); cg_n( id_table[id] );
+      }
+      else // array
+      {
+        int n=0;
+        for( int* x=init_exprs; x && n<dim; ++n, x = (int*)x[1] )
+        {
+          cg_expr( (int*)x[0] );
+          cg_o( "  mov DWORD PTR [ebp" ); cg_o( i2s( se_local_offset+n*INTSZ ) ); // TODO char
+          if( n!=0 ) cg_n( ", eax" ); else { cg_o( ", eax # init " ); cg_n( id_table[id] ); }
+        }
+        for( ; n<dim; ++n )
+        {
+          cg_o( "  mov DWORD PTR [ebp" ); cg_o( i2s( se_local_offset+n*INTSZ ) ); // TODO char
+          cg_n( ", 0" );
+        }
+      }
+    }
     return st_add( id, t, K_var, se_local_offset, dim ); // local var
   }
-  int n;
-  if( init ) // TODO && value != 0
+  if( !init_exprs )
   {
-    n = st_add( id, t, K_var, se_data_offset, dim ); // global var in data section
-    se_data_offset = se_data_offset + varsz;
-    cg_o( "  .globl  _" ); cg_n( id_table[id] );
-    if( cg_section != S_DATA ) { cg_section = S_DATA; cg_n( "  .data" ); }
-    if( idealsz>=4 && cg_data_align!=0 ) { cg_n( "  .align 4" ); cg_data_align=0; }
-    cg_data_align = (cg_data_align+idealsz) % 4;
-    cg_o( "_" ); cg_o( id_table[id] ); cg_n( ":" );
-    cg_o( "  .long " ); cg_n( i2s((int)init) );
-    // TODO value; cg_data_   if chars; etc
-    // maybe .space ...
-  }
-  else
-  {
-    n = st_add( id, t, K_var, se_bss_offset+BSS_ORG, dim ); // global bss
+    int n = st_add( id, t, K_var, se_bss_offset+BSS_ORG, dim ); // global bss
     se_bss_offset = se_bss_offset + varsz;
     cg_o( "  .globl  _" ); cg_n( id_table[id] );
     if( cg_section != S_BSS ) { cg_section = S_BSS; cg_n( "  .bss" ); }
@@ -1118,7 +1142,18 @@ int se_add_var( int id, int t, int dim, char* init )
     cg_bss_align = (cg_bss_align+idealsz) % 4;
     cg_o( "_" ); cg_o( id_table[id] ); cg_n( ":" );
     cg_o( "  .space " ); cg_n( i2s(idealsz) );
+    return n;
   }
+  int n = st_add( id, t, K_var, se_data_offset, dim ); // global var in data section
+  se_data_offset = se_data_offset + varsz;
+  cg_o( "  .globl  _" ); cg_n( id_table[id] );
+  if( cg_section != S_DATA ) { cg_section = S_DATA; cg_n( "  .data" ); }
+  if( idealsz>=4 && cg_data_align!=0 ) { cg_n( "  .align 4" ); cg_data_align=0; }
+  cg_data_align = (cg_data_align+idealsz) % 4;
+  cg_o( "_" ); cg_o( id_table[id] ); cg_n( ":" );
+  cg_o( "  .long " ); cg_n( i2s((int)init_exprs) );
+  // TODO value; cg_data_   if chars; etc
+  // maybe .space ...
   return n;
 }
 
@@ -1135,20 +1170,20 @@ int pa_vartail()
   if( sc_tkn=='=' )
   {
     sc_next();
-    int* e = (int*)pa_expr(0);
-
-    if( ET_TRACE && e ) { p1("E:vt "); et_print( e ); p0n(); }
-
+    int* e;
     if( se_level==0 ) // must be calculable for globals
     {
-      if( e[0]==ET_num )
-        if( e[1]==0 ) // .bss
-          se_add_var( id, t, -1, 0 );
-        else
-          se_add_var( id, t, -1, (char*)e[1] );
+      e = (int*)pa_integer(); // returns se_value
+      if( !e ) return t_(F);
+      se_add_var( id, t, -1, (int*)se_value );
     }
     else
     {
+      e = (int*)pa_expr(0);
+      if( !e ) return t_(F);
+
+      if( ET_TRACE && e ) { p1("E:vt "); et_print( e ); p0n(); }
+
       int idx = se_add_var( id, t, -1, 0 );
       cg_expr( e );
       cg_o( "  mov DWORD PTR [ebp" ); cg_o( i2s(st_value[idx]) ); cg_o( "], eax # " );
@@ -1168,7 +1203,7 @@ int pa_vartail()
     if( sc_tkn!='=' ) return t_(F);
     sc_next();
     if( !pa_arrayinit() ) return t_(F);
-    se_add_var( id, t, se_items, "..." );
+    se_add_var( id, t, se_items, 0 ); // TODO init ints...
     return t_(T);
   }
   else // length is specified in [N]
@@ -1179,7 +1214,7 @@ int pa_vartail()
     sc_next();
     if( sc_tkn!='=' ) return t_(T); // no initialization
     sc_next();
-    return t_(pa_arrayinit());
+    return t_(pa_arrayinit()); // TODO init ints...
   }
 }
 
