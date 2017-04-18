@@ -844,14 +844,14 @@ void cg_expr( int* e )
       if( e1[1]>=st_local ) // local var
       {
         cg_o( "  mov DWORD PTR [ebp" ); if( v>0 ) cg_o( "+" );
-        cg_o( i2s(v) ); cg_o( "], eax # " );
-        cg_n( id_table[id] );
+        cg_o( i2s(v) ); cg_o( "], eax # " ); cg_n( id_table[id] );
       }
       else // global var
       {
         cg_o( "  mov DWORD PTR _" ); cg_o( id_table[id] ); cg_n( ", eax" );
       }
     }
+    // else TODO not simple var
   }
   else if( e[0]==ET_var )
   {
@@ -861,8 +861,7 @@ void cg_expr( int* e )
     if( e[1]>=st_local ) // local var
     {
       cg_o( "  mov eax, DWORD PTR [ebp" ); if( v>0 ) cg_o( "+" );
-      cg_o( i2s(v) ); cg_o( "] # " );
-      cg_n( id_table[id] );
+      cg_o( i2s(v) ); cg_o( "] # " ); cg_n( id_table[id] );
     }
     else // global var
     {
@@ -879,6 +878,33 @@ void cg_expr( int* e )
     cg_expr( (int*)e[1] );
     cg_n( "  not eax" );
   }
+  else if( e[0]=='!' )
+  {
+    cg_expr( (int*)e[1] );
+    cg_n( "  cmp eax, 0" );
+    cg_n( "  sete al" );
+    cg_n( "  movzx eax, al" );
+  }
+  else if( e[0]=='i' || e[0]=='d' )
+  {
+    char* cmd="  inc"; if( e[0]=='d' ) cmd="  dec";
+    int* e1 = (int*)e[1];
+    if( e1[0]==ET_var )
+    {
+      int id = st_id[e1[1]];
+      int v = st_value[e1[1]];
+      if( e1[1]>=st_local ) // local var
+      {
+        cg_o( cmd ); cg_o( " DWORD PTR [ebp" ); if( v>0 ) cg_o( "+" );
+        cg_o( i2s(v) ); cg_o( "] # " ); cg_n( id_table[id] );
+      }
+      else // global var
+      {
+        cg_o( cmd ); cg_o( " DWORD PTR _" ); cg_n( id_table[id] );
+      }
+    }
+    // else TODO not simple var
+  }
 
 
   else if( e[0]=='+' && ((int*)e[2])[0]==ET_num )
@@ -890,6 +916,39 @@ void cg_expr( int* e )
   {
     cg_expr( (int*)e[1] );
     cg_o( "  sub eax, " ); cg_n( i2s( ((int*)e[2])[1] ) );
+  }
+  else if( e[0]=='&' && ((int*)e[2])[0]==ET_num )
+  {
+    cg_expr( (int*)e[1] );
+    cg_o( "  and eax, " ); cg_n( i2s( ((int*)e[2])[1] ) );
+  }
+  else if( e[0]=='|' && ((int*)e[2])[0]==ET_num )
+  {
+    cg_expr( (int*)e[1] );
+    cg_o( "  or eax, " ); cg_n( i2s( ((int*)e[2])[1] ) );
+  }
+  else if( e[0]=='^' && ((int*)e[2])[0]==ET_num )
+  {
+    cg_expr( (int*)e[1] );
+    cg_o( "  xor eax, " ); cg_n( i2s( ((int*)e[2])[1] ) );
+  }
+  else if( e[0]=='*' && ((int*)e[2])[0]==ET_num )
+  {
+    cg_expr( (int*)e[1] );
+    cg_o( "  imul eax, " ); cg_n( i2s( ((int*)e[2])[1] ) );
+  }
+  else if( e[0]=='/' && ((int*)e[2])[0]==ET_num )
+  {
+    cg_expr( (int*)e[1] );
+    cg_n( "  cdq" );
+    cg_o( "  idiv eax, " ); cg_n( i2s( ((int*)e[2])[1] ) );
+  }
+  else if( e[0]=='%' && ((int*)e[2])[0]==ET_num )
+  {
+    cg_expr( (int*)e[1] );
+    cg_n( "  cdq" );
+    cg_o( "  idiv eax, " ); cg_n( i2s( ((int*)e[2])[1] ) );
+    cg_n( "  mov eax, edx" );
   }
 
   else
