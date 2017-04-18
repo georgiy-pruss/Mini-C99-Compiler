@@ -665,7 +665,12 @@ void et_print( int* e )
   else if( e[0]==ET_neg ) et_print( (int*)e[1] );
   else if( e[0]=='i'||e[0]=='d'||e[0]=='~'||e[0]=='!' ) et_print( (int*)e[1] );
   else { et_print( (int*)e[1] ); p1( " " ); et_print( (int*)e[2] ); }
-  p2(") R=", i2s(et_analyze_expr(e)) );
+  int r=et_analyze_expr(e);
+  if( r==0 ) p1(")");
+  else if( r==1 ) p1(")'");
+  else if( r==2 ) p1(")''");
+  else if( r==3 ) p1(")'''");
+  else p2(")^", i2s(r));
 }
 
 void et_print_exprs( int** x )
@@ -756,10 +761,10 @@ void cg_fn_begin( char* name )
   if( strequ( name, "main" ) ) cg_n( "  .def ___main; .scl 2; .type 32; .endef" );
   if( cg_section != S_CODE ) { cg_section = S_CODE; cg_n( "  .text" ); }
   cg_o( "  .globl _" ); cg_n( name );
-  cg_o( "  .def  _" ); cg_o( name ); cg_n( "; .scl 2; .type 32; .endef" );
+  cg_o( "  .def _" ); cg_o( name ); cg_n( "; .scl 2; .type 32; .endef" );
   cg_o( "_" ); cg_o( name ); cg_n( ":" );
   cg_n( "  .cfi_startproc" );
-  cg_n( "  push  ebp" );
+  cg_n( "  push ebp" );
   cg_n( "  .cfi_def_cfa_offset 8" );
   cg_n( "  .cfi_offset 5, -8" );
   cg_n( "  mov ebp, esp" );
@@ -838,7 +843,8 @@ void cg_expr( int* e )
       int v = st_value[e1[1]];
       if( e1[1]>=st_local ) // local var
       {
-        cg_o( "  mov DWORD PTR [ebp" ); cg_o( i2s(v) ); cg_o( "], eax # " );
+        cg_o( "  mov DWORD PTR [ebp" ); if( v>0 ) cg_o( "+" );
+        cg_o( i2s(v) ); cg_o( "], eax # " );
         cg_n( id_table[id] );
       }
       else // global var
@@ -854,7 +860,8 @@ void cg_expr( int* e )
     int v = st_value[e[1]];
     if( e[1]>=st_local ) // local var
     {
-      cg_o( "  mov eax, DWORD PTR [ebp" ); cg_o( i2s(v) ); cg_o( "] # " );
+      cg_o( "  mov eax, DWORD PTR [ebp" ); if( v>0 ) cg_o( "+" );
+      cg_o( i2s(v) ); cg_o( "] # " );
       cg_n( id_table[id] );
     }
     else // global var
@@ -862,6 +869,29 @@ void cg_expr( int* e )
       cg_o( "  mov eax, DWORD PTR _" ); cg_n( id_table[id] );
     }
   }
+  else if( e[0]==ET_neg )
+  {
+    cg_expr( (int*)e[1] );
+    cg_n( "  neg eax" );
+  }
+  else if( e[0]=='~' )
+  {
+    cg_expr( (int*)e[1] );
+    cg_n( "  not eax" );
+  }
+
+
+  else if( e[0]=='+' && ((int*)e[2])[0]==ET_num )
+  {
+    cg_expr( (int*)e[1] );
+    cg_o( "  add eax, " ); cg_n( i2s( ((int*)e[2])[1] ) );
+  }
+  else if( e[0]=='-' && ((int*)e[2])[0]==ET_num )
+  {
+    cg_expr( (int*)e[1] );
+    cg_o( "  sub eax, " ); cg_n( i2s( ((int*)e[2])[1] ) );
+  }
+
   else
     cg_n( "  mov eax, 0 # ...expr..." );
 }
@@ -1162,7 +1192,7 @@ int se_add_var( int id, int t, int dim, int init, int* init_exprs )
   {
     int n = st_add( id, t, K_var, se_bss_offset+BSS_ORG, dim ); // global bss
     se_bss_offset = se_bss_offset + varsz;
-    cg_o( "  .globl  _" ); cg_n( id_table[id] );
+    cg_o( "  .globl _" ); cg_n( id_table[id] );
     if( cg_section != S_BSS ) { cg_section = S_BSS; cg_n( "  .bss" ); }
     if( idealsz>=4 && cg_bss_align!=0 ) { cg_n( "  .align 4" ); cg_bss_align=0; }
     cg_bss_align = (cg_bss_align+idealsz) % 4;
@@ -1172,7 +1202,7 @@ int se_add_var( int id, int t, int dim, int init, int* init_exprs )
   }
   int n = st_add( id, t, K_var, se_data_offset, dim ); // global var in data section
   se_data_offset = se_data_offset + varsz;
-  cg_o( "  .globl  _" ); cg_n( id_table[id] );
+  cg_o( "  .globl _" ); cg_n( id_table[id] );
   if( cg_section != S_DATA ) { cg_section = S_DATA; cg_n( "  .data" ); }
   if( idealsz>=4 && cg_data_align!=0 ) { cg_n( "  .align 4" ); cg_data_align=0; }
   cg_data_align = (cg_data_align+idealsz) % 4;
@@ -1316,7 +1346,7 @@ int pa_argdef()
   int t = se_type + se_stars;
   if( sc_tkn!=Id ) return t_(F);
   ++se_arg_count;
-  st_add( sc_num, t, K_arg, se_arg_count, 0 );
+  st_add( sc_num, t, K_arg, se_arg_count*INTSZ+INTSZ, 0 );
   sc_next();
   return t_(T);
 }
@@ -1476,6 +1506,7 @@ int pa_stmt()
     if( e2 ) cg_expr( (int*)e2 ); // e2 - condition
     if( e2 ) { cg_o( "  jz E" ); cg_n( i2s( loop_label ) ); }
 
+    cg_n( "  # for-stmt" );
     int rc = pa_stmt();
     if( se_local_offset<se_max_l_offset) se_max_l_offset=se_local_offset; // negative!
     if( st_count>block_local_start ) // vars were defined in block
