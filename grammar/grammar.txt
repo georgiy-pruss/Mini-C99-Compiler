@@ -19,7 +19,7 @@ call_or_index : { '[' expr ']' | '(' [ exprs ] ')' }
 postfix : primary call_or_index          // no: postfix ++|--
 
 unexpr : '+''+' unexpr | '-''-' unexpr
-       | '-' term | '~' term | '!' term | '*' term  // no: &x
+       | '-' term | '~' term | '!' term | '*' term  // no: &x  sizeof x|(T)
        | postfix
 
 type : "int" | "char" // void is used only for function "result"
