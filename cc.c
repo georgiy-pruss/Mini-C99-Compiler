@@ -45,6 +45,8 @@ int is_abc( int c ) { return c>='a' && c<='z' || c>='A' && c<='Z' || c=='_'; }
 
 void memcopy( char* d, char* s, int n ) { for( ; n>0; ++d, ++s, --n ) *d = *s; }
 
+char* memchr( char* s, int c, int n ) { for( ; n>0; --n, ++s ) if( *s==c ) return s; return 0; }
+
 int strlen( char* s ) { char* b=s; while( *s ) ++s; return s-b; }
 
 char* strdup( char* s )
@@ -614,6 +616,10 @@ enum { ET_num  = Num, ET_char = Chr,  // + int; enum also gives ET_num
 // '~' '!'    // + expr  -- not-bin, not-log
 // '*' '/' '%' '+' '-' '<' '>' 'l' 'g' 'e' 'n' '&' '^' '|' 'a' 'o' '=' // + expr1 expr2
 
+// low 8 bits - expression kind/tag (ET_xxx)
+// high 24 bits - expression type (T_xxx)
+enum { ET_MASK=0377, ET_T=0400 }; // to get type - div ET_T, to add type - mul ET_T
+
 int* ET_1( int tag, int value )
 {
   int* r = (int*)malloc( 2*INTSZ ); r[0] = tag; r[1] = value; return r;
@@ -629,7 +635,7 @@ int et_analyze_expr( int* e )
   // check if it has calls -- then no reg optimization allowed (and <0 returned)
   // for other expressions, or binary ops (binop or index) -- then how many vars needed
   // also execute constant computations; 2 + 3 -> 5
-  int e0 = e[0];
+  int e0 = e[0] & ET_MASK;
   if( e0==ET_call ) return -100000; // it'll be negative after all returns as well
   if( e0==ET_num || e0==ET_char || e0==ET_str || e0==ET_var || e0==ET_fn ) return 0;
   if( e0==ET_cast || e0==ET_star || e0==ET_neg || e0=='i' || e0=='d' || e0=='~' || e0=='!' )
@@ -645,25 +651,26 @@ char* ET_TAG[] = {"","","Num","Chr","Str","Var","Fn","Call","Idx","Cast","Deref"
 
 void et_print( int* e )
 {
-  if( e[0]<' ' ) p3("(",ET_TAG[e[0]]," ");
-  else if( e[0]=='i' ) p1( "(++ " ); else if( e[0]=='d' ) p1( "(-- " );
-  else if( e[0]=='a' ) p1( "(&& " ); else if( e[0]=='o' ) p1( "(|| " );
-  else if( e[0]=='e' ) p1( "(== " ); else if( e[0]=='n' ) p1( "(!= " );
-  else if( e[0]=='l' ) p1( "(<= " ); else if( e[0]=='g' ) p1( "(>= " );
-  else { char s[2]; s[0]=(char)e[0]; s[1]='\0'; p3("(",s," "); }
-  if( e[0]==ET_num || e[0]==ET_char ) p1(i2s(e[1]));
-  else if( e[0]==ET_str ) p1(str_repr(sl_table[e[1]]));
-  else if( e[0]==ET_fn ) p1(id_table[st_id[e[1]]]);
-  else if( e[0]==ET_var ) p1(id_table[st_id[e[1]]]);
-  else if( e[0]==ET_call ) { et_print( (int*)e[1] ); p1( " [" );
+  int e0 = e[0] & ET_MASK;
+  if( e0<' ' ) p3("(",ET_TAG[e0]," ");
+  else if( e0=='i' ) p1( "(++ " ); else if( e0=='d' ) p1( "(-- " );
+  else if( e0=='a' ) p1( "(&& " ); else if( e0=='o' ) p1( "(|| " );
+  else if( e0=='e' ) p1( "(== " ); else if( e0=='n' ) p1( "(!= " );
+  else if( e0=='l' ) p1( "(<= " ); else if( e0=='g' ) p1( "(>= " );
+  else { char s[2]; s[0]=(char)e0; s[1]='\0'; p3("(",s," "); }
+  if( e0==ET_num || e0==ET_char ) p1(i2s(e[1]));
+  else if( e0==ET_str ) p1(str_repr(sl_table[e[1]]));
+  else if( e0==ET_fn ) p1(id_table[st_id[e[1]]]);
+  else if( e0==ET_var ) p1(id_table[st_id[e[1]]]);
+  else if( e0==ET_call ) { et_print( (int*)e[1] ); p1( " [" );
     for( int n=0, x=e[2]; x; ++n, x=((int*)x)[1] ) // = et_print_exprs
       { if(n>0)p1(" "); et_print( (int*)((int*)x)[0] ); }
     p1("]"); }
-  else if( e[0]==ET_index ) { et_print( (int*)e[1] ); p1( " " ); et_print( (int*)e[2] ); }
-  else if( e[0]==ET_cast ) { p1( st_type_str[e[1]] ); p1( " " ); et_print( (int*)e[2] ); }
-  else if( e[0]==ET_star ) et_print( (int*)e[1] );
-  else if( e[0]==ET_neg ) et_print( (int*)e[1] );
-  else if( e[0]=='i'||e[0]=='d'||e[0]=='~'||e[0]=='!' ) et_print( (int*)e[1] );
+  else if( e0==ET_index ) { et_print( (int*)e[1] ); p1( " " ); et_print( (int*)e[2] ); }
+  else if( e0==ET_cast ) { p1( st_type_str[e[1]] ); p1( " " ); et_print( (int*)e[2] ); }
+  else if( e0==ET_star ) et_print( (int*)e[1] );
+  else if( e0==ET_neg ) et_print( (int*)e[1] );
+  else if( e0=='i'||e0=='d'||e0=='~'||e0=='!' ) et_print( (int*)e[1] );
   else { et_print( (int*)e[1] ); p1( " " ); et_print( (int*)e[2] ); }
   int r=et_analyze_expr(e);
   if( r==0 ) p1(")");
@@ -675,7 +682,7 @@ void et_print( int* e )
 
 void et_print_exprs( int** x )
 {
-  for( int n=0; x; ++n, x = (int**)x[1] ) { if(n>0)p1(" "); et_print( x[0] ); } p1("]");
+  for( int n=0; x; ++n, x = (int**)x[1] ) { if(n>0)p1(" "); et_print( x[0] ); } p1n("]");
 }
 
 // Code generation -------------------------------------------------------------
@@ -814,143 +821,121 @@ void cg_sl_table()
 
 int cg_exprs( int** x, int backwards_with_push );
 
+char* cg_var( int e1 ) // generate fragment, return name
+{
+  int id = st_id[e1];
+  if( e1<st_local ) { cg_o( "DWORD PTR _" ); cg_o( id_table[id] ); return 0; }
+  int v = st_value[e1]; // local var
+  cg_o( "DWORD PTR [ebp" ); if( v>0 ) cg_o( "+" ); cg_o( i2s(v) ); cg_o( "]" );
+  return id_table[id];
+}
+
 void cg_expr( int* e )
 {
-  if( e[0]==ET_num || e[0]==ET_char )
+  int e0 = e[0] & ET_MASK;
+  if( e0==ET_num || e0==ET_char )
   {
     cg_o( "  mov eax, " );
     cg_n( i2s(e[1]) );
   }
-  else if( e[0]==ET_str )
+  else if( e0==ET_str )
   {
     cg_o( "  mov eax, OFFSET FLAT:S" );
     cg_n( i2s(e[1]) );
   }
-  else if( e[0]==ET_call && ((int*)e[1])[0]==ET_fn )
+  else if( e0==ET_call && ((int*)e[1])[0]==ET_fn )
   {
     int n = cg_exprs( (int**)e[2], 1 );
     cg_o( "  call _" ); cg_n( id_table[st_id[((int*)e[1])[1]]] );
     if( n>0 ) { cg_o( "  add esp, " ); cg_n( i2s( INTSZ*n ) ); }
   }
-  else if( e[0]=='=' )
+  else if( e0=='=' )
   {
     // left side e[1] can be ET_var, ET_star, ET_index; the same for 'i' 'd'
     int* e1 = (int*)e[1];
     if( e1[0]==ET_var )
     {
       cg_expr( (int*)e[2] );
-      int id = st_id[e1[1]];
-      int v = st_value[e1[1]];
-      if( e1[1]>=st_local ) // local var
-      {
-        cg_o( "  mov DWORD PTR [ebp" ); if( v>0 ) cg_o( "+" );
-        cg_o( i2s(v) ); cg_o( "], eax # " ); cg_n( id_table[id] );
-      }
-      else // global var
-      {
-        cg_o( "  mov DWORD PTR _" ); cg_o( id_table[id] ); cg_n( ", eax" );
-      }
+      cg_o( "  mov " );
+      char* name = cg_var( e1[1] );
+      cg_o( ", eax" );
+      if( name ) { cg_o( " # " ); cg_n( name ); } else cg_n( "" );
     }
     // else TODO not simple var
   }
-  else if( e[0]==ET_var )
+  else if( e0==ET_var )
   {
-    int id = st_id[e[1]];
-    int k = st_kind[e[1]]; // TODO must be K_var, type...
-    int v = st_value[e[1]];
-    if( e[1]>=st_local ) // local var
-    {
-      cg_o( "  mov eax, DWORD PTR [ebp" ); if( v>0 ) cg_o( "+" );
-      cg_o( i2s(v) ); cg_o( "] # " ); cg_n( id_table[id] );
-    }
-    else // global var
-    {
-      cg_o( "  mov eax, DWORD PTR _" ); cg_n( id_table[id] );
-    }
+    cg_o( "  mov eax, " );
+    char* name = cg_var( e[1] );
+    if( name ) { cg_o( " # " ); cg_n( name ); } else cg_n( "" );
   }
-  else if( e[0]==ET_neg )
+  else if( e0==ET_neg )
   {
     cg_expr( (int*)e[1] );
     cg_n( "  neg eax" );
   }
-  else if( e[0]=='~' )
+  else if( e0=='~' )
   {
     cg_expr( (int*)e[1] );
     cg_n( "  not eax" );
   }
-  else if( e[0]=='!' )
+  else if( e0=='!' )
   {
     cg_expr( (int*)e[1] );
     cg_n( "  cmp eax, 0" );
     cg_n( "  sete al" );
     cg_n( "  movzx eax, al" );
   }
-  else if( e[0]=='i' || e[0]=='d' )
+  else if( e0=='i' || e0=='d' )
   {
-    char* cmd="  inc"; if( e[0]=='d' ) cmd="  dec";
+    char* cmd="  inc "; if( e0=='d' ) cmd="  dec ";
     int* e1 = (int*)e[1];
     if( e1[0]==ET_var )
     {
-      int id = st_id[e1[1]];
-      int v = st_value[e1[1]];
-      if( e1[1]>=st_local ) // local var
-      {
-        cg_o( cmd ); cg_o( " DWORD PTR [ebp" ); if( v>0 ) cg_o( "+" );
-        cg_o( i2s(v) ); cg_o( "] # " ); cg_n( id_table[id] );
-      }
-      else // global var
-      {
-        cg_o( cmd ); cg_o( " DWORD PTR _" ); cg_n( id_table[id] );
-      }
+      cg_o( cmd );
+      char* name = cg_var( e1[1] );
+      if( name ) { cg_o( " # " ); cg_n( name ); } else cg_n( "" );
     }
     // else TODO not simple var
   }
 
-
-  else if( e[0]=='+' && ((int*)e[2])[0]==ET_num )
+  else if( memchr( "+-&|^*/%", e0, 8 ) )
   {
-    cg_expr( (int*)e[1] );
-    cg_o( "  add eax, " ); cg_n( i2s( ((int*)e[2])[1] ) );
+    int e2et = ((int*)e[2])[0] & ET_MASK;
+    if( e2et == ET_num || e2et==ET_char || e2et == ET_var )
+    {
+      cg_expr( (int*)e[1] );
+      if(      e0=='+' ) cg_o( "  add eax, " );
+      else if( e0=='-' ) cg_o( "  sub eax, " );
+      else if( e0=='*' ) cg_o( "  imul eax, " );
+      else if( e0=='&' ) cg_o( "  and eax, " );
+      else if( e0=='|' ) cg_o( "  or eax, " );
+      else if( e0=='^' ) cg_o( "  xor eax, " );
+      else /* / % */   { cg_n( "  cdq" ); cg_o( "  idiv eax, " ); }
+      if( e2et == ET_var )
+      {
+        char* name = cg_var( ((int*)e[2])[1] );
+        if( name ) { cg_o( " # " ); cg_n( name ); } else cg_n( "" );
+      }
+      else // ET_num|char
+        cg_n( i2s( ((int*)e[2])[1] ) );
+    }
+    else // some complex expression
+    {
+      cg_expr( (int*)e[2] );
+      cg_n( "  push eax" );
+      cg_expr( (int*)e[1] );
+      cg_n( "  pop ebx" );
+      if(      e0=='+' ) cg_n( "  add eax, ebx" );
+      else if( e0=='-' ) cg_n( "  sub eax, ebx" );
+      else if( e0=='*' ) cg_n( "  imul eax, ebx" );
+      else if( e0=='&' ) cg_n( "  and eax, ebx" );
+      else if( e0=='|' ) cg_n( "  or eax, ebx" );
+      else if( e0=='^' ) cg_n( "  xor eax, ebx" );
+      else /* / % */   { cg_n( "  cdq" ); cg_n( "  idiv eax, ebx" ); }
+    }
+    if( e0=='%' ) cg_n( "  mov eax, edx" );
   }
-  else if( e[0]=='-' && ((int*)e[2])[0]==ET_num )
-  {
-    cg_expr( (int*)e[1] );
-    cg_o( "  sub eax, " ); cg_n( i2s( ((int*)e[2])[1] ) );
-  }
-  else if( e[0]=='&' && ((int*)e[2])[0]==ET_num )
-  {
-    cg_expr( (int*)e[1] );
-    cg_o( "  and eax, " ); cg_n( i2s( ((int*)e[2])[1] ) );
-  }
-  else if( e[0]=='|' && ((int*)e[2])[0]==ET_num )
-  {
-    cg_expr( (int*)e[1] );
-    cg_o( "  or eax, " ); cg_n( i2s( ((int*)e[2])[1] ) );
-  }
-  else if( e[0]=='^' && ((int*)e[2])[0]==ET_num )
-  {
-    cg_expr( (int*)e[1] );
-    cg_o( "  xor eax, " ); cg_n( i2s( ((int*)e[2])[1] ) );
-  }
-  else if( e[0]=='*' && ((int*)e[2])[0]==ET_num )
-  {
-    cg_expr( (int*)e[1] );
-    cg_o( "  imul eax, " ); cg_n( i2s( ((int*)e[2])[1] ) );
-  }
-  else if( e[0]=='/' && ((int*)e[2])[0]==ET_num )
-  {
-    cg_expr( (int*)e[1] );
-    cg_n( "  cdq" );
-    cg_o( "  idiv eax, " ); cg_n( i2s( ((int*)e[2])[1] ) );
-  }
-  else if( e[0]=='%' && ((int*)e[2])[0]==ET_num )
-  {
-    cg_expr( (int*)e[1] );
-    cg_n( "  cdq" );
-    cg_o( "  idiv eax, " ); cg_n( i2s( ((int*)e[2])[1] ) );
-    cg_n( "  mov eax, edx" );
-  }
-
   else
     cg_n( "  mov eax, 0 # ...expr..." );
 }
