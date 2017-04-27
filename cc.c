@@ -880,18 +880,31 @@ void cg_expr( int* e )
   }
   else if( e0=='=' )
   {
-    // left side e[1] can be ET_var, TODO ET_star, TODO ET_index
     int* e1 = (int*)e[1];
     if( e1[0]==ET_var )
     {
-      if( st_kind[e1[1]]==K_array ) err2( "Can't assign to array ", id_table[st_id[e1[1]]] );
+      if( st_kind[e1[1]]==K_array ) err2( "Can't assign to array: ", id_table[st_id[e1[1]]] );
       cg_expr( (int*)e[2] );
       cg_o( "  mov " );
       char* name = cg_var( e1[1] );
       cg_o( ",eax" );
       if( name ) { cg_o( " # " ); cg_n( name ); } else cg_n( "" );
     }
-    // else TODO not simple var
+    else if( e1[0]==ET_star )
+    {
+      cg_expr( (int*)e1[1] );
+      cg_n( "  push eax" );
+      cg_expr( (int*)e[2] );
+      cg_n( "  pop ebx" );
+      cg_n( "  mov DWORD PTR [ebx],eax" );
+    }
+    else if( e1[0]==ET_index ) // TODO
+    {
+      cg_expr( (int*)e[2] );
+      cg_n( "  # x[y] = z" );
+    }
+    else
+      err1( "Wrong expression on left of '='" );
   }
   else if( e0==ET_var ) // TODO but if it's array...
   {
