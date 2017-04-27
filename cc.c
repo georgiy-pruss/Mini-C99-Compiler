@@ -1,8 +1,9 @@
-// cc.c -- self-compiling C compiler - 2017 (C) G.Pruss
+// cc.c -- self-compiling C compiler
+// Copyright (C) 2017 Georgiy Pruss
+// https://github.com/georgiy-pruss/Mini-C99-Compiler
 // gcc -fno-builtin-malloc -fno-builtin-strlen -O2 cc.c -o cc.exe
 // -std=c99 is default in gcc
 
-// TODO labels for && and ||
 // TODO expressions; lvalue for = ++ --; initializers, strings and arrays as values
 // TODO exprs in vardef_of_expr to allow for( i=1,j=2; ... ) and ++i, f(i), a=b;
 
