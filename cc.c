@@ -6,7 +6,7 @@
 // TODO expressions; lvalue for = ++ --; initializers, strings and arrays as values
 // TODO exprs in vardef_of_expr to allow for( i=1,j=2; ... ) and ++i, f(i), a=b;
 
-char* TITLE = "Georgiy Pruss CC 0.0.3+";
+char* TITLE = "Georgiy Pruss CC 0.0.4";
 
 // Parameters ------------------------------------------------------------------
 
@@ -773,18 +773,18 @@ void cg_fn_begin( char* name )
   cg_n( "  .cfi_startproc" );
   cg_n( "  push ebp" );
   cg_n( "  .cfi_def_cfa_offset 8" );
-  cg_n( "  .cfi_offset 5, -8" );
-  cg_n( "  mov ebp, esp" );
+  cg_n( "  .cfi_offset 5,-8" );
+  cg_n( "  mov ebp,esp" );
   cg_n( "  .cfi_def_cfa_register 5" );
 }
 
 void cg_fn_end( int ret0 )
 {
-  if( ret0 ) cg_n( "  mov eax, 0" );
+  if( ret0 ) cg_n( "  mov eax,0" );
   cg_o( "R" ); cg_o( i2s( cg_fn_label ) ); cg_n( ":" );
   cg_n( "  leave" );
   cg_n( "  .cfi_restore 5" );
-  cg_n( "  .cfi_def_cfa 4, 4" );
+  cg_n( "  .cfi_def_cfa 4,4" );
   cg_n( "  ret" );
   cg_n( "  .cfi_endproc\n" );
 }
@@ -835,19 +835,19 @@ void cg_expr( int* e )
   int e0 = e[0] & ET_MASK;
   if( e0==ET_num || e0==ET_char )
   {
-    cg_o( "  mov eax, " );
+    cg_o( "  mov eax," );
     cg_n( i2s(e[1]) );
   }
   else if( e0==ET_str )
   {
-    cg_o( "  mov eax, OFFSET FLAT:S" );
+    cg_o( "  mov eax,OFFSET FLAT:S" );
     cg_n( i2s(e[1]) );
   }
   else if( e0==ET_call && ((int*)e[1])[0]==ET_fn )
   {
     int n = cg_exprs( (int**)e[2], 1 );
     cg_o( "  call _" ); cg_n( id_table[st_id[((int*)e[1])[1]]] );
-    if( n>0 ) { cg_o( "  add esp, " ); cg_n( i2s( INTSZ*n ) ); }
+    if( n>0 ) { cg_o( "  add esp," ); cg_n( i2s( INTSZ*n ) ); }
   }
   else if( e0=='=' )
   {
@@ -858,14 +858,14 @@ void cg_expr( int* e )
       cg_expr( (int*)e[2] );
       cg_o( "  mov " );
       char* name = cg_var( e1[1] );
-      cg_o( ", eax" );
+      cg_o( ",eax" );
       if( name ) { cg_o( " # " ); cg_n( name ); } else cg_n( "" );
     }
     // else TODO not simple var
   }
   else if( e0==ET_var )
   {
-    cg_o( "  mov eax, " );
+    cg_o( "  mov eax," );
     char* name = cg_var( e[1] );
     if( name ) { cg_o( " # " ); cg_n( name ); } else cg_n( "" );
   }
@@ -882,9 +882,9 @@ void cg_expr( int* e )
   else if( e0=='!' )
   {
     cg_expr( (int*)e[1] );
-    cg_n( "  cmp eax, 0" );
+    cg_n( "  cmp eax,0" );
     cg_n( "  sete al" );
-    cg_n( "  movzx eax, al" );
+    cg_n( "  movzx eax,al" );
   }
   else if( e0=='i' || e0=='d' )
   {
@@ -898,20 +898,14 @@ void cg_expr( int* e )
     }
     // else TODO not simple var
   }
-
-  else if( memchr( "+-&|^*/%", e0, 8 ) )
+  else if( memchr( "<>lgen", e0, 6 ) )
   {
     int e2et = ((int*)e[2])[0] & ET_MASK;
     if( e2et == ET_num || e2et==ET_char || e2et == ET_var )
     {
       cg_expr( (int*)e[1] );
-      if(      e0=='+' ) cg_o( "  add eax, " );
-      else if( e0=='-' ) cg_o( "  sub eax, " );
-      else if( e0=='*' ) cg_o( "  imul eax, " );
-      else if( e0=='&' ) cg_o( "  and eax, " );
-      else if( e0=='|' ) cg_o( "  or eax, " );
-      else if( e0=='^' ) cg_o( "  xor eax, " );
-      else /* / % */   { cg_n( "  cdq" ); cg_o( "  idiv eax, " ); }
+      cg_o( "  cmp eax," );
+
       if( e2et == ET_var )
       {
         char* name = cg_var( ((int*)e[2])[1] );
@@ -926,18 +920,54 @@ void cg_expr( int* e )
       cg_n( "  push eax" );
       cg_expr( (int*)e[1] );
       cg_n( "  pop ebx" );
-      if(      e0=='+' ) cg_n( "  add eax, ebx" );
-      else if( e0=='-' ) cg_n( "  sub eax, ebx" );
-      else if( e0=='*' ) cg_n( "  imul eax, ebx" );
-      else if( e0=='&' ) cg_n( "  and eax, ebx" );
-      else if( e0=='|' ) cg_n( "  or eax, ebx" );
-      else if( e0=='^' ) cg_n( "  xor eax, ebx" );
-      else /* / % */   { cg_n( "  cdq" ); cg_n( "  idiv eax, ebx" ); }
+      cg_n( "  cmp eax,ebx" );
     }
-    if( e0=='%' ) cg_n( "  mov eax, edx" );
+    char* o="ne";
+    if( e0=='e' ) o="e"; else if( e0=='<' ) o="l"; else if( e0=='>' ) o="g";
+    else if( e0=='l' ) o="le"; else if( e0=='g' ) o="ge";
+    cg_o( "  set" ); cg_o( o ); cg_n( " al" );
+    cg_n( "  movzx eax,al" );
+  }
+  else if( memchr( "+-&|^*/%", e0, 8 ) )
+  {
+    int e2et = ((int*)e[2])[0] & ET_MASK;
+    if( e2et == ET_num || e2et==ET_char || e2et == ET_var )
+    {
+      cg_expr( (int*)e[1] );
+      if(      e0=='+' ) cg_o( "  add eax," );
+      else if( e0=='-' ) cg_o( "  sub eax," );
+      else if( e0=='*' ) cg_o( "  imul eax," );
+      else if( e0=='&' ) cg_o( "  and eax," );
+      else if( e0=='|' ) cg_o( "  or eax," );
+      else if( e0=='^' ) cg_o( "  xor eax," );
+      else /* / % */   { cg_n( "  cdq" ); cg_o( "  idiv eax," ); }
+
+      if( e2et == ET_var )
+      {
+        char* name = cg_var( ((int*)e[2])[1] );
+        if( name ) { cg_o( " # " ); cg_n( name ); } else cg_n( "" );
+      }
+      else // ET_num|char
+        cg_n( i2s( ((int*)e[2])[1] ) );
+    }
+    else // some complex expression
+    {
+      cg_expr( (int*)e[2] );
+      cg_n( "  push eax" );
+      cg_expr( (int*)e[1] );
+      cg_n( "  pop ebx" );
+      if(      e0=='+' ) cg_n( "  add eax,ebx" );
+      else if( e0=='-' ) cg_n( "  sub eax,ebx" );
+      else if( e0=='*' ) cg_n( "  imul eax,ebx" );
+      else if( e0=='&' ) cg_n( "  and eax,ebx" );
+      else if( e0=='|' ) cg_n( "  or eax,ebx" );
+      else if( e0=='^' ) cg_n( "  xor eax,ebx" );
+      else /* / % */   { cg_n( "  cdq" ); cg_n( "  idiv eax,ebx" ); }
+    }
+    if( e0=='%' ) cg_n( "  mov eax,edx" );
   }
   else
-    cg_n( "  mov eax, 0 # ...expr..." );
+    cg_n( "  mov eax,0 # ...expr..." );
 }
 
 int cg_exprs( int** x, int backwards_with_push ) // return number of exprs
@@ -1211,7 +1241,7 @@ int se_add_var( int id, int t, int dim, int init, int* init_exprs )
         cg_expr( init_exprs );
         // TODO check type
         cg_o( "  mov DWORD PTR [ebp" ); cg_o( i2s( se_local_offset ) );
-        cg_o( ", eax # init " ); cg_n( id_table[id] );
+        cg_o( ",eax # init " ); cg_n( id_table[id] );
       }
       else // array
       {
@@ -1220,12 +1250,12 @@ int se_add_var( int id, int t, int dim, int init, int* init_exprs )
         {
           cg_expr( (int*)x[0] );
           cg_o( "  mov DWORD PTR [ebp" ); cg_o( i2s( se_local_offset+n*INTSZ ) ); // TODO char
-          if( n!=0 ) cg_n( ", eax" ); else { cg_o( ", eax # init " ); cg_n( id_table[id] ); }
+          if( n!=0 ) cg_n( ",eax" ); else { cg_o( ",eax # init " ); cg_n( id_table[id] ); }
         }
         for( ; n<dim; ++n )
         {
           cg_o( "  mov DWORD PTR [ebp" ); cg_o( i2s( se_local_offset+n*INTSZ ) ); // TODO char
-          cg_n( ", 0" );
+          cg_n( ",0" );
         }
       }
     }
@@ -1307,7 +1337,7 @@ int pa_vartail()
 
       int idx = se_add_var( id, t, -1, 0, 0 ); // TODO
       cg_expr( e );
-      cg_o( "  mov DWORD PTR [ebp" ); cg_o( i2s(st_value[idx]) ); cg_o( "], eax # " );
+      cg_o( "  mov DWORD PTR [ebp" ); cg_o( i2s(st_value[idx]) ); cg_o( "],eax # " );
       cg_n( id_table[id] );
     }
     return t_(T);
@@ -1465,7 +1495,9 @@ int pa_stmt()
     sc_next(); if( sc_tkn!='(' ) return t_(F);
     cg_o( "L" ); cg_o( i2s( loop_label ) ); cg_n( ":" );
     sc_next(); if( !(c = pa_expr(0)) || sc_tkn!=')' ) return t_(F);
+    // TODO cg_cond( c, "E", loop_label );
     cg_expr( (int*)c );
+    cg_n( "  test eax,eax" );
     cg_o( "  jz E" ); cg_n( i2s( loop_label ) );
 
     if( ET_TRACE && c ) { p1( "E:wh " ); et_print( (int*)c ); p0n(); }
@@ -1484,7 +1516,9 @@ int pa_stmt()
     int if_label = cg_new_label();
     sc_next(); if( sc_tkn!='(' ) return t_(F);
     sc_next(); if( !(c = pa_expr(0)) || sc_tkn!=')' ) return t_(F);
+    // TODO cg_cond( c, "J", if_label );
     cg_expr( (int*)c );
+    cg_n( "  test eax,eax" );
     cg_o( "  jz J" ); cg_n( i2s( if_label ) ); // jump if false
 
     if( ET_TRACE && c ) { p1( "E:if " ); et_print( (int*)c ); p0n(); }
@@ -1493,12 +1527,12 @@ int pa_stmt()
     sc_next(); if( !pa_stmt() ) return t_(F);
     if( sc_tkn==Kw+Else )
     {
-      cg_o( "  jmp K" ); cg_n( i2s( if_label ) );
+      cg_o( "  jmp Z" ); cg_n( i2s( if_label ) );
       cg_o( "J" ); cg_o( i2s( if_label ) ); cg_n( ":" );
       sc_next();
       cg_n( "  # else-stmt" );
       if( !pa_stmt() ) return t_(F);
-      cg_o( "K" ); cg_o( i2s( if_label ) ); cg_n( ":" );
+      cg_o( "Z" ); cg_o( i2s( if_label ) ); cg_n( ":" );
     }
     else // no else part
     {
@@ -1547,9 +1581,12 @@ int pa_stmt()
     cg_o( "P" ); cg_o( i2s( loop_label ) ); cg_n( ":" );
     if( e3 ) cg_n( "  # for-post" ); // e3
     cg_o( "C" ); cg_o( i2s( loop_label ) ); cg_n( ":" );
-    if( e2 ) cg_expr( (int*)e2 ); // e2 - condition
-    if( e2 ) { cg_o( "  jz E" ); cg_n( i2s( loop_label ) ); }
-
+    if( e2 )
+    {
+      cg_expr( (int*)e2 ); // e2 - condition
+      cg_n( "  test eax,eax" );
+      cg_o( "  jz E" ); cg_n( i2s( loop_label ) );
+    }
     cg_n( "  # for-stmt" );
     int rc = pa_stmt();
     if( se_local_offset<se_max_l_offset) se_max_l_offset=se_local_offset; // negative!
