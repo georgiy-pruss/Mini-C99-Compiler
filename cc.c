@@ -632,6 +632,8 @@ int* ET_2( int tag, int value1, int value2 )
 
 int et_analyze_expr( int* e )
 {
+  // let's use it not for expression "level" but to calculate types!
+
   // check if it has calls -- then no reg optimization allowed (and <0 returned)
   // for other expressions, or binary ops (binop or index) -- then how many vars needed
   // also execute constant computations; 2 + 3 -> 5
@@ -640,10 +642,7 @@ int et_analyze_expr( int* e )
   if( e0==ET_num || e0==ET_char || e0==ET_str || e0==ET_var || e0==ET_fn ) return 0;
   if( e0==ET_cast || e0==ET_star || e0==ET_neg || e0=='i' || e0=='d' || e0=='~' || e0=='!' )
     return et_analyze_expr( (int*)e[1] );
-  //if( e0==ET_index ||
-  //    e0=='*' || e0=='/' || e0=='%' || e0=='+' || e0=='-' || e0=='<' || e0=='>' ||
-  //    e0=='l' || e0=='g' || e0=='e' || e0=='n' || e0=='&' || e0=='^' || e0=='|' ||
-  //    e0=='a' || e0=='o' || e0=='=' )
+  //if( e0==ET_index || memchr( "*/%+-<>lgen&^|ao=", e0, 17 ) ) ...
   return et_analyze_expr( (int*)e[1] ) + 1 + et_analyze_expr( (int*)e[2] );
 }
 
