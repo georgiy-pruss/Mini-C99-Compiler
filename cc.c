@@ -819,8 +819,6 @@ void cg_sl_table()
   }
 }
 
-int cg_exprs( int** x, int backwards_with_push );
-
 char* cg_var( int e1 ) // generate fragment, return name
 {
   int id = st_id[e1];
@@ -829,6 +827,19 @@ char* cg_var( int e1 ) // generate fragment, return name
   cg_o( "DWORD PTR [ebp" ); if( v>0 ) cg_o( "+" ); cg_o( i2s(v) ); cg_o( "]" );
   return id_table[id];
 }
+
+void cg_simple_item( int e2et, int e21 ) // number or var
+{
+  if( e2et != ET_var )
+    cg_n( i2s( e21 ) );
+  else // ET_num|char
+  {
+    char* name = cg_var( e21 );
+    if( name ) { cg_o( " # " ); cg_n( name ); } else cg_n( "" );
+  }
+}
+
+int cg_exprs( int** x, int backwards_with_push );
 
 void cg_expr( int* e )
 {
@@ -851,7 +862,7 @@ void cg_expr( int* e )
   }
   else if( e0=='=' )
   {
-    // left side e[1] can be ET_var, ET_star, ET_index; the same for 'i' 'd'
+    // left side e[1] can be ET_var, TODO ET_star, TODO ET_index
     int* e1 = (int*)e[1];
     if( e1[0]==ET_var )
     {
@@ -863,11 +874,15 @@ void cg_expr( int* e )
     }
     // else TODO not simple var
   }
-  else if( e0==ET_var )
+  else if( e0==ET_var ) // TODO but if it's array...
   {
     cg_o( "  mov eax," );
     char* name = cg_var( e[1] );
     if( name ) { cg_o( " # " ); cg_n( name ); } else cg_n( "" );
+    // XXX DEBUG ...
+    p2n( "var     ", name );
+    p2n( "st_kind ", st_kind_str[st_kind[e[1]]] ); // Enum Var Array Arg Fn
+    p2n( "st_type ", st_type_str[st_type[e[1]]] ); // Void Char Char* Char** Int Int* Int**
   }
   else if( e0==ET_neg )
   {
@@ -888,6 +903,7 @@ void cg_expr( int* e )
   }
   else if( e0=='i' || e0=='d' )
   {
+    // left side e[1] can be ET_var, TODO ET_star, TODO ET_index
     char* cmd="  inc "; if( e0=='d' ) cmd="  dec ";
     int* e1 = (int*)e[1];
     if( e1[0]==ET_var )
@@ -905,14 +921,7 @@ void cg_expr( int* e )
     {
       cg_expr( (int*)e[1] );
       cg_o( "  cmp eax," );
-
-      if( e2et == ET_var )
-      {
-        char* name = cg_var( ((int*)e[2])[1] );
-        if( name ) { cg_o( " # " ); cg_n( name ); } else cg_n( "" );
-      }
-      else // ET_num|char
-        cg_n( i2s( ((int*)e[2])[1] ) );
+      cg_simple_item( e2et, ((int*)e[2])[1] );
     }
     else // some complex expression
     {
@@ -941,14 +950,7 @@ void cg_expr( int* e )
       else if( e0=='|' ) cg_o( "  or eax," );
       else if( e0=='^' ) cg_o( "  xor eax," );
       else /* / % */   { cg_n( "  cdq" ); cg_o( "  idiv eax," ); }
-
-      if( e2et == ET_var )
-      {
-        char* name = cg_var( ((int*)e[2])[1] );
-        if( name ) { cg_o( " # " ); cg_n( name ); } else cg_n( "" );
-      }
-      else // ET_num|char
-        cg_n( i2s( ((int*)e[2])[1] ) );
+      cg_simple_item( e2et, ((int*)e[2])[1] );
     }
     else // some complex expression
     {
@@ -965,6 +967,36 @@ void cg_expr( int* e )
       else /* / % */   { cg_n( "  cdq" ); cg_n( "  idiv eax,ebx" ); }
     }
     if( e0=='%' ) cg_n( "  mov eax,edx" );
+  }
+  else if( e0=='a' ) // &&
+  {
+    int and_label = cg_new_label();
+    cg_expr( (int*)e[1] );
+    cg_n( "  cmp eax,0" );
+    cg_n( "  setne al" );
+    cg_n( "  movzx eax,al" );
+    cg_n( "  test eax,eax" );
+    cg_o( "  jz A" ); cg_n( i2s( and_label ) );
+    cg_expr( (int*)e[2] );
+    cg_n( "  cmp eax,0" );
+    cg_n( "  setne al" );
+    cg_n( "  movzx eax,al" );
+    cg_o( "A" ); cg_o( i2s( and_label ) ); cg_n( ":" );
+  }
+  else if( e0=='o' ) // ||
+  {
+    int or_label = cg_new_label();
+    cg_expr( (int*)e[1] );
+    cg_n( "  cmp eax,0" );
+    cg_n( "  setne al" );
+    cg_n( "  movzx eax,al" );
+    cg_n( "  test eax,eax" );
+    cg_o( "  jnz O" ); cg_n( i2s( or_label ) );
+    cg_expr( (int*)e[2] );
+    cg_n( "  cmp eax,0" );
+    cg_n( "  setne al" );
+    cg_n( "  movzx eax,al" );
+    cg_o( "O" ); cg_o( i2s( or_label ) ); cg_n( ":" );
   }
   else
     cg_n( "  mov eax,0 # ...expr..." );
@@ -1259,7 +1291,7 @@ int se_add_var( int id, int t, int dim, int init, int* init_exprs )
         }
       }
     }
-    return st_add( id, t, K_var, se_local_offset, dim ); // local var
+    return st_add( id, t, k, se_local_offset, dim ); // local var
   }
   // global var
   if( init==0 || init==Num && init_exprs==0 )
@@ -1579,7 +1611,7 @@ int pa_stmt()
     if( e1 ) cg_n( "  # for-init" ); // e1
     if( e3 ) { cg_o( "  jmp C" ); cg_n( i2s( loop_label ) ); }
     cg_o( "P" ); cg_o( i2s( loop_label ) ); cg_n( ":" );
-    if( e3 ) cg_n( "  # for-post" ); // e3
+    if( e3 ) cg_exprs( (int**)e3, 0 ); // e3 - post expressions
     cg_o( "C" ); cg_o( i2s( loop_label ) ); cg_n( ":" );
     if( e2 )
     {
@@ -1684,10 +1716,10 @@ int pa_func()
     if( se_max_l_offset < 0 ) // it's negative!
     {
       char cmd[32];
-      memcopy( cmd, "  sub esp, ", 11 );
+      memcopy( cmd, "  sub esp,", 10 );
       char* number = i2s(-se_max_l_offset); int nn = strlen(number);
-      memcopy( cmd+11, number, nn );
-      memcopy( cmd+11+nn, "\n", 2 ); // with ending '\0'
+      memcopy( cmd+10, number, nn );
+      memcopy( cmd+10+nn, "\n", 2 ); // with ending '\0'
       cg_resume( cmd );
     }
     else
@@ -1748,15 +1780,12 @@ int pa_decl_or_def()
   return t_(pa_func());
 }
 
-int pa_program( char* fn )
+int pa_program()
 {
   t1("pa_program");
-  rd_file = open( fn, O_RDONLY, 0 );
-  if( rd_file<=0 ) return t_(F);
   int rc = T;
   sc_next(); // start parsing<-scanning<-reading
   while( sc_tkn!=Eof ) if( !pa_decl_or_def() ) { rc = F; break; }
-  close( rd_file );
   return t_(rc);
 }
 
@@ -1800,6 +1829,8 @@ int main( int ac, char** av )
     }
 
   if( !filename ) { p1( "No input file\n" ); exit(1); }
+  rd_file = open( filename, O_RDONLY, 0 );
+  if( rd_file<=0 ) { p3( "Can't open input file '", filename, "'\n" ); exit(1); }
   // initialization
   op_set_prec();
   st_create( ST_DIM );
@@ -1813,6 +1844,7 @@ int main( int ac, char** av )
   cg_sl_table();
   cg_end();
   if( cg_file>0 ) close( cg_file );
+  close( rd_file );
   if( IT_DUMP ) { id_table_dump(); sl_table_dump(); }
   if( ST_DUMP )
   {
