@@ -1585,6 +1585,7 @@ int pa_stmt()
     if( sc_tkn!=';' )
     {
       if( !(e1 = pa_vardef_or_expr()) ) return t_(F); // also clean?
+      // it calls cg_... as well
     }
     else { e1 = 0; sc_next(); } // e1=0 means no init part
 
@@ -1608,7 +1609,6 @@ int pa_stmt()
     if( sc_tkn!=')' ) return t_(F); // also...
     sc_next();
 
-    if( e1 ) cg_n( "  # for-init" ); // e1
     if( e3 ) { cg_o( "  jmp C" ); cg_n( i2s( loop_label ) ); }
     cg_o( "P" ); cg_o( i2s( loop_label ) ); cg_n( ":" );
     if( e3 ) cg_exprs( (int**)e3, 0 ); // e3 - post expressions
