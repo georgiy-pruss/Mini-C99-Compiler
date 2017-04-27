@@ -50,6 +50,7 @@ str_or_0 : @String | 0                        // can be null pointer, see below
 arrayinit : @String                           // char a[] = "abc"; // ARRAY!
           | '{' str_or_0 { ',' str_or_0 } '}' // char* b[] = {"ijk","mn",0};
           | '{' integer { ',' integer } '}'   // int c[] = {1,2,3};
+          | '{' exprs '}'                     // for local vars TODO
 
 vartail : [ '=' integer | '=' @String ]       // for global vars
         | [ '=' expr ]                        // for local vars - any expr.

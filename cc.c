@@ -856,7 +856,7 @@ void cg_simple_item( int e2et, int e21 ) // number or var
   }
 }
 
-int cg_exprs( int** x, int backwards_with_push );
+int cg_exprs_backwards_with_push( int** e );
 
 void cg_expr( int* e )
 {
@@ -871,9 +871,10 @@ void cg_expr( int* e )
     cg_o( "  mov eax,OFFSET FLAT:S" );
     cg_n( i2s(e[1]) );
   }
-  else if( e0==ET_call && ((int*)e[1])[0]==ET_fn )
+  else if( e0==ET_call )
   {
-    int n = cg_exprs( (int**)e[2], 1 );
+    if( ((int*)e[1])[0]!=ET_fn ) err1( "A call must have fn name on the left" );
+    int n = cg_exprs_backwards_with_push( (int**)e[2] );
     cg_o( "  call _" ); cg_n( id_table[st_id[((int*)e[1])[1]]] );
     if( n>0 ) { cg_o( "  add esp," ); cg_n( i2s( INTSZ*n ) ); }
   }
@@ -883,6 +884,7 @@ void cg_expr( int* e )
     int* e1 = (int*)e[1];
     if( e1[0]==ET_var )
     {
+      if( st_kind[e1[1]]==K_array ) err2( "Can't assign to array ", id_table[st_id[e1[1]]] );
       cg_expr( (int*)e[2] );
       cg_o( "  mov " );
       char* name = cg_var( e1[1] );
@@ -893,10 +895,27 @@ void cg_expr( int* e )
   }
   else if( e0==ET_var ) // TODO but if it's array...
   {
-    cg_o( "  mov eax," );
-    char* name = cg_var( e[1] );
-    if( name ) { cg_o( " # " ); cg_n( name ); } else cg_n( "" );
     // XXX DEBUG ... st_kind_str[st_kind[e[1]]]
+    int k = st_kind[e[1]];
+    if( k==K_var )
+    {
+      cg_o( "  mov eax," );
+      char* name = cg_var( e[1] );
+      if( name ) { cg_o( " # " ); cg_n( name ); } else cg_n( "" );
+    }
+    else
+    {
+      assert( k==K_array, "Must be array here" );
+      int id = st_id[e[1]];
+      if( e[1]<st_local )
+        { cg_o( "  mov eax,OFFSET FLAT:_" ); cg_n( id_table[id] ); }
+      else
+      {
+        int v = st_value[e[1]]; // local var
+        cg_o( "  lea eax,[ebp" ); if( v>0 ) cg_o( "+" ); cg_o( i2s(v) ); cg_o( "] # " );
+        cg_n( id_table[id] );
+      }
+    }
   }
   else if( e0==ET_neg )
   {
@@ -927,6 +946,24 @@ void cg_expr( int* e )
       if( name ) { cg_o( " # " ); cg_n( name ); } else cg_n( "" );
     }
     // else TODO not simple var
+  }
+  else if( e0==ET_index ) // TODO
+  {
+    cg_n( "  # index left..." );
+    cg_expr( (int*)e[1] );
+    cg_n( "  # index right..." );
+    cg_expr( (int*)e[2] );
+    cg_n( "  # index: deref of left + right*itemsize" );
+  }
+  else if( e0==ET_star )
+  {
+    cg_expr( (int*)e[1] );
+    cg_n( "  mov eax,DWORD PTR [eax]" );
+  }
+  else if( e0==ET_cast )
+  {
+    cg_expr( (int*)e[1] );
+    cg_n( "  # cast... probably nothing at all" ); // TODO
   }
   else if( memchr( "<>lgen", e0, 6 ) )
   {
@@ -1012,24 +1049,22 @@ void cg_expr( int* e )
     cg_n( "  movzx eax,al" );
     cg_o( "O" ); cg_o( i2s( or_label ) ); cg_n( ":" );
   }
+  else if( e0==ET_fn )
+    err1( "Just fn name?" );
   else
     cg_n( "  mov eax,0 # ...expr..." );
 }
 
-int cg_exprs( int** x, int backwards_with_push ) // return number of exprs
+int cg_exprs_backwards_with_push( int** x  ) // return number of exprs
 {
-  int n=0;
-  if( backwards_with_push )
-  {
-    if( !x ) return 0;
-    n = cg_exprs( (int**)x[1], 1 ); // first tail (via recursion), then head
-    cg_expr( x[0] );
-    cg_n( "  push eax" );
-    return n + 1;
-  }
-  for( ; x; ++n, x = (int**)x[1] ) cg_expr( x[0] );
-  return n;
+  if( !x ) return 0;
+  int n = cg_exprs_backwards_with_push( (int**)x[1] ); // first tail, then head
+  cg_expr( x[0] );
+  cg_n( "  push eax" );
+  return n + 1;
 }
+
+void cg_exprs( int** x ) { for( ; x; x = (int**)x[1] ) cg_expr( x[0] ); }
 
 // Parser ----------------------------------------------------------------------
 
@@ -1310,7 +1345,7 @@ int se_add_var( int id, int t, int dim, int init, int* init_exprs )
   // global var
   if( init==0 || init==Num && init_exprs==0 )
   {
-    int n = st_add( id, t, K_var, se_bss_offset+BSS_ORG, dim ); // global bss
+    int n = st_add( id, t, k, se_bss_offset+BSS_ORG, dim ); // global bss
     se_bss_offset = se_bss_offset + varsz;
     cg_o( "  .globl _" ); cg_n( id_table[id] );
     if( cg_section != S_BSS ) { cg_section = S_BSS; cg_n( "  .bss" ); }
@@ -1320,7 +1355,7 @@ int se_add_var( int id, int t, int dim, int init, int* init_exprs )
     cg_o( "  .space " ); cg_n( i2s(idealsz) );
     return n;
   }
-  int n = st_add( id, t, K_var, se_data_offset, dim ); // global var in data section
+  int n = st_add( id, t, k, se_data_offset, dim ); // global var in data section
   se_data_offset = se_data_offset + varsz;
   cg_o( "  .globl _" ); cg_n( id_table[id] );
   if( cg_section != S_DATA ) { cg_section = S_DATA; cg_n( "  .data" ); }
@@ -1637,7 +1672,7 @@ int pa_stmt()
 
     if( e3 ) { cg_o( "  jmp C" ); cg_n( i2s( loop_label ) ); }
     cg_o( "P" ); cg_o( i2s( loop_label ) ); cg_n( ":" );
-    if( e3 ) cg_exprs( (int**)e3, 0 ); // e3 - post expressions
+    if( e3 ) cg_exprs( (int**)e3 ); // e3 - post expressions
     cg_o( "C" ); cg_o( i2s( loop_label ) ); cg_n( ":" );
     if( e2 )
     {

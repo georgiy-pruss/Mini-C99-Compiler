@@ -4,7 +4,7 @@ primary   @ET_num i-val   @ET_char i-val   @ET_str s-id   // enum is also ET_num
           @ET_fn f-id                                     // if id is function
           @ET_var v-id                                    // var, array, arg
 
-call      @ET_call fn 0          // fn is @ET_fn f-id
+call      @ET_call fn 0          // fn must be @ET_fn f-id
           @ET_call fn exprs
 
 exprs     expr;0                 // i.e. a simple linked list of expr's
