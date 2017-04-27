@@ -630,22 +630,6 @@ int* ET_2( int tag, int value1, int value2 )
   int* r = (int*)malloc( 3*INTSZ ); r[0] = tag; r[1] = value1; r[2] = value2; return r;
 }
 
-int et_analyze_expr( int* e )
-{
-  // let's use it not for expression "level" but to calculate types!
-
-  // check if it has calls -- then no reg optimization allowed (and <0 returned)
-  // for other expressions, or binary ops (binop or index) -- then how many vars needed
-  // also execute constant computations; 2 + 3 -> 5
-  int e0 = e[0] & ET_MASK;
-  if( e0==ET_call ) return -100000; // it'll be negative after all returns as well
-  if( e0==ET_num || e0==ET_char || e0==ET_str || e0==ET_var || e0==ET_fn ) return 0;
-  if( e0==ET_cast || e0==ET_star || e0==ET_neg || e0=='i' || e0=='d' || e0=='~' || e0=='!' )
-    return et_analyze_expr( (int*)e[1] );
-  //if( e0==ET_index || memchr( "*/%+-<>lgen&^|ao=", e0, 17 ) ) ...
-  return et_analyze_expr( (int*)e[1] ) + 1 + et_analyze_expr( (int*)e[2] );
-}
-
 char* ET_TAG[] = {"","","Num","Chr","Str","Var","Fn","Call","Idx","Cast","Deref","Neg"};
 
 void et_print( int* e )
@@ -657,6 +641,7 @@ void et_print( int* e )
   else if( e0=='e' ) p1( "(== " ); else if( e0=='n' ) p1( "(!= " );
   else if( e0=='l' ) p1( "(<= " ); else if( e0=='g' ) p1( "(>= " );
   else { char s[2]; s[0]=(char)e0; s[1]='\0'; p3("(",s," "); }
+  // TODO else { char s[2] = {(char)e0,'\0'}; p3("(",s," "); }
   if( e0==ET_num || e0==ET_char ) p1(i2s(e[1]));
   else if( e0==ET_str ) p1(str_repr(sl_table[e[1]]));
   else if( e0==ET_fn ) p1(id_table[st_id[e[1]]]);
@@ -671,17 +656,49 @@ void et_print( int* e )
   else if( e0==ET_neg ) et_print( (int*)e[1] );
   else if( e0=='i'||e0=='d'||e0=='~'||e0=='!' ) et_print( (int*)e[1] );
   else { et_print( (int*)e[1] ); p1( " " ); et_print( (int*)e[2] ); }
-  int r=et_analyze_expr(e);
-  if( r==0 ) p1(")");
-  else if( r==1 ) p1(")'");
-  else if( r==2 ) p1(")''");
-  else if( r==3 ) p1(")'''");
-  else p2(")^", i2s(r));
+  p1(")");
 }
 
 void et_print_exprs( int** x )
 {
   for( int n=0; x; ++n, x = (int**)x[1] ) { if(n>0)p1(" "); et_print( x[0] ); } p1n("]");
+}
+
+int et_analyze_type( int* e ) // return type
+{
+  return 0;
+  // TODO
+  // redo exprs --> ',' expr expr
+  // i.e.  e            e
+  //       e,e2         , e e2
+  //       e,e2,e3      , e ->  , e2 e3
+  //       e,e2,e3,e4   , e ->  , e2 ->  , e3 e4
+
+  p1n("Analyze");
+  et_print( e );p0n();
+
+  int e0 = e[0] & ET_MASK;
+  if( e0==ET_call )
+  {
+    int* e1 = (int*)e[1];
+    if( e1[0]!=ET_fn ) p1n("ERROR");
+    char* fnname = id_table[st_id[e1[1]]];
+    int fntype = st_type[e1[1]];
+    p2( "call ", fnname ); p2n( " -> ", st_type_str[fntype] );
+    // TODO check args
+    return 0; // it'll be negative after all returns as well
+  }
+
+  if( e0==ET_num || e0==ET_char || e0==ET_str || e0==ET_var || e0==ET_fn )
+    return 0;
+
+  if( e0==ET_cast || e0==ET_star || e0==ET_neg || e0=='i' || e0=='d' || e0=='~' || e0=='!' )
+    return et_analyze_type( (int*)e[1] );
+
+  //if( e0==ET_index || memchr( "*/%+-<>lgen&^|ao=", e0, 17 ) ) ...
+  et_analyze_type( (int*)e[1] );
+  et_analyze_type( (int*)e[2] );
+  return 0;
 }
 
 // Code generation -------------------------------------------------------------
@@ -796,6 +813,7 @@ void cg_spec_and_nl( char* str, int next )
 void cg_sl_str( int i ) // write string def w/o align; w/o label
 {
   char c[2],cc[3]; cc[2]=c[1]='\0'; cc[0]='\\';
+  // TODO char c[2] = ".", cc[3] = "\\.";
   cg_o( "  .ascii \"" );
   for( char* s = sl_table[i]; *s; ++s )
   {
@@ -878,10 +896,7 @@ void cg_expr( int* e )
     cg_o( "  mov eax," );
     char* name = cg_var( e[1] );
     if( name ) { cg_o( " # " ); cg_n( name ); } else cg_n( "" );
-    // XXX DEBUG ...
-    p2n( "var     ", name );
-    p2n( "st_kind ", st_kind_str[st_kind[e[1]]] ); // Enum Var Array Arg Fn
-    p2n( "st_type ", st_type_str[st_type[e[1]]] ); // Void Char Char* Char** Int Int* Int**
+    // XXX DEBUG ... st_kind_str[st_kind[e[1]]]
   }
   else if( e0==ET_neg )
   {
@@ -1364,6 +1379,7 @@ int pa_vartail()
       e = (int*)pa_expr(0);
       if( !e ) return t_(F);
 
+      int typ = et_analyze_type( e );
       if( ET_TRACE && e ) { p1("E:vt "); et_print( e ); p0n(); }
 
       int idx = se_add_var( id, t, -1, 0, 0 ); // TODO
@@ -1424,12 +1440,16 @@ int pa_vardef_or_expr()
   // TODO if it's expr, return expr AST
   // TODO if it's vardef, perform var definitions, return exprs (list!)
   // TODO e.g. int* a,b=c,*d=o+2; === int* a,b,*d; { b=c; d=o+2; }
+
+  // TODO all e must be one type. either int or int*
+
   t1("pa_vardef_or_expr");
   if( sc_tkn!=Kw+Int && sc_tkn!=Kw+Char )
   {
     int e = pa_expr(0);
     if( !e || sc_tkn!=';' ) return t_(F); // expr ';'
 
+    int typ = et_analyze_type( (int*)e );
     if( ET_TRACE && e ) { p1("E:ex "); et_print( (int*)e ); p0n(); }
 
     sc_next();
@@ -1512,6 +1532,7 @@ int pa_stmt()
     }
     int e = pa_expr(0);
 
+    int typ = et_analyze_type( (int*)e );
     if( ET_TRACE && e ) { p1("E:rt "); et_print( (int*)e ); p0n(); }
 
     if( !e || sc_tkn!=';' ) return t_(F);
@@ -1526,6 +1547,8 @@ int pa_stmt()
     sc_next(); if( sc_tkn!='(' ) return t_(F);
     cg_o( "L" ); cg_o( i2s( loop_label ) ); cg_n( ":" );
     sc_next(); if( !(c = pa_expr(0)) || sc_tkn!=')' ) return t_(F);
+
+    int typ = et_analyze_type( (int*)c );
     // TODO cg_cond( c, "E", loop_label );
     cg_expr( (int*)c );
     cg_n( "  test eax,eax" );
@@ -1547,6 +1570,8 @@ int pa_stmt()
     int if_label = cg_new_label();
     sc_next(); if( sc_tkn!='(' ) return t_(F);
     sc_next(); if( !(c = pa_expr(0)) || sc_tkn!=')' ) return t_(F);
+
+    int typ = et_analyze_type( (int*)c );
     // TODO cg_cond( c, "J", if_label );
     cg_expr( (int*)c );
     cg_n( "  test eax,eax" );
@@ -1595,6 +1620,7 @@ int pa_stmt()
     else e2 = 0; // it means no condition expr
 
     if( ET_TRACE && e2 ) { p1( "E:fc " ); et_print( (int*)e2 ); p0n(); }
+    if( e2 ) { int typ2 = et_analyze_type( (int*)e2 ); } // TODO
 
     sc_next();
     if( sc_tkn!=')' )
@@ -1604,6 +1630,7 @@ int pa_stmt()
     else e3 = 0; // it means no post exprs
 
     if( ET_TRACE && e3 ) { p1( "E:fp [" ); et_print_exprs( (int**)e3 ); }
+    if( e3 ) { int typ3 = et_analyze_type( (int*)e3 ); } // TODO
 
     if( sc_tkn!=')' ) return t_(F); // also...
     sc_next();
