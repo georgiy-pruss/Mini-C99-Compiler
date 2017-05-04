@@ -442,6 +442,7 @@ int   st_count;   // number of symbols in ST; the last is at st_count-1
 int   st_local;   // start of local part of symbol table
 
 enum { T_v, T_c, T_cp, T_cpp, T_i, T_ip, T_ipp }; // st_type
+  // T_cp==T_c+1, T_cpp==T_cp+1, T_ip==T_i+1, T_ipp==T_ip+1 -- must be so!
 enum { K_enum, K_var, K_array, K_arg, K_fn };
 
 char* st_type_str[] = {"Void","Char","Char*","Char**","Int","Int*","Int**"};
@@ -603,8 +604,8 @@ void bf_free( int* bf )
 
 // Expression tree -------------------------------------------------------------
 
-enum { ET_num  = Num, ET_char = Chr,  // + int; enum also gives ET_num
-  ET_str  = Str,  // + sl-id
+enum { ET_num = 1, // + int; enum also gives ET_num, char literal too
+  ET_str,   // + sl-id
   ET_var,   // + id (id checked and it's var or array or arg)
   ET_fn,    // + id (id checked and it's fn)
   ET_call,  // + fn-expr 0 | expr ptr-to-list
@@ -612,30 +613,31 @@ enum { ET_num  = Num, ET_char = Chr,  // + int; enum also gives ET_num
   ET_cast,  // + type expr (type is from st_type enum, i.e. 1..3 char, 4..6 int)
   ET_star,  // + expr  (*E)
   ET_neg }; // + expr  (-E)
-// other nodes are marked with these chars (from tokens enum):
-// 'i' 'd'    // + expr  -- incr, decr
-// '~' '!'    // + expr  -- not-bin, not-log
-// '*' '/' '%' '+' '-' '<' '>' 'l' 'g' 'e' 'n' '&' '^' '|' 'a' 'o' '=' // + expr1 expr2
+  // other nodes are marked with these chars (from tokens enum):
+  // 'i' 'd'    // + expr  -- incr, decr
+  // '~' '!'    // + expr  -- not-bin, not-log
+  // '*' '/' '%' '+' '-' '<' '>' 'l' 'g' 'e' 'n' '&' '^' '|' 'a' 'o' '=' // + expr1 expr2
 
 // low 8 bits - expression kind/tag (ET_xxx)
-// high 24 bits - expression type (T_xxx)
+// high 24 bits - expression type (T_xxx) actually 3 bits only
 enum { ET_MASK=0377, ET_T=0400 }; // to get type - div ET_T, to add type - mul ET_T
 
-int* ET_1( int tag, int value )
+int* ET_1( int tag, int value, int type )
 {
-  int* r = (int*)malloc( 2*INTSZ ); r[0] = tag; r[1] = value; return r;
+  int* r = (int*)malloc( 2*INTSZ ); r[0] = tag + type*ET_T; r[1] = value; return r;
 }
 
-int* ET_2( int tag, int value1, int value2 )
+int* ET_2( int tag, int value1, int value2, int type )
 {
-  int* r = (int*)malloc( 3*INTSZ ); r[0] = tag; r[1] = value1; r[2] = value2; return r;
+  int* r = (int*)malloc( 3*INTSZ ); r[0] = tag + type*ET_T; r[1] = value1; r[2] = value2; return r;
 }
 
-char* ET_TAG[] = {"","","Num","Chr","Str","Var","Fn","Call","Idx","Cast","Deref","Neg"};
+char* ET_TAG[] = {"","Num","Str","Var","Fn","Call","Idx","Cast","Deref","Neg"};
 
 void et_print( int* e )
 {
   int e0 = e[0] & ET_MASK;
+  int e0type = e[0] / ET_T;
   if( e0<' ' ) p3("(",ET_TAG[e0]," ");
   else if( e0=='i' ) p1( "(++ " ); else if( e0=='d' ) p1( "(-- " );
   else if( e0=='a' ) p1( "(&& " ); else if( e0=='o' ) p1( "(|| " );
@@ -643,7 +645,7 @@ void et_print( int* e )
   else if( e0=='l' ) p1( "(<= " ); else if( e0=='g' ) p1( "(>= " );
   else { char s[2]; s[0]=(char)e0; s[1]='\0'; p3("(",s," "); }
   // TODO else { char s[2] = {(char)e0,'\0'}; p3("(",s," "); }
-  if( e0==ET_num || e0==ET_char ) p1(i2s(e[1]));
+  if( e0==ET_num ) { p1(i2s(e[1])); if( e0type==T_c ) p1("/c"); }
   else if( e0==ET_str ) p1(str_repr(sl_table[e[1]]));
   else if( e0==ET_fn ) p1(id_table[st_id[e[1]]]);
   else if( e0==ET_var ) p1(id_table[st_id[e[1]]]);
@@ -690,7 +692,7 @@ int et_analyze_type( int* e ) // return type
     return 0; // it'll be negative after all returns as well
   }
 
-  if( e0==ET_num || e0==ET_char || e0==ET_str || e0==ET_var || e0==ET_fn )
+  if( e0==ET_num || e0==ET_str || e0==ET_var || e0==ET_fn )
     return 0;
 
   if( e0==ET_cast || e0==ET_star || e0==ET_neg || e0=='i' || e0=='d' || e0=='~' || e0=='!' )
@@ -854,7 +856,7 @@ void cg_simple_item( int e2et, int e21 ) // number or var
 {
   if( e2et != ET_var )
     cg_n( i2s( e21 ) );
-  else // ET_num|char
+  else // ET_num
   {
     char* name = cg_var( e21 );
     if( name ) { cg_o( " # " ); cg_n( name ); } else cg_n( "" );
@@ -866,7 +868,7 @@ int cg_exprs_backwards_with_push( int** e );
 void cg_expr( int* e )
 {
   int e0 = e[0] & ET_MASK;
-  if( e0==ET_num || e0==ET_char )
+  if( e0==ET_num )
   {
     cg_o( "  mov eax," );
     cg_n( i2s(e[1]) );
@@ -878,7 +880,7 @@ void cg_expr( int* e )
   }
   else if( e0==ET_call )
   {
-    if( ((int*)e[1])[0]!=ET_fn ) err1( "A call must have fn name on the left" );
+    if( (*(int*)e[1]&ET_MASK)!=ET_fn ) err1( "A call must have fn name on the left" );
     int n = cg_exprs_backwards_with_push( (int**)e[2] );
     cg_o( "  call _" ); cg_n( id_table[st_id[((int*)e[1])[1]]] );
     if( n>0 ) { cg_o( "  add esp," ); cg_n( i2s( INTSZ*n ) ); }
@@ -886,7 +888,8 @@ void cg_expr( int* e )
   else if( e0=='=' )
   {
     int* e1 = (int*)e[1];
-    if( e1[0]==ET_var )
+    int e1tag = e1[0] & ET_MASK;
+    if( e1tag==ET_var )
     {
       if( st_kind[e1[1]]==K_array ) err2( "Can't assign to array: ", id_table[st_id[e1[1]]] );
       cg_expr( (int*)e[2] );
@@ -895,7 +898,7 @@ void cg_expr( int* e )
       cg_o( ",eax" );
       if( name ) { cg_o( " # " ); cg_n( name ); } else cg_n( "" );
     }
-    else if( e1[0]==ET_star ) // TODO char*
+    else if( e1tag==ET_star ) // TODO char*
     {
       cg_expr( (int*)e1[1] );
       cg_n( "  push eax" );
@@ -903,7 +906,7 @@ void cg_expr( int* e )
       cg_n( "  pop ebx" );
       cg_n( "  mov DWORD PTR [ebx],eax" );
     }
-    else if( e1[0]==ET_index ) // TODO
+    else if( e1tag==ET_index ) // TODO
     {
       cg_expr( (int*)e[2] );
       cg_n( "  # x[y] = z" );
@@ -986,7 +989,7 @@ void cg_expr( int* e )
   else if( memchr( "<>lgen", e0, 6 ) )
   {
     int e2et = ((int*)e[2])[0] & ET_MASK;
-    if( e2et == ET_num || e2et==ET_char || e2et == ET_var )
+    if( e2et == ET_num || e2et == ET_var )
     {
       cg_expr( (int*)e[1] );
       cg_o( "  cmp eax," );
@@ -1009,7 +1012,7 @@ void cg_expr( int* e )
   else if( memchr( "+-&|^*/%", e0, 8 ) )
   {
     int e2et = ((int*)e[2])[0] & ET_MASK;
-    if( e2et == ET_num || e2et==ET_char || e2et == ET_var )
+    if( e2et == ET_num || e2et == ET_var )
     {
       cg_expr( (int*)e[1] );
       if(      e0=='+' ) cg_o( "  add eax," ); // TODO T*+I --> add eax,N
@@ -1099,16 +1102,19 @@ int pa_primary()
   int* r;
   if( sc_tkn==Num || sc_tkn==Chr || sc_tkn==Str )
   {
-    r = ET_1( sc_tkn, sc_num );
+    int t = T_i, k = ET_num;
+    if( sc_tkn==Str ) { k = ET_str; t = T_cp; } else if( sc_tkn==Chr ) t = T_c;
+    r = ET_1( k, sc_num, t );
     sc_next(); return t_((int)r);
   }
   if( sc_tkn==Id )
   {
     int varid = st_find(sc_num);
     if( varid < 0 ) err2( "Name is not defined: ", id_table[sc_num] );
-    if( st_kind[varid]==K_enum ) r = ET_1( ET_num, st_value[varid] );
-    else if( st_kind[varid]==K_fn ) r = ET_1( ET_fn, varid );
-    else r = ET_1( ET_var, varid ); // var array arg
+    if( st_kind[varid]==K_enum ) r = ET_1( ET_num, st_value[varid], T_i );
+    else if( st_kind[varid]==K_fn ) r = ET_1( ET_fn, varid, st_type[varid] );
+    else if( st_kind[varid]==K_array ) r = ET_1( ET_var, varid, st_type[varid]+1 );
+    else r = ET_1( ET_var, varid, st_type[varid] ); // var arg
     sc_next(); return t_((int)r);
   }
   if( sc_tkn!='(' ) return t_(F);
@@ -1146,13 +1152,13 @@ int pa_exprs()
 {
   t1("pa_exprs");
   int r = pa_expr(0); if( !r ) return t_(F);
-  int* first = ET_1( r, 0 ); // use it just as a pair - an item of a list of exprs
+  int* first = ET_1( r, 0, 0 ); // use it just as a pair - an item of a list of exprs
   int* last = first;
   while( sc_tkn==',' )
   {
     sc_next();
     if( !(r = pa_expr(0)) ) return t_(F);
-    last[1] = (int)ET_1( r, 0 );
+    last[1] = (int)ET_1( r, 0, 0 );
     last = (int*)last[1];
   }
   return t_( (int)first );
@@ -1168,19 +1174,24 @@ int pa_call_or_index(int e)
     {
       sc_next();
       if( !(r = pa_expr(0)) || sc_tkn!=']' ) return t_(F);
-      e = (int)ET_2( ET_index, e, r );
+      int et = *(int*)e / ET_T;
+      int rt = *(int*)r / ET_T;
+      if( !(et==T_cp || et==T_cpp || et==T_ip || et==T_ipp) )
+        err1( "Indexed expr. must be pointer" );
+      if( !(rt==T_i || rt==T_c) ) err1( "Index must be integer" ); // char too!
+      e = (int)ET_2( ET_index, e, r, et-1 );
     }
     else /* '(' */
     {
       sc_next();
       if( sc_tkn==')' )
       {
-        e = (int)ET_2( ET_call, e, 0 ); // call with no args
+        e = (int)ET_2( ET_call, e, 0, *(int*)e / ET_T ); // call with no args
       }
       else
       {
         if( !(r = pa_exprs()) || sc_tkn!=')' ) return t_(F);
-        e = (int)ET_2( ET_call, e, r ); // r is list of args
+        e = (int)ET_2( ET_call, e, r, *(int*)e / ET_T ); // r is list of args
       }
     }
     sc_next();
@@ -1203,14 +1214,24 @@ int pa_unexpr()
   {
     int t = sc_tkn;
     sc_next();
-    return t_( (int)ET_1( t, pa_unexpr() ) );
+    int e = pa_unexpr();
+    return t_( (int)ET_1( t, e, *(int*)e / ET_T ) ); // the same type
   }
   if( sc_tkn=='-' || sc_tkn=='!' || sc_tkn=='*' || sc_tkn=='~')
   {
     int t = sc_tkn;
     if( t=='-' ) t = ET_neg; else if( t=='*' ) t = ET_star;
     sc_next();
-    return t_( (int)ET_1( t, pa_term() ) );
+    int e = pa_term();
+    int type = T_i;
+    if( t==ET_star )
+    {
+      int et = *(int*)e / ET_T;
+      if( !(et==T_cp || et==T_cpp || et==T_ip || et==T_ipp) )
+        err1( "Dereferenced expr. must be pointer" );
+      type = et-1;
+    }
+    return t_( (int)ET_1( t, e, type ) );
   }
   return t_( pa_postfix() );
 }
@@ -1246,7 +1267,7 @@ int pa_term()
       pa_stars(); if( sc_tkn!=')' ) return t_(F);
       int t = se_type + se_stars;
       sc_next();
-      return t_( (int)ET_2( ET_cast, t, pa_term() ) );
+      return t_( (int)ET_2( ET_cast, t, pa_term(), t ) );
     }
     int r = pa_expr(0);
     if( !r || sc_tkn!=')' ) return t_(F); // (E)
@@ -1269,6 +1290,18 @@ int pa_binop_na() // na = no advance, sc_next() must be called in the caller
   return t_(F);
 }
 
+int se_calc_binop_type( int op, int left, int right )
+{
+  // calculate new type based on token op, left expr, right expr
+  int lt = *(int*)left / ET_T;
+  int rt = *(int*)right / ET_T;
+  if( (lt==T_c || lt==T_i) && (rt==T_c || rt==T_i) ) return T_i;
+  // TODO alot!
+  return T_i;
+  // ... op==+ -
+  // ... et==T_cp || et==T_cpp || et==T_ip || et==T_ipp
+}
+
 int pa_expr( int min_prec ) // precedence climbing
 {
   t2("pa_expr ",i2s(min_prec));
@@ -1282,7 +1315,7 @@ int pa_expr( int min_prec ) // precedence climbing
     sc_next();
     int q = pa_expr( p );
     if( !q ) return t_(F);
-    r = (int)ET_2( t, r, q );
+    r = (int)ET_2( t, r, q, se_calc_binop_type( t, r, q ) );
   }
   return t_( r );
 }
