@@ -26,7 +26,7 @@ int IT_DEBUG=0; // -I - id table trace
 int IT_DUMP=0;  // -D - id table dump
 int ST_DUMP=0;  // -S - symbol table dump
 int ET_TRACE=0; // -E - trace expressions
-int CG_LINES=1; // -L - output line numbers (default: yes)
+int CG_LINES=0; // -L - output line numbers
 
 // stdlib ----------------------------------------------------------------------
 
@@ -748,7 +748,11 @@ void cg_n( char* s )
   else { bf_append( cg_buffer, s, n ); bf_append( cg_buffer, "\n", 1 ); }
 }
 
-void cg_line() { if( CG_LINES ) { cg_o( "  # " ); cg_n( i2s(rd_line) ); } }
+void cg_line()
+{
+  cg_o( "  # " ); cg_n( i2s(rd_line) ); // maybe remove some time
+  // if( CG_LINES ) { cg_o( "  mov ecx," ); cg_n( i2s(rd_line) ); } // ONLY IN CODE!
+}
 
 void cg_suspend() // after this, write to buffer
 {
@@ -1008,13 +1012,14 @@ void cg_expr( int* e )
     if( e2et == ET_num || e2et==ET_char || e2et == ET_var )
     {
       cg_expr( (int*)e[1] );
-      if(      e0=='+' ) cg_o( "  add eax," );
-      else if( e0=='-' ) cg_o( "  sub eax," );
+      if(      e0=='+' ) cg_o( "  add eax," ); // TODO T*+I --> add eax,N
+      else if( e0=='-' ) cg_o( "  sub eax," ); // TODO T*-I --> sub eax,N
+                                               // TODO T*-T* --> sub; [sar eax,2]
       else if( e0=='*' ) cg_o( "  imul eax," );
       else if( e0=='&' ) cg_o( "  and eax," );
       else if( e0=='|' ) cg_o( "  or eax," );
       else if( e0=='^' ) cg_o( "  xor eax," );
-      else /* / % -- but no "idiv NUM" */
+      else /* / % -- but no 'idiv NUM' */
         { cg_n( "  cdq" ); if( e2et == ET_var ) cg_o( "  idiv " ); else cg_o( "  mov ebx," ); }
       cg_simple_item( e2et, ((int*)e[2])[1] );
       if( (e0=='/' || e0=='%') && e2et != ET_var ) cg_n( "  idiv ebx" );
@@ -1039,30 +1044,22 @@ void cg_expr( int* e )
   {
     int and_label = cg_new_label();
     cg_expr( (int*)e[1] );
-    cg_n( "  cmp eax,0" );
-    cg_n( "  setne al" );
-    cg_n( "  movzx eax,al" );
+    cg_n( "  cmp eax,0\n  setne al\n  movzx eax,al" );
     cg_n( "  test eax,eax" );
     cg_o( "  jz A" ); cg_n( i2s( and_label ) );
     cg_expr( (int*)e[2] );
-    cg_n( "  cmp eax,0" );
-    cg_n( "  setne al" );
-    cg_n( "  movzx eax,al" );
+    cg_n( "  cmp eax,0\n  setne al\n  movzx eax,al" );
     cg_o( "A" ); cg_o( i2s( and_label ) ); cg_n( ":" );
   }
   else if( e0=='o' ) // ||
   {
     int or_label = cg_new_label();
     cg_expr( (int*)e[1] );
-    cg_n( "  cmp eax,0" );
-    cg_n( "  setne al" );
-    cg_n( "  movzx eax,al" );
+    cg_n( "  cmp eax,0\n  setne al\n  movzx eax,al" );
     cg_n( "  test eax,eax" );
     cg_o( "  jnz O" ); cg_n( i2s( or_label ) );
     cg_expr( (int*)e[2] );
-    cg_n( "  cmp eax,0" );
-    cg_n( "  setne al" );
-    cg_n( "  movzx eax,al" );
+    cg_n( "  cmp eax,0\n  setne al\n  movzx eax,al" );
     cg_o( "O" ); cg_o( i2s( or_label ) ); cg_n( ":" );
   }
   else if( e0==ET_fn )
@@ -1887,7 +1884,7 @@ int main( int ac, char** av )
     p1( "-D  dump id table data and string literal table\n" );
     p1( "-S  dump symbol table\n" );
     p1( "-E  trace expressions\n" );
-    p1( "-L  output line numbers in assembler (default)\n" );
+    //p1( "-L  output line numbers in assembler as 'mov ecx,N'\n" ); TODO...
     p1( "-o FILE  specify output file name\n" );
     return 0;
   }
@@ -1902,7 +1899,7 @@ int main( int ac, char** av )
       if( av[i][1] == 'D' ) IT_DUMP=1;
       if( av[i][1] == 'S' ) ST_DUMP=1;
       if( av[i][1] == 'E' ) ET_TRACE=1;
-      if( av[i][1] == 'L' ) CG_LINES=1;
+      //if( av[i][1] == 'L' ) CG_LINES=1;
       if( av[i][1] == 'o' ) { outputfn = av[++i]; }
     }
 
