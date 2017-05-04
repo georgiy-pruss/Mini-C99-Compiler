@@ -604,12 +604,13 @@ void bf_free( int* bf )
 
 // Expression tree -------------------------------------------------------------
 
-enum { ET_num = 1, // + int; enum also gives ET_num, char literal too
+enum { ET_none,
+  ET_num,   // + int; enum also gives ET_num, char literal too
   ET_str,   // + sl-id
   ET_var,   // + id (id checked and it's var or array or arg)
   ET_fn,    // + id (id checked and it's fn)
   ET_call,  // + fn-expr 0 | expr ptr-to-list
-  ET_index, // + array-expr expr
+  //ET_index, // + array-expr expr --> replace to ET_star ('+' e1 e2)
   ET_cast,  // + type expr (type is from st_type enum, i.e. 1..3 char, 4..6 int)
   ET_star,  // + expr  (*E)
   ET_neg }; // + expr  (-E)
@@ -632,7 +633,7 @@ int* ET_2( int tag, int value1, int value2, int type )
   int* r = (int*)malloc( 3*INTSZ ); r[0] = tag + type*ET_T; r[1] = value1; r[2] = value2; return r;
 }
 
-char* ET_TAG[] = {"","Num","Str","Var","Fn","Call","Idx","Cast","Deref","Neg"};
+char* ET_TAG[] = {"","Num","Str","Var","Fn","Call","Cast","Deref","Neg"};
 
 void et_print( int* e )
 {
@@ -653,7 +654,6 @@ void et_print( int* e )
     for( int n=0, x=e[2]; x; ++n, x=((int*)x)[1] ) // = et_print_exprs
       { if(n>0)p1(" "); et_print( (int*)((int*)x)[0] ); }
     p1("]"); }
-  else if( e0==ET_index ) { et_print( (int*)e[1] ); p1( " " ); et_print( (int*)e[2] ); }
   else if( e0==ET_cast ) { p1( st_type_str[e[1]] ); p1( " " ); et_print( (int*)e[2] ); }
   else if( e0==ET_star ) et_print( (int*)e[1] );
   else if( e0==ET_neg ) et_print( (int*)e[1] );
@@ -698,7 +698,7 @@ int et_analyze_type( int* e ) // return type
   if( e0==ET_cast || e0==ET_star || e0==ET_neg || e0=='i' || e0=='d' || e0=='~' || e0=='!' )
     return et_analyze_type( (int*)e[1] );
 
-  //if( e0==ET_index || memchr( "*/%+-<>lgen&^|ao=", e0, 17 ) ) ...
+  //if( memchr( "*/%+-<>lgen&^|ao=", e0, 17 ) ) ...
   et_analyze_type( (int*)e[1] );
   et_analyze_type( (int*)e[2] );
   return 0;
@@ -906,11 +906,13 @@ void cg_expr( int* e )
       cg_n( "  pop ebx" );
       cg_n( "  mov DWORD PTR [ebx],eax" );
     }
+    /*
     else if( e1tag==ET_index ) // TODO
     {
       cg_expr( (int*)e[2] );
       cg_n( "  # x[y] = z" );
     }
+    */
     else
       err1( "Wrong expression on left of '='" );
   }
@@ -956,7 +958,7 @@ void cg_expr( int* e )
   }
   else if( e0=='i' || e0=='d' )
   {
-    // left side e[1] can be ET_var, TODO ET_star, TODO ET_index
+    // left side e[1] can be ET_var, TODO ET_star
     char* cmd="  inc "; if( e0=='d' ) cmd="  dec ";
     int* e1 = (int*)e[1];
     if( e1[0]==ET_var )
@@ -967,6 +969,7 @@ void cg_expr( int* e )
     }
     // else TODO not simple var
   }
+  /*
   else if( e0==ET_index ) // TODO
   {
     cg_n( "  # index left..." );
@@ -975,6 +978,7 @@ void cg_expr( int* e )
     cg_expr( (int*)e[2] );
     cg_n( "  # index: deref of left + right*itemsize" );
   }
+  */
   else if( e0==ET_star )
   {
     cg_expr( (int*)e[1] );
@@ -1179,7 +1183,8 @@ int pa_call_or_index(int e)
       if( !(et==T_cp || et==T_cpp || et==T_ip || et==T_ipp) )
         err1( "Indexed expr. must be pointer" );
       if( !(rt==T_i || rt==T_c) ) err1( "Index must be integer" ); // char too!
-      e = (int)ET_2( ET_index, e, r, et-1 );
+      // we don't implement 5[a]
+      e = (int)ET_1( ET_star, (int)ET_2( '+', e, r, et ), et-1 );
     }
     else /* '(' */
     {
