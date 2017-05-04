@@ -891,7 +891,7 @@ void cg_expr( int* e )
       cg_o( ",eax" );
       if( name ) { cg_o( " # " ); cg_n( name ); } else cg_n( "" );
     }
-    else if( e1[0]==ET_star )
+    else if( e1[0]==ET_star ) // TODO char*
     {
       cg_expr( (int*)e1[1] );
       cg_n( "  push eax" );
@@ -907,11 +907,10 @@ void cg_expr( int* e )
     else
       err1( "Wrong expression on left of '='" );
   }
-  else if( e0==ET_var ) // TODO but if it's array...
+  else if( e0==ET_var )
   {
-    // XXX DEBUG ... st_kind_str[st_kind[e[1]]]
     int k = st_kind[e[1]];
-    if( k==K_var )
+    if( k==K_var || k==K_arg )
     {
       cg_o( "  mov eax," );
       char* name = cg_var( e[1] );
@@ -919,7 +918,7 @@ void cg_expr( int* e )
     }
     else
     {
-      assert( k==K_array, "Must be array here" );
+      assert( k==K_array, "Must be var | arg | array" );
       int id = st_id[e[1]];
       if( e[1]<st_local )
         { cg_o( "  mov eax,OFFSET FLAT:_" ); cg_n( id_table[id] ); }
@@ -976,7 +975,8 @@ void cg_expr( int* e )
   }
   else if( e0==ET_cast )
   {
-    cg_expr( (int*)e[1] );
+    // e[1] - type
+    cg_expr( (int*)e[2] );
     cg_n( "  # cast... probably nothing at all" ); // TODO
   }
   else if( memchr( "<>lgen", e0, 6 ) )
@@ -1014,8 +1014,10 @@ void cg_expr( int* e )
       else if( e0=='&' ) cg_o( "  and eax," );
       else if( e0=='|' ) cg_o( "  or eax," );
       else if( e0=='^' ) cg_o( "  xor eax," );
-      else /* / % */   { cg_n( "  cdq" ); cg_o( "  idiv eax," ); }
+      else /* / % -- but no "idiv NUM" */
+        { cg_n( "  cdq" ); if( e2et == ET_var ) cg_o( "  idiv " ); else cg_o( "  mov ebx," ); }
       cg_simple_item( e2et, ((int*)e[2])[1] );
+      if( (e0=='/' || e0=='%') && e2et != ET_var ) cg_n( "  idiv ebx" );
     }
     else // some complex expression
     {
@@ -1029,7 +1031,7 @@ void cg_expr( int* e )
       else if( e0=='&' ) cg_n( "  and eax,ebx" );
       else if( e0=='|' ) cg_n( "  or eax,ebx" );
       else if( e0=='^' ) cg_n( "  xor eax,ebx" );
-      else /* / % */   { cg_n( "  cdq" ); cg_n( "  idiv eax,ebx" ); }
+      else /* / % */   { cg_n( "  cdq" ); cg_n( "  idiv ebx" ); }
     }
     if( e0=='%' ) cg_n( "  mov eax,edx" );
   }
@@ -1064,9 +1066,9 @@ void cg_expr( int* e )
     cg_o( "O" ); cg_o( i2s( or_label ) ); cg_n( ":" );
   }
   else if( e0==ET_fn )
-    err1( "Just fn name?" );
+    err1( "Just fn name? Anyway not implemented" );
   else
-    cg_n( "  mov eax,0 # ...expr..." );
+    assert( 0, "What expr?" ); // ET_TAG[e0]
 }
 
 int cg_exprs_backwards_with_push( int** x  ) // return number of exprs
@@ -1867,6 +1869,7 @@ int pa_program()
 void before_exit()
 {
   if( cg_file>0 ) close(cg_file); cg_file=0;
+  if( rd_file>0 ) close(rd_file); rd_file=0;
 }
 
 // Main compiler function ------------------------------------------------------
@@ -1918,8 +1921,7 @@ int main( int ac, char** av )
   if( !pa_program( filename ) ) err1( "wrong syntax" );
   cg_sl_table();
   cg_end();
-  if( cg_file>0 ) close( cg_file );
-  close( rd_file );
+  before_exit(); // close files
   if( IT_DUMP ) { id_table_dump(); sl_table_dump(); }
   if( ST_DUMP )
   {
