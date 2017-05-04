@@ -1,0 +1,124 @@
+ ...free... | loc3 | loc2 | loc1 | ebp^ | r.a. | arg1 | arg2 | arg3 | ...
+            esp    -8     -4     ebp           +8     +12    +16
+-------------------------------------------------------------------------
+
+Num    i|c                  mov eax,N # load int even for c
+
+Str    cp                   mov eax,OFFSET FLAT:Sxxx
+
+Var    var,arg: T   loc i   mov eax,DWORD PTR [ebp...]
+                    glb i   mov eax,DWORD PTR _...
+                    loc c   movsx eax,BYTE PTR [ebp...]
+                    glb c   movsx eax,BYTE PTR _...
+
+       array: T+1   loc     lea eax,[ebp-...]
+                    glb     mov eax,OFFSET FLAT:_...
+
+Fn     T                    -
+
+Cast   e1.T                 -
+
+Call   e1.T                 push eax (0..Narg times)
+                            call _...
+                            add esp,Narg*4 (if Narg>0)
+
+Neg    c|i -> i             neg eax
+
+~      c|i -> i             not eax
+
+!      any -> i             cmp eax,0; sete al; movzx eax,al
+
+Deref  cp -> c              movsx eax,BYTE PTR [eax]
+
+       Tp -> T              mov eax,DWORD PTR [eax]
+
+&& ||  any any -> i         cmp... jz/jnz...
+
+== !=  c|i c|i -> i |       [B]; push eax; [A]; pop ebx
+       Tp Tp -> i   |       cmp eax,ebx
+                            sete|setne al
+                            movzx eax,al
+
+       any c|i:0            [A]
+                            cmp eax,0                          | N
+                            sete|setne al
+                            movzx eax,al
+
+< etc  c|i c|i -> i |       [B]; push eax; [A]; pop ebx
+       Tp Tp -> i   |       cmp eax,ebx                        | 0 | N
+                            setl|setg|setle|setge al
+                            movzx eax,al
+
+&^|*   c|i c|i -> i         [B]; push eax; [A]; pop ebx
+       NO PTRS              and|xor|or|imul eax,ebx
+
+/      c|i c|i -> i         [B]; push eax; [A]; pop ebx
+                            cdq
+                            idiv ebx
+
+%      c|i c|i -> i         [B]; push eax; [A]; pop ebx
+                            cdq
+                            idiv ebx
+                            mov eax,edx
+
++      c|i c|i -> i         [B]; push eax; [A]; pop ebx        | N | V
+       cp i -> cp           add eax,ebx
+       i cp -> cp
+
+       Tp i -> Tp           [B]; push eax; [A]; pop ebx
+                            lea eax,[eax+4*ebx]
+
+       i Tp -> Tp           [B]; push eax; [A]; pop ebx
+                            lea eax,[4*eax+ebx]
+
+-      c|i c|i -> i         [B]; push eax; [A]; pop ebx        | N | V
+       cp cp -> i           sub eax,ebx
+
+       Tp i -> Tp           [B]; push eax; [A]; pop ebx
+                            sal ebx,2
+                            sub eax,ebx
+
+       Tp Tp -> i           [B]; push eax; [A]; pop ebx
+                            sub eax,ebx
+                            sar eax,2
+
+=      i i|c -> i
+       c i|c -> c
+       Tp Tp -> Tp
+       Tp c|i:0
+
+                            [B]
+       var|arg      loc i   mov DWORD PTR [ebp...],eax   |0 |N
+       NO ARRAY     glb i   mov DWORD PTR _...,eax       |0 |N
+
+                    loc c   mov BYTE PTR [ebp...],al     |0 |N
+                    glb c   mov BYTE PTR _...,al
+
+       *(...)
+
+       cp i|c           c   [B]; push eax; [A]; mov ebx,eax; pop eax
+       ip i|c               mov BYTE PTR [ebx],al
+       Tp T                 mov DWORD PTR [ebx],eax
+       Tp 0
+
+
+++ --  c|i -> i     loc i   mov eax,DWORD PTR [ebp...]
+                    glb i   mov eax,DWORD PTR _...
+       var|arg      loc c   movsx eax,BYTE PTR [ebp...]
+       NO ARRAY     glb c   movsx eax,BYTE PTR _...
+       c|i|cp               add eax,1 | sub eax,1
+       Tp                   add eax,4 | sub eax,4
+                    loc i   mov DWORD PTR [ebp...],eax
+                    glb i   mov DWORD PTR _...,eax
+                    loc c   mov BYTE PTR [ebp...],al
+                    glb c   mov BYTE PTR _...,al
+
+       *(...)               [A]
+       Tp                   mov ebx,eax
+                    cp      movsx eax,BYTE PTR [ebx]
+                    Tp      mov eax,DWORD PTR [ebx]
+                    cp*|ip  add eax,1 | sub eax,1
+                    ipp     add eax,4 | sub eax,4
+                    cp      mov BYTE PTR [ebx],al
+                    Tp      mov DWORD PTR [ebx],eax
+
