@@ -1,5 +1,6 @@
 // gcc -S -masm=intel x.c -o x.s
 // gcc [-masm=intel] x.s -o x.exe
+// objdump -d x.exe >x.asm
 
 
 gcc -Wa,-adhln -g main.c >main.s

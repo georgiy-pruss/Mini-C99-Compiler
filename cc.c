@@ -152,11 +152,13 @@ char* KWDS[NKW] = { "void","char","int","enum","if","else","while","for","break"
 
 int op_prec[128] = {0}; // operator precedence
 
+char* OPS = "=+-en*/%<>lgao&^|"; // in frequency order, not there: A << >>  2 ?:  ? @=
+char* PRC = "1BB88CCC999943765"; // precedence corresp. to OPS
+int OPS_LEN = 17;
+
 void op_set_prec()
 {
-  char* o = "=oa|^&en<>lg+-*/%";
-  char* p = "134567889999BBCCC";
-  for( int i=0; o[i]; ++i ) op_prec[o[i]] = p[i]-'0';
+  for( int i=0; OPS[i]; ++i ) op_prec[OPS[i]] = PRC[i]-'0';
 }
 
 int find_kw( char* s )
@@ -774,7 +776,7 @@ void cg_fn_begin( char* name )
 
 void cg_fn_end( int ret0 )
 {
-  if( ret0 ) cg_n( "  mov eax,0" );
+  if( ret0 ) cg_n( "  xor eax,eax" );
   cg_3n( "R", i2s( cg_fn_label ), ":" );
   cg_n( "  leave" );
   cg_n( "  .cfi_restore 5\n  .cfi_def_cfa 4,4" );
@@ -827,11 +829,6 @@ void cg_var_n( int e )
   char* name = cg_var( e ); if( name ) cg_2n( " # ", name ); else cg_o( "\n" );
 }
 
-void cg_simple_item( int e2et, int e21 ) // number or var
-{
-  if( e2et == ET_var ) cg_var_n( e21 ); else cg_n( i2s( e21 ) );
-}
-
 int cg_exprs_backwards_with_push( int** e );
 
 void cg_expr( int* e )
@@ -839,7 +836,8 @@ void cg_expr( int* e )
   int e0 = e[0] & ET_MASK;
   if( e0==ET_num )
   {
-    cg_2n( "  mov eax,", i2s(e[1]) );
+    int n = e[1];
+    if( n==0 ) cg_n( "  xor eax,eax" ); else cg_2n( "  mov eax,", i2s(n) );
   }
   else if( e0==ET_str )
   {
@@ -877,11 +875,6 @@ void cg_expr( int* e )
   }
   else if( e0=='=' )
   {
-    //   if( op=='=' && lt==T_c && rt==T_c ) return T_c; // don't promote to int
-    //if( (lt==T_c || lt==T_i) && (rt==T_c || rt==T_i) ) return T_i;
-    //if( se_is_ptr(lt) && lt==rt ) return lt; // Tp = Tp -> Tp
-    //if( se_is_ptr(lt) && (lt==T_c || lt==T_i) ) return lt; // for Tp = 0
-
     int* e1 = (int*)e[1];
     int e1tag = e1[0] & ET_MASK;
     if( e1tag==ET_var )
@@ -890,13 +883,37 @@ void cg_expr( int* e )
       cg_expr( (int*)e[2] );
       cg_o( "  mov " );
       char* name = cg_var( e1[1] );
-      cg_o( ",eax" );
+      if( *e1 / ET_T == T_c ) cg_o( ",al" ); else cg_o( ",eax" );
       if( name ) cg_2n( " # ", name ); else cg_o( "\n" );
     }
     else if( e1tag==ET_star ) // TODO char*
     {
-      cg_expr( (int*)e1[1] ); cg_n( "  push eax" );
-      cg_expr( (int*)e[2] ); cg_n( "  pop ebx\n  mov DWORD PTR [ebx],eax" );
+      int e2et = *(int*)e[2] & ET_MASK;
+      int n = ((int*)e[2])[1];
+      if( e2et == ET_num || (e2et == ET_var && st_kind[n]!=K_array) )
+      {
+        cg_expr( (int*)e1[1] );
+        cg_n( "  mov ebx,eax" );
+        if( e2et == ET_num )
+          cg_2n( "  mov eax,", i2s(n) );
+        else // e2et == ET_var
+        {
+          if( *(int*)e[2] / ET_T == T_c )
+            cg_o( "  movsx eax," );
+          else
+            cg_o( "  mov eax," ); // wrong for array
+          cg_var_n( n );
+        }
+      }
+      else
+      {
+        cg_expr( (int*)e1[1] ); cg_n( "  push eax" );
+        cg_expr( (int*)e[2] ); cg_n( "  pop ebx" );
+      }
+      if( e1[0] / ET_T == T_c )
+        cg_n( "  mov BYTE PTR [ebx],al" );
+      else
+        cg_n( "  mov DWORD PTR [ebx],eax" );
     }
     else
       err1( "Wrong expression on left of '='" );
@@ -940,37 +957,65 @@ void cg_expr( int* e )
   {
     cg_expr( (int*)e[1] ); // no action at run-time
   }
-  else if( memchr( "<>lgen", e0, 6 ) )
+  else if( e0=='e' || e0=='n' )
   {
-    int e2et = ((int*)e[2])[0] & ET_MASK;
-    if( e2et == ET_num || e2et == ET_var )
+    int e2et = *(int*)e[2] & ET_MASK;
+    int n = ((int*)e[2])[1];
+    int zero = e2et == ET_num && n == 0;
+    if( se_is_ptr( *(int*)e[1] / ET_T ) && se_is_int( *(int*)e[2] / ET_T ) )
+    {
+      if( !zero ) err1( "Can't compare poiner and number" );
+    }
+    char* cmp = "e";
+    if( e2et == ET_num || (e2et == ET_var && st_kind[n]!=K_array) )
     {
       cg_expr( (int*)e[1] );
-      cg_o( "  cmp eax," );
-      cg_simple_item( e2et, ((int*)e[2])[1] );
+      if( zero )
+      {
+        cg_n( "  test eax,eax" ); cmp = "z";
+      }
+      else if( e2et == ET_var && *(int*)e[2] / ET_T == T_c )
+      {
+        cg_o( "  movsx ebx," ); cg_var_n( n ); cg_n( "  cmp eax,ebx" );
+      }
+      else
+      {
+        cg_o( "  cmp eax," ); if( e2et == ET_var ) cg_var_n( n ); else cg_n( i2s( n ) );
+      }
     }
     else // some complex expression
     {
       cg_expr( (int*)e[2] ); cg_n( "  push eax" );
       cg_expr( (int*)e[1] ); cg_n( "  pop ebx\n  cmp eax,ebx" );
     }
-    char* o="ne";
-    if( e0=='e' ) o="e"; else if( e0=='<' ) o="l"; else if( e0=='>' ) o="g";
-    else if( e0=='l' ) o="le"; else if( e0=='g' ) o="ge";
-    cg_o( "  set" ); cg_o( o ); cg_n( " al" );
-    cg_n( "  movzx eax,al" );
+    cg_o( "  set" ); if( e0=='n' ) cg_o( "n" ); cg_2n( cmp, " al\n  movzx eax,al" );
+  }
+  else if( memchr( "<>lg", e0, 4 ) )
+  {
+    int e2et = *(int*)e[2] & ET_MASK;
+    int n = ((int*)e[2])[1];
+    if( e2et == ET_num || (e2et == ET_var && st_kind[n]!=K_array) )
+    {
+      cg_expr( (int*)e[1] );
+      if( e2et == ET_var && *(int*)e[2] / ET_T == T_c )
+      {
+        cg_o( "  movsx ebx," ); cg_var_n( n ); cg_n( "  cmp eax,ebx" );
+      }
+      else
+      {
+        cg_o( "  cmp eax," ); if( e2et == ET_var ) cg_var_n( n ); else cg_n( i2s( n ) );
+      }
+    }
+    else // some complex expression
+    {
+      cg_expr( (int*)e[2] ); cg_n( "  push eax" );
+      cg_expr( (int*)e[1] ); cg_n( "  pop ebx\n  cmp eax,ebx" );
+    }
+    char* o="l"; if( e0=='>' ) o="g"; else if( e0=='l' ) o="le"; else if( e0=='g' ) o="ge";
+    cg_3n( "  set", o, " al\n  movzx eax,al" );
   }
   else if( memchr( "+-&|^*/%", e0, 8 ) )
   {
-    // +
-    // if( (lt==T_c || lt==T_i) && (rt==T_c || rt==T_i) ) return T_i;
-    // if( se_is_ptr(lt) && (rt==T_c || rt==T_i) ) return lt; // Tp + i|c -> Tp
-    // if( (lt==T_c || lt==T_i) && se_is_ptr(rt) ) return rt; // i|c + Tp -> Tp
-    // -
-    // if( (lt==T_c || lt==T_i) && (rt==T_c || rt==T_i) ) return T_i;
-    // if( se_is_ptr(lt) && (rt==T_c || rt==T_i) ) return lt; // Tp - i|c -> Tp
-    // if( se_is_ptr(lt) && lt==rt ) return T_i;              // Tp - Tp -> i
-
     int e1t = *(int*)e[1] / ET_T;
     int e2t = *(int*)e[2] / ET_T;
     int e2et = *(int*)e[2] & ET_MASK;
@@ -982,19 +1027,45 @@ void cg_expr( int* e )
     }
     else if( e0=='-' && se_is_ptr4(e1t) && se_is_int(e2t) )
       mixed = 3;
-    if( (e2et == ET_num || e2et == ET_var) && !mixed )
+    if( e2et == ET_num )
     {
       cg_expr( (int*)e[1] );
-      if( e0=='+' )      cg_o( "  add eax," ); // add eax,N
+      if( e0=='+' )
+      {
+        if( mixed==2 ) cg_n( "  sal eax,2" );
+        cg_o( "  add eax," ); // add eax,N
+      }
       else if( e0=='-' ) cg_o( "  sub eax," );
-      else if( e0=='*' ) { cg_o( "  imul eax," ); if( e2et == ET_num ) cg_o( "eax," ); }
+      else if( e0=='*' ) cg_o( "  imul eax,eax," );
       else if( e0=='&' ) cg_o( "  and eax," );
       else if( e0=='|' ) cg_o( "  or eax," );
       else if( e0=='^' ) cg_o( "  xor eax," );
-      else /* / % -- but no 'idiv NUM' */
-        { cg_n( "  cdq" ); if( e2et == ET_var ) cg_o( "  idiv " ); else cg_o( "  mov ebx," ); }
-      cg_simple_item( e2et, ((int*)e[2])[1] );
-      if( (e0=='/' || e0=='%') && e2et != ET_var ) cg_n( "  idiv ebx" );
+      else cg_o( "  cdq\n  mov ebx," ); // / % -- no 'idiv NUM'
+      int n = ((int*)e[2])[1];
+      if( e0=='+' && mixed==1 || e0=='-' && mixed==3 ) n = n*4; // Tp + i or Tp - i
+      cg_n( i2s( n ) );
+      if( e0=='/' || e0=='%' ) cg_n( "  idiv ebx" );
+    }
+    else if( e2et == ET_var && e2t != T_c && st_kind[((int*)e[2])[1]]!=K_array )
+    {
+      cg_expr( (int*)e[1] );
+      if( e0=='+' ) { if( mixed==0 ) cg_o( "  add eax," ); else cg_o( "  mov ebx," ); }
+      else if( e0=='-' ) { if( mixed==0 ) cg_o( "  sub eax," ); else cg_o( "  mov ebx," ); }
+      else if( e0=='*' ) cg_o( "  imul eax," );
+      else if( e0=='&' ) cg_o( "  and eax," );
+      else if( e0=='|' ) cg_o( "  or eax," );
+      else if( e0=='^' ) cg_o( "  xor eax," );
+      else { cg_n( "  cdq" ); cg_o( "  idiv " ); }
+      cg_var_n( ((int*)e[2])[1] );
+      if( e0=='+' )
+      {
+        if( mixed==1 )      cg_n( "  lea eax,[eax+4*ebx]" ); // Tp + i
+        else if( mixed==2 ) cg_n( "  lea eax,[4*eax+ebx]" ); // i + Tp
+      }
+      else if( e0=='-' && mixed==3 )
+      {
+        cg_n( "  sal ebx,2\n  sub eax,ebx" ); // Tp - i
+      }
     }
     else // some complex expression
     {
@@ -1024,22 +1095,22 @@ void cg_expr( int* e )
   {
     int and_label = cg_new_label();
     cg_expr( (int*)e[1] );
-    cg_n( "  cmp eax,0\n  setne al\n  movzx eax,al" );
+    cg_n( "  test eax,eax\n  setnz al\n  movzx eax,al" ); // need 0 or 1 for result
     cg_n( "  test eax,eax" );
     cg_o( "  jz A" ); cg_n( i2s( and_label ) );
     cg_expr( (int*)e[2] );
-    cg_n( "  cmp eax,0\n  setne al\n  movzx eax,al" );
+    cg_n( "  test eax,eax\n  setnz al\n  movzx eax,al" ); // need 0 or 1 for result
     cg_3n( "A", i2s( and_label ), ":" );
   }
   else if( e0=='o' ) // ||
   {
     int or_label = cg_new_label();
     cg_expr( (int*)e[1] );
-    cg_n( "  cmp eax,0\n  setne al\n  movzx eax,al" );
+    cg_n( "  test eax,eax\n  setnz al\n  movzx eax,al" ); // need 0 or 1 for result
     cg_n( "  test eax,eax" );
     cg_2n( "  jnz O", i2s( or_label ) );
     cg_expr( (int*)e[2] );
-    cg_n( "  cmp eax,0\n  setne al\n  movzx eax,al" );
+    cg_n( "  test eax,eax\n  setnz al\n  movzx eax,al" ); // need 0 or 1 for result
     cg_3n( "O", i2s( or_label ), ":" );
   }
   else if( e0==ET_fn )
@@ -1258,45 +1329,47 @@ int pa_term()
 int pa_binop_na() // na = no advance, sc_next() must be called in the caller
 {
   t1("pa_binop");
-  if( sc_tkn=='*' || sc_tkn=='/' || sc_tkn=='%' ||                // C
-      sc_tkn=='+' || sc_tkn=='-' ||                               // B   A: << >>
-      sc_tkn=='<' || sc_tkn=='>' || sc_tkn=='l' || sc_tkn=='g' || // 9   2: ?:
-      sc_tkn=='e' || sc_tkn=='n' ||                               // 8
-      sc_tkn=='&' || sc_tkn=='^' || sc_tkn=='|' ||                // 7 6 5
-      sc_tkn=='a' || sc_tkn=='o' || sc_tkn=='=' )                 // 4 3 1
-    return t_(T);
-  return t_(F);
+  return t_( memchr( OPS, sc_tkn, OPS_LEN ) != 0 );
 }
 
 int se_calc_binop_type( int op, int left, int right )
 {
-  // calculate new type based on token op, left expr, right expr
-  if( memchr( "*neao/%<>lg&^|", op, 14 ) ) return T_i; // arg type checks are in cg_...
+  // calculate new type based on token op, left expr, right expr types
+  if( op=='a' || op=='o' ) return T_i;
   int lt = *(int*)left / ET_T;
   int rt = *(int*)right / ET_T;
   if( op=='=' && lt==T_c && rt==T_c ) return T_c; // don't promote to int
-  if( (lt==T_c || lt==T_i) && (rt==T_c || rt==T_i) ) return T_i;
+  if( se_is_int(lt) && se_is_int(rt) ) return T_i; // enough for '&^|*/%'
   if( op=='=' )
   {
     if( se_is_ptr(lt) && lt==rt ) return lt; // Tp = Tp -> Tp
-    if( se_is_ptr(lt) && (rt==T_c || rt==T_i) ) return lt; // for Tp = 0
-    err1( "Wrong types for '='" );
+    if( se_is_ptr(lt) && (rt==T_c || rt==T_i) ) return lt; // Tp = 0 TODO check 0 there!
   }
   else if( op=='+' )
   {
     if( se_is_ptr(lt) && (rt==T_c || rt==T_i) ) return lt; // Tp + i|c -> Tp
     if( (lt==T_c || lt==T_i) && se_is_ptr(rt) ) return rt; // i|c + Tp -> Tp
-    err1( "Wrong types for '+'" );
   }
   else if( op=='-' )
   {
     if( se_is_ptr(lt) && (rt==T_c || rt==T_i) ) return lt; // Tp - i|c -> Tp
     if( se_is_ptr(lt) && lt==rt ) return T_i;              // Tp - Tp -> i
-    err1( "Wrong types for '-'" );
   }
-  else
-    assert( 0, "What op?" );
-  return T_i;
+  else if( op=='e' || op=='n' )
+  {
+    if( se_is_ptr(lt) && lt==rt ) return T_i; // Tp == Tp -> i
+    if( se_is_ptr(lt) && (rt==T_c || rt==T_i) ) return T_i; // Tp == 0 TODO check 0
+  }
+  else if( op=='<' || op=='>' || op=='l' || op=='g' )
+  {
+    if( se_is_ptr(lt) && lt==rt ) return T_i; // Tp == Tp -> i
+  }
+  char op_s[2]; op_s[0] = (char)op; op_s[1]='\0';
+  char* op_r = op_s;
+  if( op=='e' ) op_r = "=="; else if( op=='n' ) op_r = "!=";
+  else if( op=='l' ) op_r = "<="; else if( op=='g' ) op_r = ">=";
+  err2( "Wrong operand types in operator: ", op_r );
+  return T_v;
 }
 
 int pa_expr( int min_prec ) // precedence climbing
