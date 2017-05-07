@@ -1,5 +1,5 @@
 // gcc -S -masm=intel x.c -o x.s
-// gcc -masm=intel x.s -o x.exe
+// gcc [-masm=intel] x.s -o x.exe
 
 
 gcc -Wa,-adhln -g main.c >main.s
@@ -21,6 +21,11 @@ https://sourceware.org/binutils/docs/as/index.html#Top
 gnu assembler directives
 http://linux.web.cern.ch/linux/scientific4/docs/rhel-as-en-4/tic54x-directives.html
 https://en.m.wikibooks.org/wiki/X86_Disassembly
+http://ref.x86asm.net/coder32.html                   +
+http://ref.x86asm.net/coder32-abc.html               +
+http://www.agner.org/optimize/instruction_tables.pdf +
+http://www.c-jump.com/CIS77/CIS77syllabus.htm
+http://www.c-jump.com/CIS77/reference/Instructions_by_Opcode.html
 
 
   ...free... | loc3 | loc2 | loc1 | ebp^ | r.a. | arg1 | arg2 | arg3 | ...
@@ -70,7 +75,7 @@ labels:
 
 Sxx:  string literal
 Jxx:  else part of if-else
-Kxx:  end of if-else
+Zxx:  end of if-else
 Lxx:  loop start (condition) | Stack
 Exx:  loop end               | of loops
 Cxx:  for-loop condition     |
@@ -123,22 +128,16 @@ char c            movsx eax, BYTE PTR [esp+15]
 
 c = ...           mov BYTE PTR [esp+15], al
 
--a  ~a            neg eax    not eax
+see also file 'expressions'
 
-!a                cmp DWORD PTR [esp+4], 0
-                  sete al
-                  movzx eax, al
-
-a + b             add eax, edx     sub    and   or
-
-a * b             imul eax, DWORD PTR [esp+4]  ; eax
-
-a / b             cdq
-                  idiv DWORD PTR [esp+4]       ; eax
-
-a % b             cdq
-                  idiv DWORD PTR [esp+4]       ; edx
-
+IMUL r32           386+
+IMUL i32           386+
+IMUL r32,i8        386+
+IMUL r32,i16       386+
+IMUL r32,r32       386+
+IMUL r32,m32       386+
+IMUL r32,r32,i8    386+
+IMUL r32,r32,i32   386+
 
 
 BEGIN
