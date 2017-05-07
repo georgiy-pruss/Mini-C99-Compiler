@@ -73,6 +73,7 @@ Deref  cp -> c              movsx eax,BYTE PTR [eax]
 
 -      c|i c|i -> i         [B]; push eax; [A]; pop ebx        | N | V
        cp cp -> i           sub eax,ebx
+       cp i -> cp
 
        Tp i -> Tp           [B]; push eax; [A]; pop ebx
                             sal ebx,2
