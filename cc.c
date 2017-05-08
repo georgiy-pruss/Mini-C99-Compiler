@@ -7,7 +7,7 @@
 // TODO expressions; lvalue for = ++ --; initializers, strings and arrays as values
 // TODO exprs in vardef_of_expr to allow for( i=1,j=2; ... ) and ++i, f(i), a=b;
 
-char* TITLE = "Georgiy Pruss CC 0.0.4";
+char* TITLE = "Georgiy Pruss C99C 0.26"; // en.wikipedia.org/wiki/Meissel–Mertens_constant
 
 // Parameters ------------------------------------------------------------------
 
@@ -746,8 +746,7 @@ void cg_resume( char* s ) // output string, then unload buffer to the file
 void cg_begin( char* fn )
 {
   cg_3n( "  .file \"", fn, "\"" );
-  cg_n( "  .intel_syntax noprefix" );
-  cg_n( "  # compile with: gcc -masm=intel a.s -o a.exe\n" );
+  cg_n( "  .intel_syntax noprefix # compile with: gcc a.s -o a.exe\n" );
 }
 
 void cg_end()
@@ -868,6 +867,7 @@ void cg_expr( int* e )
   }
   else if( e0==ET_call )
   {
+    // TODO check arg types and number! TODO ... = n_args == VAR_ARGS
     if( (*(int*)e[1]&ET_MASK)!=ET_fn ) err1( "A call must have fn name on the left" );
     int n_args = cg_exprs_backwards_with_push( (int**)e[2] );
     cg_2n( "  call _", id_table[st_id[((int*)e[1])[1]]] );
@@ -875,6 +875,8 @@ void cg_expr( int* e )
   }
   else if( e0=='=' )
   {
+    // TODO *(3+x) = c;
+    // TODO here and below - shortcuts for ET_var are wrong if var is array
     int* e1 = (int*)e[1];
     int e1tag = e1[0] & ET_MASK;
     if( e1tag==ET_var )
