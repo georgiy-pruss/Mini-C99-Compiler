@@ -852,7 +852,7 @@ void cg_expr( int* e )
       if( st_type[e[1]]==T_c ) cg_o( "  movsx eax," ); else cg_o( "  mov eax," );
       cg_var_n( e[1] );
     }
-    else
+    else // ET_var K_array
     {
       assert( k==K_array, "Must be var | arg | array" );
       int id = st_id[e[1]];
@@ -898,22 +898,18 @@ void cg_expr( int* e )
           cg_2n( "  mov eax,", i2s(n) );
         else // e2et == ET_var
         {
-          if( *(int*)e[2] / ET_T == T_c )
-            cg_o( "  movsx eax," );
-          else
-            cg_o( "  mov eax," ); // wrong for array
+          if( *(int*)e[2] / ET_T == T_c ) cg_o( "  movsx eax," );
+          else                            cg_o( "  mov eax," ); // would be wrong for array
           cg_var_n( n );
         }
       }
       else
       {
         cg_expr( (int*)e1[1] ); cg_n( "  push eax" );
-        cg_expr( (int*)e[2] ); cg_n( "  pop ebx" );
+        cg_expr( (int*)e[2] );  cg_n( "  pop ebx" );
       }
-      if( e1[0] / ET_T == T_c )
-        cg_n( "  mov BYTE PTR [ebx],al" );
-      else
-        cg_n( "  mov DWORD PTR [ebx],eax" );
+      if( e1[0] / ET_T == T_c ) cg_n( "  mov BYTE PTR [ebx],al" );
+      else                      cg_n( "  mov DWORD PTR [ebx],eax" );
     }
     else
       err1( "Wrong expression on left of '='" );
@@ -933,25 +929,35 @@ void cg_expr( int* e )
   }
   else if( e0=='i' || e0=='d' )
   {
-    // left side e[1] can be ET_var, TODO ET_star
-    char* cmd="  inc "; if( e0=='d' ) cmd="  dec ";
     int* e1 = (int*)e[1];
-    if( e1[0]==ET_var )
+    int e1et = e1[0] & ET_MASK;
+    if( e1et == ET_var )
     {
-      cg_o( cmd );
+      int k = st_kind[e1[1]];
+      if( k==K_array )
+        err2( "Can't be array name: ", id_table[st_id[e1[1]]] );
+      if( st_type[e1[1]]==T_c ) cg_o( "  movsx eax," ); else cg_o( "  mov eax," );
+      cg_var_n( e1[1] );
+      if( e0=='i' ) cg_o( "  add eax," ); else cg_o( "  sub eax," );
+      if( se_is_ptr4(st_type[e1[1]]) ) cg_n( "4" ); else cg_n( "1" );
+      cg_o( "  mov " );
       char* name = cg_var( e1[1] );
-      if( name ) { cg_o( " # " ); cg_n( name ); } else cg_n( "" );
+      if( *e1 / ET_T == T_c ) cg_o( ",al" ); else cg_o( ",eax" );
+      if( name ) cg_2n( " # ", name ); else cg_o( "\n" );
     }
-    // else TODO not simple var
+    else if( e1et == ET_star )
+    {
+      // else TODO not simple var
+    }
+    else
+      err1( "Wrong expr for increment/decrement" );
   }
   else if( e0==ET_star )
   {
     int e0type = e[0] / ET_T; // dereferenced type!
     cg_expr( (int*)e[1] );
-    if( e[0] / ET_T == T_c )
-      cg_n( "  movsx eax,BYTE PTR [eax]" );
-    else
-      cg_n( "  mov eax,DWORD PTR [eax]" );
+    if( e[0] / ET_T == T_c ) cg_n( "  movsx eax,BYTE PTR [eax]" );
+    else                     cg_n( "  mov eax,DWORD PTR [eax]" );
   }
   else if( e0==ET_cast )
   {

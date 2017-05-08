@@ -131,15 +131,18 @@ c = ...           mov BYTE PTR [esp+15], al
 
 see also file 'expressions'
 
-IMUL r32           386+
-IMUL i32           386+
-IMUL r32,i8        386+
-IMUL r32,i16       386+
-IMUL r32,r32       386+
-IMUL r32,m32       386+
-IMUL r32,r32,i8    386+
-IMUL r32,r32,i32   386+
+http://ref.x86asm.net/coder32-abc.html#I and test.s
 
+imul ebx                    # f7 eb
+imul DWORD PTR _w1          # f7 2d 6c 30 40 00
+imul DWORD PTR [ebp+8]      # f7 6d 08
+
+imul eax,ebx                # 0f af c3
+imul eax,DWORD PTR _w1      # 0f af 05 6c 30 40 00
+imul eax,DWORD PTR [ebp+8]  # 0f af 45 08
+
+imul eax,eax,100            # 6b c0 64
+imul eax,eax,2000000000     # 69 c0 00 94 35 77
 
 BEGIN
                       .file   "intmain.c"
