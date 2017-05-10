@@ -7,7 +7,7 @@
 // TODO initializers, strings and arrays as values
 // TODO exprs in vardef_of_expr to allow for( i=1,j=2; ... ) and ++i, f(i), a=b;
 
-char* TITLE = "Georgiy Pruss C99C 0.261";
+char* TITLE = "Georgiy Pruss C99C 0.2614";
 
 // Parameters ------------------------------------------------------------------
 
