@@ -4,6 +4,8 @@ int main(int k)
 {
   int a[10]; int* p; int* q; int n; char* d; char* s;
 
+  // below is GCC code. mine must be the same, except it's based on EBP
+
   pp = aa;      // mov DWORD PTR _pp, OFFSET FLAT:_aa
 
   qq = pp+1;    // mov eax, DWORD PTR _pp

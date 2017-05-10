@@ -61,6 +61,7 @@ int main()
 
   i = i*(c+1);
   i = i*c;
+  i = i*i;
   i = i*3;
 
   return 0;

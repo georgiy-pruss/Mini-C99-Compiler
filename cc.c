@@ -903,7 +903,10 @@ void cg_expr( int* e )
         cg_expr( (int*)e1[1] );
         cg_n( "  mov ebx,eax" );
         if( e2et == ET_num )
-          cg_2n( "  mov eax,", i2s(n) );
+        {
+          if( n==0 ) cg_n( "  xor eax,eax" );
+          else       cg_2n( "  mov eax,", i2s(n) );
+        }
         else // e2et == ET_var
         {
           if( *(int*)e[2] / ET_T == T_c ) cg_o( "  movsx eax," );
