@@ -4,10 +4,10 @@
 // gcc -fno-builtin-malloc -fno-builtin-strlen -O2 cc.c -o cc.exe
 // -std=c99 is default in gcc
 
-// TODO expressions; lvalue for = ++ --; initializers, strings and arrays as values
+// TODO initializers, strings and arrays as values
 // TODO exprs in vardef_of_expr to allow for( i=1,j=2; ... ) and ++i, f(i), a=b;
 
-char* TITLE = "Georgiy Pruss C99C 0.26"; // en.wikipedia.org/wiki/Meissel–Mertens_constant
+char* TITLE = "Georgiy Pruss C99C 0.261";
 
 // Parameters ------------------------------------------------------------------
 
@@ -651,7 +651,7 @@ void et_print( int* e )
   else if( e0=='e' ) p1( "(== " ); else if( e0=='n' ) p1( "(!= " );
   else if( e0=='l' ) p1( "(<= " ); else if( e0=='g' ) p1( "(>= " );
   else { char s[2]; s[0]=(char)e0; s[1]='\0'; p3("(",s," "); }
-  // TODO else { char s[2] = {(char)e0,'\0'}; p3("(",s," "); }
+  // TODO INIT: else { char s[2] = {(char)e0,'\0'}; p3("(",s," "); }
   if( e0==ET_num ) { p1(i2s(e[1])); }
   else if( e0==ET_str ) p1(str_repr(sl_table[e[1]]));
   else if( e0==ET_fn ) p1(id_table[st_id[e[1]]]);
@@ -791,7 +791,7 @@ void cg_spec_and_nl( char* str, int next )
 void cg_sl_str( int i ) // write string def w/o align; w/o label
 {
   char c[2],cc[3]; cc[2]=c[1]='\0'; cc[0]='\\';
-  // TODO char c[2] = ".", cc[3] = "\\.";
+  // TODO INIT: char c[2] = ".", cc[3] = "\\.";
   cg_o( "  .ascii \"" );
   for( char* s = sl_table[i]; *s; ++s )
   {
@@ -875,20 +875,26 @@ void cg_expr( int* e )
   }
   else if( e0=='=' )
   {
-    // TODO *(3+x) = c;
-    // TODO here and below - shortcuts for ET_var are wrong if var is array
     int* e1 = (int*)e[1];
+    int* e2 = (int*)e[2];
     int e1tag = e1[0] & ET_MASK;
+
+    if( se_is_ptr(e1[0]/ET_T) && se_is_int(e2[0]/ET_T) ) // allow ptr = 0
+    {
+      if( !((e2[0] & ET_MASK) == ET_num && e2[1] == 0) )
+        err1( "Can't assign integer to pointer" );
+    }
     if( e1tag==ET_var )
     {
-      if( st_kind[e1[1]]==K_array ) err2( "Can't assign to array: ", id_table[st_id[e1[1]]] );
+      if( st_kind[e1[1]]==K_array )
+        err2( "Can't assign to array: ", id_table[st_id[e1[1]]] );
       cg_expr( (int*)e[2] );
       cg_o( "  mov " );
       char* name = cg_var( e1[1] );
       if( *e1 / ET_T == T_c ) cg_o( ",al" ); else cg_o( ",eax" );
       if( name ) cg_2n( " # ", name ); else cg_o( "\n" );
     }
-    else if( e1tag==ET_star ) // TODO char*
+    else if( e1tag==ET_star )
     {
       int e2et = *(int*)e[2] & ET_MASK;
       int n = ((int*)e[2])[1];
@@ -1246,7 +1252,7 @@ int pa_call_or_index(int e)
       if( !(et==T_cp || et==T_cpp || et==T_ip || et==T_ipp) )
         err1( "Indexed expr. must be pointer" );
       if( !(rt==T_i || rt==T_c) ) err1( "Index must be integer" ); // char too!
-      // we don't implement 5[a]
+      // we don't implement 5[a] although *(5+a) works
       e = (int)ET_1( ET_star, (int)ET_2( '+', e, r, et ), et-1 );
     }
     else /* '(' */
@@ -1362,7 +1368,7 @@ int se_calc_binop_type( int op, int left, int right )
   if( op=='=' )
   {
     if( se_is_ptr(lt) && lt==rt ) return lt; // Tp = Tp -> Tp
-    if( se_is_ptr(lt) && (rt==T_c || rt==T_i) ) return lt; // Tp = 0 TODO check 0 there!
+    if( se_is_ptr(lt) && (rt==T_c || rt==T_i) ) return lt; // Tp = 0
   }
   else if( op=='+' )
   {
@@ -1377,12 +1383,13 @@ int se_calc_binop_type( int op, int left, int right )
   else if( op=='e' || op=='n' )
   {
     if( se_is_ptr(lt) && lt==rt ) return T_i; // Tp == Tp -> i
-    if( se_is_ptr(lt) && (rt==T_c || rt==T_i) ) return T_i; // Tp == 0 TODO check 0
+    if( se_is_ptr(lt) && (rt==T_c || rt==T_i) ) return T_i; // Tp == 0
   }
   else if( op=='<' || op=='>' || op=='l' || op=='g' )
   {
     if( se_is_ptr(lt) && lt==rt ) return T_i; // Tp == Tp -> i
   }
+  // error: show msg with operator
   char op_s[2]; op_s[0] = (char)op; op_s[1]='\0';
   char* op_r = op_s;
   if( op=='e' ) op_r = "=="; else if( op=='n' ) op_r = "!=";
