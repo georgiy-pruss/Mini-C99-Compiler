@@ -154,7 +154,7 @@ int op_prec[128] = {0}; // operator precedence
 
 char* OPS = "=+-en*/%<>lgao&^|"; // in frequency order, not there: A << >>  2 ?:  ? @=
 char* PRC = "1BB88CCC999943765"; // precedence corresp. to OPS
-int OPS_LEN = 17;
+enum { OPS_LEN = 17 };
 
 void op_set_prec()
 {
@@ -916,19 +916,6 @@ void cg_expr( int* e )
     else
       err1( "Wrong expression on left of '='" );
   }
-  else if( e0==ET_neg )
-  {
-    cg_expr( (int*)e[1] ); cg_n( "  neg eax" );
-  }
-  else if( e0=='~' )
-  {
-    cg_expr( (int*)e[1] ); cg_n( "  not eax" );
-  }
-  else if( e0=='!' )
-  {
-    cg_expr( (int*)e[1] );
-    cg_n( "  test eax,eax\n  setz al\n  movzx eax,al" );
-  }
   else if( e0=='i' || e0=='d' )
   {
     int* e1 = (int*)e[1];
@@ -941,7 +928,7 @@ void cg_expr( int* e )
       if( st_type[e1[1]]==T_c ) cg_o( "  movsx eax," ); else cg_o( "  mov eax," );
       cg_var_n( e1[1] );
       if( e0=='i' ) cg_o( "  add eax," ); else cg_o( "  sub eax," );
-      if( se_is_ptr4(st_type[e1[1]]) ) cg_n( "4" ); else cg_n( "1" );
+      if( se_is_ptr4(st_type[e1[1]]) ) cg_n( "4" ); else cg_n( "1" ); // var type
       cg_o( "  mov " );
       char* name = cg_var( e1[1] );
       if( *e1 / ET_T == T_c ) cg_o( ",al" ); else cg_o( ",eax" );
@@ -949,7 +936,15 @@ void cg_expr( int* e )
     }
     else if( e1et == ET_star )
     {
-      // else TODO not simple var
+      int t = e[0] / ET_T; // expr type
+      cg_expr( (int*)e1[1] );
+      cg_n( "  mov ebx,eax" );
+      if( t==T_c ) cg_n( "  movsx eax,BYTE PTR [ebx]" );
+      else         cg_n( "  mov eax,DWORD PTR [ebx]" );
+      if( e0=='i' ) cg_o( "  add eax," ); else cg_o( "  sub eax," );
+      if( se_is_ptr4(t) ) cg_n( "4" ); else cg_n( "1" );
+      if( t==T_c ) cg_n( "  mov BYTE PTR [ebx],al" );
+      else         cg_n( "  mov DWORD PTR [ebx],eax" );
     }
     else
       err1( "Wrong expr for increment/decrement" );
@@ -964,6 +959,19 @@ void cg_expr( int* e )
   else if( e0==ET_cast )
   {
     cg_expr( (int*)e[1] ); // no action at run-time
+  }
+  else if( e0==ET_neg )
+  {
+    cg_expr( (int*)e[1] ); cg_n( "  neg eax" );
+  }
+  else if( e0=='~' )
+  {
+    cg_expr( (int*)e[1] ); cg_n( "  not eax" );
+  }
+  else if( e0=='!' )
+  {
+    cg_expr( (int*)e[1] );
+    cg_n( "  test eax,eax\n  setz al\n  movzx eax,al" );
   }
   else if( e0=='e' || e0=='n' )
   {
@@ -1038,21 +1046,24 @@ void cg_expr( int* e )
     if( e2et == ET_num )
     {
       cg_expr( (int*)e[1] );
-      if( e0=='+' )
-      {
-        if( mixed==2 ) cg_n( "  sal eax,2" );
-        cg_o( "  add eax," ); // add eax,N
-      }
-      else if( e0=='-' ) cg_o( "  sub eax," );
-      else if( e0=='*' ) cg_o( "  imul eax,eax," );
-      else if( e0=='&' ) cg_o( "  and eax," );
-      else if( e0=='|' ) cg_o( "  or eax," );
-      else if( e0=='^' ) cg_o( "  xor eax," );
-      else cg_o( "  cdq\n  mov ebx," ); // / % -- no 'idiv NUM'
       int n = ((int*)e[2])[1];
-      if( e0=='+' && mixed==1 || e0=='-' && mixed==3 ) n = n*4; // Tp + i or Tp - i
-      cg_n( i2s( n ) );
-      if( e0=='/' || e0=='%' ) cg_n( "  idiv ebx" );
+      if( e0!='+' && e0!='-' && e0!='|' && e0!='^' || n!=0 )
+      {
+        if( e0=='+' )
+        {
+          if( mixed==2 ) cg_n( "  sal eax,2" );
+          cg_o( "  add eax," ); // add eax,N
+        }
+        else if( e0=='-' ) cg_o( "  sub eax," );
+        else if( e0=='*' ) cg_o( "  imul eax,eax," );
+        else if( e0=='&' ) cg_o( "  and eax," );
+        else if( e0=='|' ) cg_o( "  or eax," );
+        else if( e0=='^' ) cg_o( "  xor eax," );
+        else cg_o( "  cdq\n  mov ebx," ); // / % -- no 'idiv NUM'
+        if( e0=='+' && mixed==1 || e0=='-' && mixed==3 ) n = n*4; // Tp + i or Tp - i
+        cg_n( i2s( n ) );
+        if( e0=='/' || e0=='%' ) cg_n( "  idiv ebx" );
+      }
     }
     else if( e2et == ET_var && e2t != T_c && st_kind[((int*)e[2])[1]]!=K_array )
     {
