@@ -18,6 +18,7 @@ enum { INTSZ = 4,    // all this is for 32-bit architecture; int and int* is 4 b
   ST_DIM=500,        // symbol table; max length is 500 (it's for all scopes at a moment)
   RD_BUF=8000,       // buffer for reading program text
   BF_WRT_SZ=4000,    // buffer for suspended output
+  MAX_INIT_DIM=600,  // max number of items in init array
   BSS_ORG=100000 };  // tag that data is in bss section (BSS_ORG+offset)
 
 int SC_DEBUG=0; // -T - tokens trace, including lines
@@ -150,7 +151,7 @@ enum { Void, Char, Int, Enum, If, Else, While, For, Break, Return, NKW }; // key
 
 char* KWDS[NKW] = { "void","char","int","enum","if","else","while","for","break","return" };
 
-int op_prec[128] = {0}; // operator precedence
+int op_prec[128]; // operator precedence
 
 char* OPS = "=+-en*/%<>lgao&^|"; // in frequency order, not there: A << >>  2 ?:  ? @=
 char* PRC = "1BB88CCC999943765"; // precedence corresp. to OPS
@@ -554,6 +555,7 @@ int se_arg_count; // number of arguments in fn
 int se_lvars = 0; // local vars -- JFYI
 int se_gvars = 0; // global vars -- JFYI
 int se_items; // items in initialization array
+int* se_array_items; // the items
 int se_last_stmt_ret; // last statement was return -- for cg_fn_end
 int se_local_offset; // offset for local vars (negative! for [EBP-...])
 int se_max_l_offset; // max value of local offset == stack size to allocate
@@ -798,7 +800,9 @@ void cg_sl_str( int i ) // write string def w/o align; w/o label
     if( *s=='\n' ) cg_spec_and_nl( "\\12", s[1] );
     else if( *s=='\r' ) cg_spec_and_nl( "\\15", s[1] );
     else if( *s=='\b' ) cg_spec_and_nl( "\\10", s[1] );
-    else if( *s=='\\' || *s=='"' ) { cc[1] = *s; cg_o( cc ); }
+    //else if( *s=='\\' || *s=='"' ) { cc[1] = *s; cg_o( cc ); }
+    else if( *s=='\\' ) cg_spec_and_nl( "\\134", s[1] );
+    else if( *s=='"' ) cg_spec_and_nl( "\\42", s[1] );
     else { c[0] = *s; cg_o( c ); }
   }
   cg_n( "\\0\"" );
@@ -910,7 +914,7 @@ void cg_expr( int* e )
         else // e2et == ET_var
         {
           if( *(int*)e[2] / ET_T == T_c ) cg_o( "  movsx eax," );
-          else                            cg_o( "  mov eax," ); // would be wrong for array
+          else                            cg_o( "  mov eax," );
           cg_var_n( n );
         }
       }
@@ -1430,17 +1434,31 @@ int pa_arrayinit()            // TODO can be any expression?
     return t_(T);
   }
   se_items = 0;
+  se_array_items = 0;
   if( sc_tkn!='{' ) return t_(F);
   sc_next();
   if( sc_tkn==Str )
   {
-    sc_next();                              // TODO sc_tkn can be '0'
-    while( sc_tkn==',' ) { sc_next(); ++se_items; if( sc_tkn!=Str ) return t_(F); sc_next(); }
+    int* array_items = (int*)malloc( INTSZ*MAX_INIT_DIM );
+    array_items[se_items] = sc_num;
+    sc_next();
+    while( sc_tkn==',' )
+    {
+      sc_next(); ++se_items;
+      if( sc_tkn!=Str ) return t_(F);      // TODO sc_tkn can be '0', 1st too
+      array_items[se_items] = sc_num;
+      sc_next();
+    }
+    se_array_items = array_items;
   }
   else
   {
     if( !pa_integer() ) return t_(F);
-    while( sc_tkn==',' ) { sc_next(); ++se_items; if( !pa_integer() ) return t_(F); }
+    while( sc_tkn==',' )
+    {
+      sc_next(); ++se_items;
+      if( !pa_integer() ) return t_(F);
+    }
   }
   if( sc_tkn!='}' ) return t_(F);
   sc_next(); ++se_items;
@@ -1513,11 +1531,21 @@ int se_add_var( int id, int t, int dim, int init, int* init_exprs )
     int tail = dim - (strlen( sl_table[(int)init_exprs] )+1);
     if( tail > 0 ) { cg_o( "  .space " ); cg_n( i2s( tail ) ); }
   }
+  else if( init==Str && t==T_cp && k==K_array )
+  {
+    int items = dim;
+    if( items>se_items ) items = se_items;
+    int i=0;
+    for( ; i<items; ++i )
+      cg_2n( "  .long S", i2s(init_exprs[i]) );
+    if( i<dim )
+      cg_2n( "  .space ", i2s(4*(dim-items) ) );
+  }
   else
   {
     cg_o( "  .long " );
     if( t==T_cp ) // then init_exprs is string index
-      { cg_o( "S" ); cg_n( i2s( (int)init_exprs ) ); }
+      cg_2n( "S", i2s( (int)init_exprs ) );
     else
       cg_n( i2s( (int)init_exprs ) );
     // TODO value; cg_data_   if chars; etc
@@ -1579,18 +1607,26 @@ int pa_vartail()
     if( sc_tkn!='=' ) return t_(F);
     sc_next();
     if( !pa_arrayinit() ) return t_(F);
-    se_add_var( id, t, se_items, 0, 0 ); // TODO init ints...
+    se_add_var( id, t, se_items, Str, se_array_items ); // TODO init ints...
+    free( (char*)se_array_items );
     return t_(T);
   }
   else // length is specified in [N]
   {
     if( !pa_integer() ) return t_(F); // value in se_value
     if( sc_tkn!=']' ) return t_(F);
-    se_add_var( id, t, se_value, 0, 0 ); // TODO
+    int dim = se_value;
     sc_next();
-    if( sc_tkn!='=' ) return t_(T); // no initialization
+    if( sc_tkn!='=' ) // no initialization
+    {
+      se_add_var( id, t, dim, 0, 0 );
+      return t_(T);
+    }
     sc_next();
-    return t_(pa_arrayinit()); // TODO init ints...
+    if( !pa_arrayinit() ) return t_(F);
+    se_add_var( id, t, dim, Str, se_array_items ); // only {Str,Str,...} implemented
+    free( (char*)se_array_items );
+    return t_(T);
   }
 }
 

@@ -28,7 +28,7 @@ char Cm = -1;
 
 char* Cxu;
 char* Cxz = 0;
-//char* Cxs = "abc"; // TODO
+//char* Cxs = "abc"; // TODO -- strinit.c
 //char* Cxn = "";
 
 char** Cxxu;
@@ -42,11 +42,11 @@ char Cazz[2] = {0,0};
 //char Can[2] = "";
 char Cv1[] = {0};
 char Cv2[] = {0,0};
-char Cv3[] = "abc";
+//char Cv3[] = "abc";
 
 char* Cxau[2];
 char* Cxaz[3] = {0};
-char* Cxas[3] = {"aaa","bbb","ccc"};
+//char* Cxas[3] = {"aaa","bbb","ccc"};
 //char* Cxas2[3] = {0,"dddd"};
 //char* Cxvs[] = {0,"e","ff"};
 
