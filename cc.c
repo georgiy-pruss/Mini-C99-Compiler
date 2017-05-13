@@ -4,7 +4,7 @@
 // gcc -fno-builtin-malloc -fno-builtin-strlen -O2 cc.c -o cc.exe
 // -std=c99 is default in gcc
 
-// TODO initializers, strings and arrays as values
+// TODO number array initializers; local array initializers
 // TODO exprs in vardef_of_expr to allow for( i=1,j=2; ... ) and ++i, f(i), a=b;
 
 char* TITLE = "Georgiy Pruss C99C 0.2614";
@@ -27,7 +27,7 @@ int IT_DEBUG=0; // -I - id table trace
 int IT_DUMP=0;  // -D - id table dump
 int ST_DUMP=0;  // -S - symbol table dump
 int ET_TRACE=0; // -E - trace expressions
-int CG_LINES=0; // -L - output line numbers
+int CG_LINES=1; // -L - omit output of line numbers; -L => CG_LINES=0
 
 // stdlib ----------------------------------------------------------------------
 
@@ -85,13 +85,13 @@ char* str_repr( char* s )
   char* d = str_repr_buf; *d = '"';
   for( ++d; *s; ++d, ++s )
   {
-    if( *s=='\n' ) { *d='\\'; ++d; *d='n'; }
-    else if( *s==0 ) { *d='\\'; ++d; *d='0'; }
-    else if( *s=='\b' ) { *d='\\'; ++d; *d='b'; }
-    else if( *s=='\r' ) { *d='\\'; ++d; *d='r'; }
+    if( *s=='\n' ) { *d='\\'; *++d='n'; }
+    else if( *s==0 ) { *d='\\'; *++d='0'; }
+    else if( *s=='\b' ) { *d='\\'; *++d='b'; }
+    else if( *s=='\r' ) { *d='\\'; *++d='r'; }
     else *d=*s;
   }
-  *d = '"'; ++d; *d = '\0';
+  *d = '"'; *++d = '\0';
   return str_repr_buf;
 }
 
@@ -119,9 +119,9 @@ void p2( char* s, char* s2 ) { p1( s ); p1( s2 ); }
 void p3( char* s, char* s2, char* s3 ) { p1( s ); p1( s2 ); p1( s3 ); }
 void p4( char* s, char* s2, char* s3, char* s4 ) { p1( s ); p1( s2 ); p1( s3 ); p1( s4 ); }
 void p0n() { write( 1, "\n", 1 ); } // n = new line
-void p1n( char* s ) { write( 1, s, strlen(s) ); write( 1, "\n", 1 ); }
-void p2n( char* s, char* s2 ) { p1( s ); p1( s2 ); write( 1, "\n", 1 ); }
-void p3n( char* s, char* s2, char* s3 ) { p1( s ); p1( s2 ); p1( s3 ); write( 1, "\n", 1 ); }
+void p1n( char* s ) { write( 1, s, strlen(s) ); p0n(); }
+void p2n( char* s, char* s2 ) { p1( s ); p1( s2 ); p0n(); }
+void p3n( char* s, char* s2, char* s3 ) { p1( s ); p1( s2 ); p1( s3 ); p0n(); }
 
 void before_exit(); // to call if compilation fails, before calling exit()
 
@@ -157,10 +157,7 @@ char* OPS = "=+-en*/%<>lgao&^|"; // in frequency order, not there: A << >>  2 ?:
 char* PRC = "1BB88CCC999943765"; // precedence corresp. to OPS
 enum { OPS_LEN = 17 };
 
-void op_set_prec()
-{
-  for( int i=0; OPS[i]; ++i ) op_prec[OPS[i]] = PRC[i]-'0';
-}
+void op_set_prec() { for( int i=0; OPS[i]; ++i ) op_prec[OPS[i]] = PRC[i]-'0'; }
 
 int find_kw( char* s )
 {
@@ -234,7 +231,7 @@ int id_index( char* s ) // looks up in the table or adds there if needed
 
 void id_table_dump()
 {
-  int k = 0;
+  int k = 0; // count ids for double-check
   for( int i=0; i<id_table_dim; ++i )
     if( id_table[i] ) { ++k; p3n( i2s(i), " ", id_table[i] ); }
   p1( "-------------------------------------\n" );
@@ -295,7 +292,7 @@ int sc_read_next()        // scan for next token
     int v = rd_char - '0';
     if( v==0 ) // octal
       for( rd_next(); rd_char>='0' && rd_char<='7'; rd_next() ) v = 8*v + rd_char - '0';
-      // hex also can be here, under 'x' etc
+      // hex also can be here, under 'x' etc..... in future
     else // decimal
       for( rd_next(); rd_char>='0' && rd_char<='9'; rd_next() ) v = 10*v + rd_char - '0';
     sc_num = v;
@@ -335,9 +332,7 @@ int sc_read_next()        // scan for next token
     rd_next();
     return Chr;
   }
-  if( rd_char=='{' || rd_char=='}' || rd_char=='(' || rd_char==')' ||
-      rd_char=='[' || rd_char==']' || rd_char==',' || rd_char==';' ||
-      rd_char=='*' || rd_char=='%' || rd_char=='^' || rd_char=='~' )
+  if( memchr( "(){}[],;*%^~", rd_char, 12 ) )
   {
     int c = rd_char; rd_next();
     return c;
@@ -696,12 +691,11 @@ int cg_fn_label; // current function exit label
 int cg_loop_label[20]; // stack of labels for loops/breaks
 int cg_loop_level;     // stack "pointer"
 
-int cg_new_label() { ++cg_label; return cg_label; }
+int cg_new_label() { return ++cg_label; }
 
 int cg_new_loop_label()
 {
-  ++cg_label;
-  cg_loop_label[cg_loop_level] = cg_label; ++cg_loop_level;
+  cg_loop_label[cg_loop_level] = ++cg_label; ++cg_loop_level;
   return cg_label;
 }
 
@@ -731,11 +725,7 @@ void cg_2n( char* s, char* t ) { cg_o(s); cg_n(t); }
 void cg_3( char* s, char* t, char* u ) { cg_o(s); cg_o(t); cg_o(u); }
 void cg_3n( char* s, char* t, char* u ) { cg_o(s); cg_o(t); cg_n(u); }
 
-void cg_line()
-{
-  cg_2n( "  # ", i2s(rd_line) ); // maybe remove some time
-  // if( CG_LINES ) { cg_o( "  mov ecx," ); cg_n( i2s(rd_line) ); } // ONLY IN CODE!
-}
+void cg_line() { if( CG_LINES ) cg_2n( "  # ", i2s(rd_line) ); }
 
 void cg_suspend() // after this, write to buffer
 {
@@ -753,7 +743,7 @@ void cg_resume( char* s ) // output string, then unload buffer to the file
 void cg_begin( char* fn )
 {
   cg_3n( "  .file \"", fn, "\"" );
-  cg_n( "  .intel_syntax noprefix # compile with: gcc a.s -o a.exe\n" );
+  cg_n( "  .intel_syntax noprefix\n" );
 }
 
 void cg_end()
@@ -797,17 +787,16 @@ void cg_spec_and_nl( char* str, int next )
 
 void cg_sl_str( int i ) // write string def w/o align; w/o label
 {
-  char c[2],cc[3]; cc[2]=c[1]='\0'; cc[0]='\\';
-  // TODO INIT: char c[2] = ".", cc[3] = "\\.";
+  char c[2]; c[1]='\0';
+  // TODO INIT: char c[2] = ".";
   cg_o( "  .ascii \"" );
   for( char* s = sl_table[i]; *s; ++s )
   {
     if( *s=='\n' ) cg_spec_and_nl( "\\12", s[1] );
+    else if( *s=='\\' ) cg_spec_and_nl( "\\134", s[1] );
     else if( *s=='\r' ) cg_spec_and_nl( "\\15", s[1] );
     else if( *s=='\b' ) cg_spec_and_nl( "\\10", s[1] );
-    //else if( *s=='\\' || *s=='"' ) { cc[1] = *s; cg_o( cc ); }
-    else if( *s=='\\' ) cg_spec_and_nl( "\\134", s[1] );
-    else if( *s=='"' ) cg_spec_and_nl( "\\42", s[1] );
+    else if( *s=='\"' ) cg_spec_and_nl( "\\42", s[1] );
     else { c[0] = *s; cg_o( c ); }
   }
   cg_n( "\\0\"" );
@@ -887,7 +876,6 @@ void cg_expr( int* e )
     int* e1 = (int*)e[1];
     int* e2 = (int*)e[2];
     int e1tag = e1[0] & ET_MASK;
-
     if( se_is_ptr(e1[0]/ET_T) && se_is_int(e2[0]/ET_T) ) // allow ptr = 0
     {
       if( !((e2[0] & ET_MASK) == ET_num && e2[1] == 0) )
@@ -1175,13 +1163,12 @@ void t1( char* s ) { if( PA_TRACE ) { tI(); p1n( s ); ++tL; } }
 void t2( char* s, char* s2 ) { if( PA_TRACE ) { tI(); p2n( s,s2 ); ++tL; } }
 void t3( char* s, char* s2, char* s3 ) { if( PA_TRACE ) { tI(); p3n( s,s2,s3 ); ++tL; } }
 int  t_( int r ) { if( PA_TRACE ) { --tL; tI(); p2n( "<< ", i2s(r) ); } return r; }
-int* tx( int* r ) { if( PA_TRACE ) { --tL; tI(); p2n( "<< ", i2s((int)r) ); } return r; }
+int* tx( int* r ) { if( PA_TRACE ) { --tL; tI(); p2n( "<<* ", i2s((int)r) ); } return r; }
 
 enum { F, T }; // Boolean result of pa_* functions: False, True
 
 // Due to recursive nature and difficult syntax, some fns have to be pre-declared
-// parser fns returning false/true - pa_...
-// parser fns returning expressions - px_...
+// parser fns returning false/true - pa_...; returning expressions - px_...
 
 int* px_expr(int min_prec); int* px_term();
 
@@ -1367,12 +1354,6 @@ int* px_term()
   return tx( px_unexpr() );
 }
 
-int pa_binop_na() // na = no advance, sc_next() must be called in the caller
-{
-  t1("pa_binop");
-  return t_( memchr( OPS, sc_tkn, OPS_LEN ) != 0 );
-}
-
 int se_calc_binop_type( int op, int* left, int* right )
 {
   // calculate new type based on token op, left expr, right expr types
@@ -1419,7 +1400,7 @@ int* px_expr( int min_prec ) // precedence climbing
   t2("px_expr ",i2s(min_prec));
   int* r = px_term();
   if( !r ) return tx(0);
-  while( pa_binop_na() && min_prec < op_prec[sc_tkn] )
+  while( memchr( OPS, sc_tkn, OPS_LEN ) != 0 && min_prec < op_prec[sc_tkn] )
   {
     int p = op_prec[sc_tkn];
     if( sc_tkn=='=' ) --p; // correct precedence for right-to-left operator
@@ -1432,7 +1413,7 @@ int* px_expr( int min_prec ) // precedence climbing
   return tx( r );
 }
 
-int pa_arrayinit()            // TODO can be any expression?
+int pa_arrayinit()        // TODO can be any expression?
 {
   t1("pa_arrayinit");
   if( sc_tkn==Str ) // string as array of char
@@ -1454,7 +1435,7 @@ int pa_arrayinit()            // TODO can be any expression?
     while( sc_tkn==',' )
     {
       sc_next(); ++se_items;
-      if( sc_tkn!=Str ) return t_(F);      // TODO sc_tkn can be '0', 1st too
+      if( sc_tkn!=Str ) return t_(F);   // TODO sc_tkn can be '0', 1st too
       array_items[se_items] = sc_num;
       sc_next();
     }
@@ -1768,7 +1749,6 @@ int pa_stmt()
     cg_o( "  jz E" ); cg_n( i2s( loop_label ) );
     if( ET_TRACE && c ) { p1( "E:whl " ); et_print( (int*)c ); p0n(); }
     sc_next();
-    ///cg_n( "  # while-stmt" );
     int r = pa_stmt();
     cg_o( "  jmp L" ); cg_n( i2s( loop_label ) );
     cg_o( "E" ); cg_o( i2s( loop_label ) ); cg_n( ":" );
@@ -1786,14 +1766,12 @@ int pa_stmt()
     cg_n( "  test eax,eax" );
     cg_o( "  jz J" ); cg_n( i2s( if_label ) ); // jump if false
     if( ET_TRACE && c ) { p1( "E:iff " ); et_print( (int*)c ); p0n(); }
-    ///cg_n( "  # then-stmt" );
     sc_next(); if( !pa_stmt() ) return t_(F);
     if( sc_tkn==Kw+Else )
     {
       cg_o( "  jmp Z" ); cg_n( i2s( if_label ) );
       cg_o( "J" ); cg_o( i2s( if_label ) ); cg_n( ":" );
       sc_next();
-      ///cg_n( "  # else-stmt" );
       if( !pa_stmt() ) return t_(F);
       cg_o( "Z" ); cg_o( i2s( if_label ) ); cg_n( ":" );
     }
@@ -1847,7 +1825,6 @@ int pa_stmt()
       cg_n( "  test eax,eax" );
       cg_o( "  jz E" ); cg_n( i2s( loop_label ) );
     }
-    ///cg_n( "  # for-stmt" );
     int rc = pa_stmt();
     if( se_local_offset<se_max_l_offset) se_max_l_offset=se_local_offset; // negative!
     if( st_count>block_local_start ) // vars were defined in block
@@ -2033,7 +2010,7 @@ int main( int ac, char** av )
     p1( "-D  dump id table data and string literal table\n" );
     p1( "-S  dump symbol table\n" );
     p1( "-E  trace expressions\n" );
-    //p1( "-L  output line numbers in assembler as 'mov ecx,N'\n" ); TODO...
+    p1( "-L  omit output of line numbers in assembler\n" );
     p1( "-o FILE  specify output file name\n" );
     return 0;
   }
@@ -2048,7 +2025,7 @@ int main( int ac, char** av )
       if( av[i][1] == 'D' ) IT_DUMP=1;
       if( av[i][1] == 'S' ) ST_DUMP=1;
       if( av[i][1] == 'E' ) ET_TRACE=1;
-      //if( av[i][1] == 'L' ) CG_LINES=1;
+      if( av[i][1] == 'L' ) CG_LINES=0;
       if( av[i][1] == 'o' ) { outputfn = av[++i]; }
     }
 
