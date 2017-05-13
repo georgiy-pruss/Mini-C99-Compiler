@@ -7,7 +7,7 @@
 // TODO number array initializers; local array initializers
 // TODO exprs in vardef_of_expr to allow for( i=1,j=2; ... ) and ++i, f(i), a=b;
 
-char* TITLE = "Georgiy Pruss C99C 0.2614";
+char* TITLE = "Georgiy Pruss C99C 0.26149";
 
 // Parameters ------------------------------------------------------------------
 
@@ -151,19 +151,19 @@ enum { Void, Char, Int, Enum, If, Else, While, For, Break, Return, NKW }; // key
 
 char* KWDS[NKW] = { "void","char","int","enum","if","else","while","for","break","return" };
 
-int op_prec[128]; // operator precedence
-
-char* OPS = "=+-en*/%<>lgao&^|"; // in frequency order, not there: A << >>  2 ?:  ? @=
-char* PRC = "1BB88CCC999943765"; // precedence corresp. to OPS
-enum { OPS_LEN = 17 };
-
-void op_set_prec() { for( int i=0; OPS[i]; ++i ) op_prec[OPS[i]] = PRC[i]-'0'; }
-
 int find_kw( char* s )
 {
   for( int i=0; i<NKW; ++i ) if( strequ( s, KWDS[i] ) ) return i;
   return -1;
 }
+
+char* OPS = "=+-en*/%<>lgao&^|"; // binary ors in frequency order
+char* PRC = "1BB88CCC999943765"; // precedence corresp. to OPS
+enum { OPS_LEN = 17 };
+
+int op_prec[128]; // operator precedence
+
+void op_set_prec() { for( int i=0; OPS[i]; ++i ) op_prec[OPS[i]] = PRC[i]-'0'; }
 
 // File reader -----------------------------------------------------------------
 
@@ -1566,8 +1566,7 @@ int pa_vartail()
       }
       else
       {
-        int res = pa_integer(); // returns se_value
-        if( !res ) return t_(F);
+        if( !pa_integer() ) return t_(F);
         se_add_var( id, t, -1, Num, (int*)se_value );
       }
     }
@@ -1796,22 +1795,18 @@ int pa_stmt()
     }
     else
       sc_next(); // no init part
-    int* e2;
+    int* e2 = 0; // the default means no condition expr provided
     if( sc_tkn!=';' )
     {
       if( !(e2 = px_expr(0)) ) return t_(F); // also ....
     }
-    else
-      e2 = 0; // it means no condition expr
     if( ET_TRACE && e2 ) { p1( "E:fr2 " ); et_print( (int*)e2 ); p0n(); }
-    int* e3; // e3 is exprs (list)
+    int* e3 = 0; // e3 is exprs (list); the defualt means no post exprs
     sc_next();
     if( sc_tkn!=')' )
     {
       if( !(e3 = px_exprs()) ) return t_(F); // opt. post-expressions
     }
-    else
-      e3 = 0; // it means no post exprs
     if( ET_TRACE && e3 ) { p1( "E:fr3 [" ); et_print_exprs( (int**)e3 ); }
     if( sc_tkn!=')' ) return t_(F); // also...
     sc_next();
