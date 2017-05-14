@@ -5,9 +5,9 @@
 15272 tokens
  1846 expressions
   371 total ids
-   62 collisions for ids
+   62 total collisions for ids
    69 enum ids
-   67 glabal vars
+   67 global vars
   121 functions
   317 literal strings
   156 bytes of initialized data
