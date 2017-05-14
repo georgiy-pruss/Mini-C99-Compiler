@@ -1,0 +1,139 @@
+05/14 19:11 STATISTICS (1stats.stat, *.stat) 2055 lines, 121 functions, etc
+05/14 00:12 a bit more of tiny changes
+05/13 23:39 just some clean up, no serious modifications
+05/13 22:00 pa_... for expressions are px_... and get/return int*; also ET_1/2/I/P
+05/11 02:08 * * *   I T   W O R K S   * * *
+05/11 01:23 implemented global string arrays; changed output of BKSLSH and QUOTE. *** GATA!!! ***
+05/10 20:59 more tests done. now var with initialization left
+05/10 18:36 renaming
+05/10 18:31 tests/examples/*.c all work
+05/10 17:18 Made check: can't assign int to ptr
+05/10 17:16 incr/decr finished; ignoring add/sub/xor/or 0 in ops
+05/08 12:55 Many TODOs; the version is Meissel-Mertens_constant
+05/08 03:43 ++ and -- for simple vars; self-compiling works for help msg!!!
+05/08 02:39 All expressions are done, except ++ and --
+05/07 04:08 many changes in expressions; most cases done; type calc done
+05/07 04:05 compilation doc: ref urls; imul formats
+05/05 01:50 compilation-asm/expressions - how-to for all exprs; tests/*.c - new test pgms
+05/05 01:41 ET_index -> ET_star (ET_add ... )
+05/05 01:40 type in ET: in constructors ET_1/2, etc
+05/05 01:38 CG_LINES ... what should be the options?
+05/05 01:36 fix in ET_cast
+04/28 02:36 well new trouble - fix license :)
+04/28 02:33 LICENSE (BSD based)
+04/28 01:57 Assignment to *x works; next x[y]; then N*itemsize, types...
+04/28 01:41 cg_exprs_backwards_with_push; array vars - created, accessed (in simple context)
+04/27 23:49 let's redo 'exprs' first, then et_analyze_type
+04/27 19:48 et_analyze_expr - not for expr 'level' but for expr 'type' - start work
+04/27 19:44 Added some test files; for-init - already there
+04/27 18:44 Refactoring, cg_simple_item; AND OR expressions; src file open/close - in main; k=Var/Array
+04/27 13:22 conditions in expressions: < > <= >= == !=
+04/27 02:59 exprs: e+C e+N e+V optimized, refactored etc; cg_var()
+04/18 03:12 exprs: ++v --v, \!x, x*n x/n x%n x&n x|n x^n
+04/18 03:08 correct local offsets, arg offsets, exprs: -x ~x x+n x-n
+04/18 03:05 et_analyze_expr; init vars
+04/06 13:47 Global/local simple int vars initialization; assignment; access
+04/04 15:59 Sync AST with the program text
+04/04 12:49 Vars - defined, initialized, used in exprs - but only int, not checks, etc
+04/04 03:02 README - added HelloWorld with printf, yes other fns can be used too
+04/03 16:06 Some corrections re. global vars
+04/03 15:55 Editing in Github
+04/03 11:44 -L and -o ofile options; lvalue in grammar (JFI only)
+04/03 11:10 'Hello World' works! All this exprs, pushes, call, add sp... :) -- 2017.04.03 11:00
+04/03 02:46 Compiles expr-constants! With call and added pushes can say 'Hello world!' :)
+04/02 21:19 Global var definitions... work is going on...
+04/02 20:36 There won't be (multiple) var declarations! Only definitions.
+04/02 20:33 A few pixel fixed in grammar.png
+03/30 02:58 Reorg in compilation-asm: all notes in file 'compilation'
+03/30 02:48 Moved all assembler-related stuff to compilation-asm
+03/30 02:43 .comm - uninit/declaration (3rd=power-of-2); .bss - init 0; .data - init not zero
+03/29 20:36 All stmt labels; line-no in .s; global vars in .s - just starting
+03/29 13:37 Labels for fn, return, while, break - and they cg good labels!
+03/29 12:29 Unique strings in sl table; some fixes in grammar; exprs for expr
+03/29 01:12 Expr tree -- ET_...  CG: print out literal strings (cg_sl_table)
+03/29 00:58 assemler.txt - plan for labels of statements
+03/28 04:08 a_print prints out expr AST (not for calls yet). Problem with Num:{some-address}
+03/28 03:37 pa_expr builds AST for expression; also pa_vardef_or_expr - TODO. File AST.txt
+03/27 23:58 String literal table. Other changes. Assembler ops
+03/25 03:50 1259 lines; 36723 chars; 8677 tokens; 264 ids; 50 enums; 52 vars; 90 fns; 144 data; 9164 bss.
+03/25 03:46 Scope 'for' implemented. Can't refactor it b/c of local scope counters.
+03/24 13:13 Vars in for added to stack; Check it all! Refactor <S> and <R>
+03/24 12:54 Correct stack size in assemply; bss section; stats
+03/24 02:41 Calculates correctly offset and size of data and local vars! One data section for now.
+03/23 23:42 Moved grammar files to subdirectory
+03/23 23:40 Started to alloc vars (now local), to count stack size
+03/23 03:45 Grammar diagram - grammar.png and grammar.xml (https://www.draw.io/)
+03/23 03:43 Returning dyn.definitions; se_level; etc. At least it compiles itself now!
+03/22 22:21 back to multiple local scopes and vardef as stmt
+03/22 19:53 Rewriting back to dynamic var defs; find_kw with loop; etc
+03/22 19:48 cg_o and cg_n use bf_ if cg_suspended; logic for suspend/resume in pa_func
+03/22 19:44 +memcopy -strcpy -strcat; buffer for writing bf_*
+03/21 23:47 At the end, dump declarations of all undefined functions; warning if not return was last
+03/21 04:04 README.md modified a bit. cc.c -- 8209 tokens, 173 globals, 238 ids, 22 collisions
+03/21 03:57 Counting lines in #...; checking duplicate fn declarations
+03/21 03:35 Duplicate fn definitions; definition of declared fn; etc
+03/20 21:54 Octal numbers; cg-output fix; definitions - changes...
+03/20 13:05 Renamed back to cc.c -- it's easier while developing
+03/20 13:01 Fns/vars defs; args/localvars/globalvars; TODO - fn/vars defs
+03/20 02:21 Simplified it - no local scopes except fns (so, only 1 level) ~~~~ 7237 tokens, 218 ids
+03/20 00:50 Removed scopes from block and for in grammar and README; moved vars in c2s.c
+03/20 00:21 token count (7373). C99 scopes require two passes or variable for esp decrement - I'll simplify language
+03/19 21:44 Compilation to a.s!!! Local stack size is saved to separate vars - I don't like it.
+03/19 12:36 Renamed: cc.c -> c2s.c
+03/19 12:35 Proper name of README.md
+03/19 12:35 README tested/edited in github
+03/19 11:42 README.md has brief description of the language
+03/19 03:34 compilations.s - how to compile into .s
+03/19 03:33 in grammar: comments, # comment; char** and char*[] samples
+03/19 01:50 Dimensions for array works. char** v is ok, char* t[N] is ok
+03/19 01:02 Tests are parsed ok. X++ -> ++X. #... IS COMMENT NOW!
+03/19 00:43 Not all but many decls/defs are in ST. Fn types are still Void etc.
+03/19 00:05 Prints scopes for blocks, for, args, program (but kinds/types/etc are not correct yet)
+03/18 22:09 ok, let's say expr(p) works. all parsing works. log ops & ^ | ~ all in.
+03/18 21:47 EXPR(P) SEEMS TO WORK! p1_expr.py gained lots of print out :)
+03/18 19:50 Expression parsing with precedence works in py
+03/18 03:01 moved assembler how-to file
+03/18 02:52 Rectored functionality. Precedence in expr does not work yet
+03/18 02:51 No postfix in our language
+03/17 13:47 Chars with backslashes. Changed primary,binop,expr for precedence climbing...
+03/17 03:48 Many small changes
+03/16 23:45 Simpler syntax, simpler parser. It works now.
+03/16 19:41 1) grammar redone... still going... 2) cc.c w/o sizeof!
+03/16 02:12 Symbol table. Enums start to have values...
+03/16 01:01 Renaming some files. Txt is txt
+03/16 00:59 Renaming done. Should be re-org in const scalar/vector exprs.
+03/15 18:50 for-loop is implemented. well, parsed ok.
+03/15 13:40 Command line options and debug flags and help :)
+03/15 12:51 Yes, it was overflowing. Now it's ok. It's <2^31/128
+03/15 12:45 better hash... probably. 148 names; 32 colls; but maybe not all there...
+03/15 12:21 Hash table of names (ids) of the program
+03/15 05:06 subdir with samples of gcc compilation
+03/15 05:05 test files moved to subdir; also t_args_vars asm code done
+03/15 03:55 assembler.x will describe machine, instruction set, assembler
+03/15 03:51 Grammar changed to bottom-to-top; optimized; cc.c modified a bit; DEBUG/TRACE
+03/14 21:53 Maybe sizeof in constexpr? No call/index in sizeof?
+03/14 13:33 Re-organized call-or-index
+03/14 04:37 TCC tests added. TODO: "string" "catenation"
+03/14 02:44 Parser works. Version 1 :) Output is cc1.res
+03/14 02:39 s2i - no skip blanks; -x as recursion; test numbers in main
+03/14 01:51 cc.exe parses cc.cga cc.cga cc.cga cc.cga cc.c!
+03/14 00:00 main is separated for codegen; cclib.c and scan.c deleted
+03/13 23:57 error in cast
+03/13 23:46 probably correct grammar and parser now
+03/13 20:30 updates in cc and grammar. bad situation with unop/base/primary.
+03/13 14:10 changed to sc_tkn and sc_next w/o result; changed tokens
+03/13 03:46 Better grammar; block is pre-checked; enum is kinda too; cc.c has 75% of rules done
+03/13 00:09 grammar... edited...
+03/12 23:41 grammar changed extension
+03/12 23:40 files converted to unix-eol format
+03/12 23:22 grammar.txt contains syntax (good coloring in ANTLR)
+03/12 20:13 converted to unix-eol format
+03/12 20:08 Orginized pgm sections; Changed names to rd_* and sc_*
+03/12 19:13 minimal scanner. all seems ok
+03/12 16:34 Full scanner, but it's too much. Next will be minimal set
+03/12 03:48 #include works! (for normal strings, not <...>)
+03/12 02:57 multiline comments done; multiline strings - in parser
+03/12 02:14 nearly everything. left: /* comments */, multiline strings
+03/12 00:36 new home for all this - cc; and so include is different
+03/12 00:28 scanner is more or less ok
+03/11 19:45 initial commit, all source files in some tree
