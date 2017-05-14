@@ -1,0 +1,98 @@
+  .ascii "Z\0"
+  .bss
+  .cfi_def_cfa 4,4
+  .cfi_def_cfa_offset 8
+  .cfi_def_cfa_register 5
+  .cfi_endproc
+  .cfi_offset 5,-8
+  .cfi_restore 5
+  .cfi_startproc
+  .data
+  .def ___main; .scl 2; .type 32; .endef
+  .def _assert; .scl 2; .type 32; .endef
+  .file "cc.c"
+  .globl _assert
+  .ident  "Georgiy Pruss C99C 0.261"
+  .intel_syntax noprefix # compile with: gcc a.s -o a.exe
+  .long -1
+  .long S0
+  .long S9
+  .section .rdata,"dr"
+  .space 12
+  .text
+  add eax,1
+  add eax,DWORD PTR [ebp+16] # n
+  add eax,DWORD PTR [ebp-8] # i
+  add eax,DWORD PTR _rd_char
+  add eax,ebx
+  add esp,8
+  and eax,255
+  call ___main
+  call _assert
+  cdq
+  cmp eax,128
+  cmp eax,500
+  cmp eax,DWORD PTR [ebp+12] # c
+  cmp eax,DWORD PTR [ebp-8] # rt
+  cmp eax,DWORD PTR _st_dim
+  cmp eax,ebx
+  idiv DWORD PTR _id_table_dim
+  idiv ebx
+  imul eax,DWORD PTR [ebp+8] # n
+  imul eax,DWORD PTR [ebp-4] # v
+  imul eax,eax,4
+  imul eax,eax,600
+  imul eax,ebx
+  jmp C16
+  jnz O103
+  jz A100
+  lea eax,[eax+4*ebx]
+  lea eax,[ebp-12] # op_s
+  leave
+  mov BYTE PTR [ebx],al
+  mov DWORD PTR [ebp+12],eax # s
+  mov DWORD PTR [ebp-12],eax # collision
+  mov DWORD PTR [ebx],eax
+  mov DWORD PTR _cg_bss_align,eax
+  mov eax,1
+  mov eax,1009
+  mov eax,2147483647
+  mov eax,DWORD PTR [eax]
+  mov eax,DWORD PTR [ebp+12] # av
+  mov eax,DWORD PTR [ebp-16] # o
+  mov eax,DWORD PTR _OPS
+  mov eax,edx
+  mov eax,OFFSET FLAT:_KWDS
+  mov ebp,esp
+  mov ebx,10
+  mov ebx,16777216
+  mov ebx,DWORD PTR [ebp+8] # i
+  mov ebx,DWORD PTR [ebp-4] # h
+  mov ebx,DWORD PTR _sc_num
+  mov ebx,eax
+  movsx eax,BYTE PTR [eax]
+  movsx eax,BYTE PTR [ebp-16] # t
+  movzx eax,al
+  neg eax
+  or eax,1
+  or eax,1024
+  pop ebx
+  push eax
+  push ebp
+  ret
+  sete al
+  setg al
+  setge al
+  setl al
+  setle al
+  setne al
+  setnz al
+  setz al
+  sub eax,1
+  sub eax,128
+  sub eax,DWORD PTR [ebp-4] # b
+  sub eax,ebx
+  sub esp,8
+  test eax,eax
+  xor eax,eax
+

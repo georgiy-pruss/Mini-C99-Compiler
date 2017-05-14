@@ -1,0 +1,690 @@
+0 se_last_stmt_ret
+6 strcmp
+7 id_hash
+13 tag
+17 Kw
+18 ET_TRACE
+19 items
+20 zero
+21 op_r
+22 Eof
+23 e1tag
+24 op_s
+26 pa_argdef
+29 and_label
+31 ET_str
+32 redefined
+41 rd_next
+42 kind
+43 k2
+44 cg_data_align
+48 F
+50 se_max_l_offset
+51 main
+54 Void
+57 rd_file
+59 pa_stars
+62 T
+64 is_abc
+67 cg_fn_begin
+75 a
+76 b
+77 c
+78 d
+79 e
+80 S_CODE
+82 h
+83 i
+84 str_repr_buf
+85 k
+87 m
+88 n
+89 o
+90 p
+91 memchr
+92 r
+93 s
+94 t
+95 SL_TABLE_DIM
+96 v
+97 u
+98 x
+99 kk
+100 q
+102 st_copy_args
+107 et_print_exprs
+111 cg_fn_label
+115 S_BSS
+118 ET_none
+120 e1et
+122 BF_LAST
+123 cmode
+124 assert
+129 T_ip
+130 dst
+131 se_enum
+132 e1t
+133 outputfn
+138 args
+140 cg_buffer
+142 se_is_ptr4
+148 OPS
+160 cg_bss_align
+167 pa_integer
+173 close
+174 m2
+175 lt
+177 cg_new_loop_label
+180 bf_write
+185 ST_DUMP
+188 cg_suspend
+193 Char
+196 e2t
+198 cg_2n
+199 left
+200 id_table_create
+213 K_arg
+218 bf_append
+227 sc_read_next
+232 Err
+236 number
+237 name
+240 rd_char
+241 Int
+242 next
+245 px_unexpr
+247 sc_next
+248 strrev
+249 se_arg_count
+257 sc_n_tokens
+260 se_type
+264 cg_3n
+267 pa_type
+268 block_local_start
+271 se_items
+274 px_exprs
+278 Num
+283 size
+289 or_label
+300 nn
+307 O_TRUNC
+308 ET_call
+315 aux
+328 O_WRONLY
+330 T_ipp
+338 strlen
+347 oflag
+352 malloc
+354 For
+355 block_local_offset
+356 K_enum
+357 expr
+361 cg_sl_str
+367 K_array
+368 BF_COUNT
+369 op
+371 p1
+372 p2
+373 p3
+374 p4
+375 Break
+376 se_is_ptr
+377 neg
+389 st_kind
+395 et_print
+398 BSS_ORG
+399 id_count
+400 se_bss_offset
+403 sc_num
+407 cmd
+408 pa_enumerator
+413 open
+414 S_NONE
+416 rd_buf
+419 cmp
+428 T_cpp
+429 bf_free
+434 sc_prev_line
+435 id_index
+440 e2et
+441 ac
+448 read
+452 px_postfix
+454 loop_label
+457 ET_neg
+458 init
+459 px_primary
+460 av
+461 if_label
+463 st_id
+466 i2s
+472 dim
+473 ST_DIM
+478 cg_begin
+479 px_call_or_index
+480 e0type
+481 p2wLN
+485 array_items
+487 memcopy
+489 cnt
+492 before_exit
+496 cond
+501 cg_var
+502 O_EXCL
+508 se_calc_binop_type
+509 bf
+510 ET_num
+511 NKW
+512 st_count_local_sz
+513 idealsz
+517 itemsz
+522 err1
+523 err2
+524 bf_alloc_min
+525 cg_label
+526 pa_enumdef
+527 pa_decl_or_def
+528 se_data_offset
+533 sl_table_create
+536 first
+537 st_type_str
+550 K_fn
+551 p0n
+552 id_table_dump
+553 pa_vardef_or_expr
+554 rc
+562 count
+564 path
+570 s2
+571 s3
+572 s4
+573 rt
+574 pa_stmt
+575 tail
+577 cg_line
+579 CG_LINES
+581 O_APPEND
+583 MAX_INIT_DIM
+584 PRC
+585 O_RDWR
+586 BF_NEXT
+587 BF_HEADSZ
+590 cg_exprs_backwards_with_push
+591 op_prec
+595 st_value
+598 SC_DEBUG
+600 write
+612 ET_fn
+615 S_DATA
+616 px_expr
+617 buf
+618 to_rev
+619 p1n
+620 min_prec
+622 sl_count
+623 IT_DUMP
+624 st_dump
+627 words
+631 STR_MAX_SZ
+633 While
+635 t1
+636 t2
+637 t3
+638 type
+641 ret0
+644 ID_TABLE_DIM
+645 st_add
+648 nargs
+653 e0
+654 e1
+655 sc_tkn
+656 free
+657 id_table_dim
+658 e2
+659 tI
+660 status
+661 se_add_var
+662 tL
+663 init_exprs
+664 varsz
+665 e3
+669 id_table
+679 se_value
+681 t_
+683 p2n
+684 Return
+687 op_set_prec
+688 cg_fn_end
+691 px_term
+699 Enum
+704 start
+706 tx
+707 collision
+710 print_args
+711 pa_program
+719 cg_spec_and_nl
+721 et
+730 st_count
+733 st_create
+734 st_find
+736 T_c
+737 cg_current_loop_label
+742 T_cp
+743 T_i
+744 idx
+746 ET_var
+749 p3n
+755 T_v
+759 n_args
+764 KWDS
+765 sc_do_backslash
+769 se_is_int
+771 fd
+772 cg_resume
+776 pa_args
+777 K_var
+778 ET_cast
+781 TITLE
+782 fn
+783 cg_loop_label
+784 rd_line
+785 OPS_LEN
+786 last
+787 right
+792 rd_buf_len
+796 find_kw
+802 pa_morevars
+808 Str
+814 cg_new_label
+818 cg_exprs
+827 cg_pop_loop_label
+828 expr1
+829 i2s_buf
+830 expr2
+831 ET_TAG
+832 cg_var_n
+833 pa_func
+834 new_bf
+841 cg_sl_table
+842 sc_text
+844 O_RDONLY
+845 se_local_offset
+846 BF_DIM
+849 collisions
+851 h0
+853 st_kind_str
+854 strdup
+855 cg_loop_level
+859 cg_file
+861 IT_DEBUG
+862 str_repr
+863 value
+864 sl_add
+865 st_local
+875 Id
+877 If
+885 pa_vartail
+889 cg_section
+891 sl_table_dump
+893 sl_table
+906 exit
+915 strequ
+918 PA_TRACE
+920 se_level
+922 O_CREAT
+928 Else
+929 se_gvars
+932 cg_2
+933 cg_3
+934 st_dim
+935 filename
+942 mixed
+945 BF_WRT_SZ
+949 INTSZ
+950 Chr
+951 cg_end
+954 strrchr
+955 se_stars
+956 se_lvars
+957 ET_1
+958 ET_2
+959 str
+960 cg_expr
+964 RD_BUF
+965 warn
+966 ET_star
+969 id
+972 rd_char_pos
+978 pa_arrayinit
+979 msg
+981 sev
+982 ET_I
+983 varid
+984 st_prop
+985 st_type
+988 ET_P
+992 ET_T
+993 cg_o
+994 cg_n
+1002 ET_MASK
+1005 se_array_items
+1007 ptr
+-------------------------------------
+371 ids, 62 collisions
+0 -> "Georgiy Pruss C99C 0.26149"
+1 -> "0"
+2 -> "-2147483648"
+3 -> "\n"
+4 -> "ASSERT FAILED: "
+5 -> "Warning"
+6 -> "Error"
+7 -> "*** "
+8 -> "void"
+9 -> "char"
+10 -> "int"
+11 -> "enum"
+12 -> "if"
+13 -> "else"
+14 -> "while"
+15 -> "for"
+16 -> "break"
+17 -> "return"
+18 -> "=+-en*/%<>lgao&^|"
+19 -> "1BB88CCC999943765"
+20 -> "\n*** "
+21 -> " at or before line "
+22 -> " == "
+23 -> "Too many ids; id_table is full"
+24 -> " ++ "
+25 -> " "
+26 -> "-------------------------------------\n"
+27 -> " ids, "
+28 -> "Errors in id_table (negative hash?)"
+29 -> " collisions\n"
+30 -> "Too many literal strings"
+31 -> " -> "
+32 -> "(){}[],;*%^~"
+33 -> "| "
+34 -> " - "
+35 -> "kw "
+36 -> "id "
+37 -> " #"
+38 -> "str "
+39 -> "num "
+40 -> "chr "
+41 -> "eof\n"
+42 -> "err"
+43 -> "op/sep "
+44 -> "???"
+45 -> "Void"
+46 -> "Char"
+47 -> "Char*"
+48 -> "Char**"
+49 -> "Int"
+50 -> "Int*"
+51 -> "Int**"
+52 -> "Enum"
+53 -> "Var"
+54 -> "Array"
+55 -> "Arg"
+56 -> "Fn"
+57 -> "st_copy"
+58 -> "too many identifiers"
+59 -> "K_arg"
+60 -> " ()"
+61 -> " ("
+62 -> ") "
+63 -> " v="
+64 -> " dim: "
+65 -> " args:"
+66 -> ""
+67 -> "Num"
+68 -> "Str"
+69 -> "Call"
+70 -> "Cast"
+71 -> "@"
+72 -> "Neg"
+73 -> "("
+74 -> "(++ "
+75 -> "(-- "
+76 -> "(&& "
+77 -> "(|| "
+78 -> "(== "
+79 -> "(!= "
+80 -> "(<= "
+81 -> "(>= "
+82 -> " ["
+83 -> "]"
+84 -> " |"
+85 -> ")"
+86 -> "  # "
+87 -> "int error: already suspended!"
+88 -> "int error: was not suspended!"
+89 -> "  .file ""
+90 -> """
+91 -> "  .intel_syntax noprefix\n"
+92 -> "\n  .ident  ""
+93 -> ""\n"
+94 -> "  .def _"
+95 -> "; .scl 2; .type 32; .endef"
+96 -> "main"
+97 -> "  .def ___main; .scl 2; .type 32; .endef"
+98 -> "  .text"
+99 -> "  .globl _"
+100 -> "_"
+101 -> ":"
+102 -> "  .cfi_startproc"
+103 -> "  push ebp"
+104 -> "  .cfi_def_cfa_offset 8\n  .cfi_offset 5,-8"
+105 -> "  mov ebp,esp"
+106 -> "  .cfi_def_cfa_register 5"
+107 -> "  xor eax,eax"
+108 -> "R"
+109 -> "  leave"
+110 -> "  .cfi_restore 5\n  .cfi_def_cfa 4,4"
+111 -> "  ret"
+112 -> "  .cfi_endproc\n"
+113 -> ""\n  .ascii ""
+114 -> "  .ascii ""
+115 -> "\12"
+116 -> "\134"
+117 -> "\15"
+118 -> "\10"
+119 -> "\42"
+120 -> "\0""
+121 -> "  .section .rdata,"dr""
+122 -> "S"
+123 -> "BYTE PTR "
+124 -> "DWORD PTR "
+125 -> "[ebp"
+126 -> "+"
+127 -> " # "
+128 -> "  mov eax,"
+129 -> "  mov eax,OFFSET FLAT:S"
+130 -> "ET_var is wrong"
+131 -> "  movsx eax,"
+132 -> "Must be var | arg | array"
+133 -> "  mov eax,OFFSET FLAT:_"
+134 -> "  lea eax,[ebp"
+135 -> "] # "
+136 -> "A call must have fn name on the left"
+137 -> "  call _"
+138 -> "  add esp,"
+139 -> "Can't assign integer to pointer"
+140 -> "Can't assign to array: "
+141 -> "  mov "
+142 -> ",al"
+143 -> ",eax"
+144 -> "  mov ebx,eax"
+145 -> "  push eax"
+146 -> "  pop ebx"
+147 -> "  mov BYTE PTR [ebx],al"
+148 -> "  mov DWORD PTR [ebx],eax"
+149 -> "Wrong expression on left of '='"
+150 -> "Can't be array name: "
+151 -> "  add eax,"
+152 -> "  sub eax,"
+153 -> "4"
+154 -> "1"
+155 -> "  movsx eax,BYTE PTR [ebx]"
+156 -> "  mov eax,DWORD PTR [ebx]"
+157 -> "Wrong expr for increment/decrement"
+158 -> "  movsx eax,BYTE PTR [eax]"
+159 -> "  mov eax,DWORD PTR [eax]"
+160 -> "  neg eax"
+161 -> "  not eax"
+162 -> "  test eax,eax\n  setz al\n  movzx eax,al"
+163 -> "Can't compare poiner and number"
+164 -> "e"
+165 -> "  test eax,eax"
+166 -> "z"
+167 -> "  movsx ebx,"
+168 -> "  cmp eax,ebx"
+169 -> "  cmp eax,"
+170 -> "  pop ebx\n  cmp eax,ebx"
+171 -> "  set"
+172 -> "n"
+173 -> " al\n  movzx eax,al"
+174 -> "<>lg"
+175 -> "l"
+176 -> "g"
+177 -> "le"
+178 -> "ge"
+179 -> "+-&|^*/%"
+180 -> "  sal eax,2"
+181 -> "  imul eax,eax,"
+182 -> "  and eax,"
+183 -> "  or eax,"
+184 -> "  xor eax,"
+185 -> "  cdq\n  mov ebx,"
+186 -> "  idiv ebx"
+187 -> "  mov ebx,"
+188 -> "  imul eax,"
+189 -> "  cdq"
+190 -> "  idiv "
+191 -> "  lea eax,[eax+4*ebx]"
+192 -> "  lea eax,[4*eax+ebx]"
+193 -> "  sal ebx,2\n  sub eax,ebx"
+194 -> "  add eax,ebx"
+195 -> "  sal ebx,2"
+196 -> "  sub eax,ebx"
+197 -> "  imul eax,ebx"
+198 -> "  and eax,ebx"
+199 -> "  or eax,ebx"
+200 -> "  xor eax,ebx"
+201 -> "  sar eax,2"
+202 -> "  mov eax,edx"
+203 -> "  test eax,eax\n  setnz al\n  movzx eax,al"
+204 -> "  jz A"
+205 -> "A"
+206 -> "  jnz O"
+207 -> "O"
+208 -> "Just fn name? Must be fn(...)"
+209 -> "What expr?"
+210 -> "            "
+211 -> "."
+212 -> "<< "
+213 -> "<<* "
+214 -> "px_primary"
+215 -> "Name is not defined: "
+216 -> "pa_integer"
+217 -> "Can't find enum Id in const expression"
+218 -> "px_exprs"
+219 -> "px_call_or_index"
+220 -> "Indexed expr. must be pointer"
+221 -> "Index must be integer"
+222 -> "px_postfix"
+223 -> "px_unexpr"
+224 -> "Dereferenced expr. must be pointer"
+225 -> "pa_type"
+226 -> "pa_stars"
+227 -> "px_term"
+228 -> "=="
+229 -> "!="
+230 -> "<="
+231 -> ">="
+232 -> "Wrong operand types in operator: "
+233 -> "px_expr "
+234 -> "pa_arrayinit"
+235 -> "  mov DWORD PTR [ebp"
+236 -> ",eax # init "
+237 -> ",0"
+238 -> "  .bss"
+239 -> "  .align 4"
+240 -> "  .space "
+241 -> "  .data"
+242 -> "  .long S"
+243 -> "  .long "
+244 -> "var"
+245 -> "pa_vartail"
+246 -> "duplicate var "
+247 -> "E:var "
+248 -> "],eax # "
+249 -> "pa_morevars"
+250 -> "pa_vardef_or_expr"
+251 -> "E:exp "
+252 -> "pa_argdef"
+253 -> "pa_args"
+254 -> "pa_stmt"
+255 -> "stmt in fns only"
+256 -> "block"
+257 -> "break outside loop"
+258 -> "  jmp E"
+259 -> "  jmp R"
+260 -> "E:ret "
+261 -> "L"
+262 -> "  jz E"
+263 -> "E:whl "
+264 -> "  jmp L"
+265 -> "E"
+266 -> "  jz J"
+267 -> "E:iff "
+268 -> "  jmp Z"
+269 -> "J"
+270 -> "Z"
+271 -> "E:fr2 "
+272 -> "E:fr3 ["
+273 -> "  jmp C"
+274 -> "P"
+275 -> "C"
+276 -> "  jmp P"
+277 -> "pa_func not at '('"
+278 -> "pa_func lvl!=0"
+279 -> "pa_func"
+280 -> "This was defined as not function before"
+281 -> "duplicate function declaration (not matching)"
+282 -> "function re-definition"
+283 -> "not matching function definition"
+284 -> "  call ___main\n"
+285 -> "fn "
+286 -> "stk "
+287 -> "last stmt was not return!"
+288 -> "  sub esp,"
+289 -> "  # no local variables\n"
+290 -> "pa_enumerator"
+291 -> "pa_enumdef"
+292 -> "pa_decl_or_def"
+293 -> "pa_program"
+294 -> "-h"
+295 -> "--help"
+296 -> "cc.exe [options] file.c [options]\n"
+297 -> "-T  show tokens\n"
+298 -> "-P  show parser trace\n"
+299 -> "-I  show id table trace\n"
+300 -> "-D  dump id table data and string literal table\n"
+301 -> "-S  dump symbol table\n"
+302 -> "-E  trace expressions\n"
+303 -> "-L  omit output of line numbers in assembler\n"
+304 -> "-o FILE  specify output file name\n"
+305 -> "No input file\n"
+306 -> "Can't open input file '"
+307 -> "'\n"
+308 -> "a.s"
+309 -> "Can't create file '"
+310 -> "wrong syntax"
+311 -> "** globals **\nenums:\n"
+312 -> "vars:\n"
+313 -> "funcs:\n"
+314 -> "data size: "
+315 -> "bss size: "
+316 -> " tokens\n"

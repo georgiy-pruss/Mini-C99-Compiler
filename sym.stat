@@ -1,0 +1,992 @@
+fn is_abc
+32 - c (77) Int Arg v=8
+stk 0
+
+fn memcopy
+33 - d (78) Char* Arg v=8
+34 - s (93) Char* Arg v=12
+35 - n (88) Int Arg v=16
+stk 0
+
+fn memchr
+34 - s (93) Char* Arg v=8
+35 - c (77) Int Arg v=12
+36 - n (88) Int Arg v=16
+stk 0
+
+fn strlen
+35 - s (93) Char* Arg v=8
+36 - b (76) Char* Var v=-4
+stk -4
+
+fn strdup
+36 - s (93) Char* Arg v=8
+37 - n (88) Int Var v=-4
+38 - d (78) Char* Var v=-8
+stk -8
+
+block
+41 - t (94) Char Var v=-16
+for
+39 - b (76) Char* Var v=-8
+40 - e (79) Char* Var v=-12
+fn strrev
+37 - s (93) Char* Arg v=8
+38 - n (88) Int Var v=-4
+stk -16
+
+fn strcmp
+38 - s (93) Char* Arg v=8
+39 - t (94) Char* Arg v=12
+stk 0
+
+fn strequ
+39 - s (93) Char* Arg v=8
+40 - t (94) Char* Arg v=12
+stk 0
+
+for
+42 - n (88) Int Var v=-4
+fn strrchr
+40 - s (93) Char* Arg v=8
+41 - c (77) Int Arg v=12
+stk -4
+
+fn str_repr
+42 - s (93) Char* Arg v=8
+43 - d (78) Char* Var v=-4
+stk -4
+
+fn i2s
+44 - value (863) Int Arg v=8
+45 - dst (130) Char* Var v=-4
+46 - to_rev (618) Char* Var v=-8
+stk -8
+
+fn p1
+45 - s (93) Char* Arg v=8
+stk 0
+
+fn p2
+46 - s (93) Char* Arg v=8
+47 - s2 (570) Char* Arg v=12
+stk 0
+
+fn p3
+47 - s (93) Char* Arg v=8
+48 - s2 (570) Char* Arg v=12
+49 - s3 (571) Char* Arg v=16
+stk 0
+
+fn p4
+48 - s (93) Char* Arg v=8
+49 - s2 (570) Char* Arg v=12
+50 - s3 (571) Char* Arg v=16
+51 - s4 (572) Char* Arg v=20
+stk 0
+
+fn p0n
+stk 0
+
+fn p1n
+50 - s (93) Char* Arg v=8
+stk 0
+
+fn p2n
+51 - s (93) Char* Arg v=8
+52 - s2 (570) Char* Arg v=12
+stk 0
+
+fn p3n
+52 - s (93) Char* Arg v=8
+53 - s2 (570) Char* Arg v=12
+54 - s3 (571) Char* Arg v=16
+stk 0
+
+fn assert
+54 - cond (496) Int Arg v=8
+55 - msg (979) Char* Arg v=12
+stk 0
+
+fn warn
+56 - msg (979) Char* Arg v=8
+stk 0
+
+fn err1
+57 - msg (979) Char* Arg v=8
+stk 0
+
+fn err2
+58 - msg (979) Char* Arg v=8
+59 - m2 (174) Char* Arg v=12
+stk 0
+
+for
+79 - i (83) Int Var v=-4
+fn find_kw
+78 - s (93) Char* Arg v=8
+stk -4
+
+for
+83 - i (83) Int Var v=-4
+fn op_set_prec
+stk -4
+
+fn rd_next
+stk 0
+
+fn p2wLN
+91 - sev (981) Char* Arg v=8
+92 - msg (979) Char* Arg v=12
+stk 0
+
+fn id_table_create
+95 - n (88) Int Arg v=8
+stk 0
+
+fn id_hash
+96 - s (93) Char* Arg v=8
+97 - h (82) Int Var v=-4
+stk -4
+
+fn id_index
+97 - s (93) Char* Arg v=8
+98 - h (82) Int Var v=-4
+99 - h0 (851) Int Var v=-8
+100 - collision (707) Int Var v=-12
+stk -12
+
+for
+99 - i (83) Int Var v=-8
+fn id_table_dump
+98 - k (85) Int Var v=-4
+stk -8
+
+fn sl_table_create
+101 - n (88) Int Arg v=8
+stk 0
+
+for
+103 - i (83) Int Var v=-4
+fn sl_add
+102 - s (93) Char* Arg v=8
+stk -4
+
+for
+103 - i (83) Int Var v=-4
+fn sl_table_dump
+stk -4
+
+fn sc_do_backslash
+stk 0
+
+block
+109 - v (96) Int Var v=-4
+block
+109 - p (90) Char* Var v=-4
+110 - k (85) Int Var v=-8
+block
+109 - p (90) Char* Var v=-4
+block
+109 - c (77) Int Var v=-4
+block
+109 - c (77) Int Var v=-4
+block
+109 - c (77) Int Var v=-4
+block
+109 - c (77) Int Var v=-4
+fn sc_read_next
+stk -8
+
+block
+112 - o (89) Char Array v=-4 dim: 2
+fn sc_next
+stk -4
+
+fn se_is_int
+135 - t (94) Int Arg v=8
+stk 0
+
+fn se_is_ptr
+136 - t (94) Int Arg v=8
+stk 0
+
+fn se_is_ptr4
+137 - t (94) Int Arg v=8
+stk 0
+
+fn st_create
+138 - n (88) Int Arg v=8
+stk 0
+
+for
+142 - i (83) Int Var v=-8
+fn st_copy_args
+139 - start (704) Int Arg v=8
+140 - nargs (648) Int Arg v=12
+141 - args (138) Char* Var v=-4
+stk -8
+
+for
+141 - i (83) Int Var v=-4
+fn st_find
+140 - id (969) Int Arg v=8
+stk -4
+
+fn st_add
+141 - id (969) Int Arg v=8
+142 - type (638) Int Arg v=12
+143 - kind (42) Int Arg v=16
+144 - value (863) Int Arg v=20
+145 - aux (315) Int Arg v=24
+146 - k (85) Int Var v=-4
+stk -4
+
+for
+144 - i (83) Int Var v=-12
+fn st_count_local_sz
+142 - s (93) Int Var v=-4
+143 - words (627) Int Var v=-8
+stk -12
+
+fn print_args
+143 - a (75) Char* Arg v=8
+stk 0
+
+block
+148 - k (85) Int Var v=-12
+149 - kk (99) Int Var v=-16
+for
+147 - i (83) Int Var v=-8
+fn st_dump
+144 - start (704) Int Arg v=8
+145 - kind (42) Int Arg v=12
+146 - cnt (489) Int Var v=-4
+stk -16
+
+fn bf_alloc_min
+165 - n (88) Int Arg v=8
+166 - a (75) Int* Var v=-4
+stk -4
+
+block
+171 - new_bf (834) Int* Var v=-12
+fn bf_append
+166 - bf (509) Int* Arg v=8
+167 - s (93) Char* Arg v=12
+168 - n (88) Int Arg v=16
+169 - last (786) Int* Var v=-4
+170 - left (199) Int Var v=-8
+stk -12
+
+fn bf_write
+167 - bf (509) Int* Arg v=8
+168 - fd (771) Int Arg v=12
+stk 0
+
+fn bf_free
+168 - bf (509) Int* Arg v=8
+169 - next (242) Int* Var v=-4
+stk -4
+
+fn ET_1
+180 - tag (13) Int Arg v=8
+181 - expr (357) Int* Arg v=12
+182 - type (638) Int Arg v=16
+183 - r (92) Int* Var v=-4
+stk -4
+
+fn ET_2
+181 - tag (13) Int Arg v=8
+182 - expr1 (828) Int* Arg v=12
+183 - expr2 (830) Int* Arg v=16
+184 - type (638) Int Arg v=20
+185 - r (92) Int* Var v=-4
+stk -4
+
+fn ET_I
+182 - tag (13) Int Arg v=8
+183 - value (863) Int Arg v=12
+184 - type (638) Int Arg v=16
+stk 0
+
+fn ET_P
+183 - e (79) Int* Arg v=8
+stk 0
+
+block
+188 - s (93) Char Array v=-12 dim: 2
+for
+188 - n (88) Int Var v=-12
+189 - x (98) Int Var v=-16
+fn et_print
+185 - e (79) Int* Arg v=8
+186 - e0 (653) Int Var v=-4
+187 - e0type (480) Int Var v=-8
+stk -16
+
+for
+187 - n (88) Int Var v=-4
+fn et_print_exprs
+186 - x (98) Int** Arg v=8
+stk -4
+
+fn cg_new_label
+stk 0
+
+fn cg_new_loop_label
+stk 0
+
+fn cg_current_loop_label
+stk 0
+
+fn cg_pop_loop_label
+stk 0
+
+fn cg_o
+204 - s (93) Char* Arg v=8
+205 - n (88) Int Var v=-4
+stk -4
+
+fn cg_n
+205 - s (93) Char* Arg v=8
+206 - n (88) Int Var v=-4
+stk -4
+
+fn cg_2
+206 - s (93) Char* Arg v=8
+207 - t (94) Char* Arg v=12
+stk 0
+
+fn cg_2n
+207 - s (93) Char* Arg v=8
+208 - t (94) Char* Arg v=12
+stk 0
+
+fn cg_3
+208 - s (93) Char* Arg v=8
+209 - t (94) Char* Arg v=12
+210 - u (97) Char* Arg v=16
+stk 0
+
+fn cg_3n
+209 - s (93) Char* Arg v=8
+210 - t (94) Char* Arg v=12
+211 - u (97) Char* Arg v=16
+stk 0
+
+fn cg_line
+stk 0
+
+fn cg_suspend
+stk 0
+
+fn cg_resume
+211 - s (93) Char* Arg v=8
+stk 0
+
+fn cg_begin
+212 - fn (782) Char* Arg v=8
+stk 0
+
+for
+213 - i (83) Int Var v=-4
+fn cg_end
+stk -4
+
+fn cg_fn_begin
+214 - name (237) Char* Arg v=8
+stk 0
+
+fn cg_fn_end
+215 - ret0 (641) Int Arg v=8
+stk 0
+
+fn cg_spec_and_nl
+216 - str (959) Char* Arg v=8
+217 - next (242) Int Arg v=12
+stk 0
+
+for
+219 - s (93) Char* Var v=-8
+fn cg_sl_str
+217 - i (83) Int Arg v=8
+218 - c (77) Char Array v=-4 dim: 2
+stk -8
+
+for
+218 - i (83) Int Var v=-4
+fn cg_sl_table
+stk -4
+
+fn cg_var
+219 - e1 (654) Int Arg v=8
+220 - v (96) Int Var v=-4
+stk -4
+
+fn cg_var_n
+220 - e (79) Int Arg v=8
+221 - name (237) Char* Var v=-4
+stk -4
+
+block
+224 - n (88) Int Var v=-8
+block
+226 - v (96) Int Var v=-16
+block
+225 - id (969) Int Var v=-12
+block
+224 - k (85) Int Var v=-8
+block
+224 - n_args (759) Int Var v=-8
+block
+227 - name (237) Char* Var v=-20
+block
+227 - e2et (440) Int Var v=-20
+228 - n (88) Int Var v=-24
+block
+224 - e1 (654) Int* Var v=-8
+225 - e2 (658) Int* Var v=-12
+226 - e1tag (23) Int Var v=-16
+block
+226 - k (85) Int Var v=-16
+227 - name (237) Char* Var v=-20
+block
+226 - t (94) Int Var v=-16
+block
+224 - e1 (654) Int* Var v=-8
+225 - e1et (120) Int Var v=-12
+block
+224 - e0type (480) Int Var v=-8
+block
+224 - e2et (440) Int Var v=-8
+225 - n (88) Int Var v=-12
+226 - zero (20) Int Var v=-16
+227 - cmp (419) Char* Var v=-20
+block
+224 - e2et (440) Int Var v=-8
+225 - n (88) Int Var v=-12
+226 - o (89) Char* Var v=-16
+block
+228 - n (88) Int Var v=-24
+block
+224 - e1t (132) Int Var v=-8
+225 - e2t (196) Int Var v=-12
+226 - e2et (440) Int Var v=-16
+227 - mixed (942) Int Var v=-20
+block
+224 - and_label (29) Int Var v=-8
+block
+224 - or_label (289) Int Var v=-8
+fn cg_expr
+222 - e (79) Int* Arg v=8
+223 - e0 (653) Int Var v=-4
+stk -24
+
+fn cg_exprs_backwards_with_push
+223 - x (98) Int** Arg v=8
+224 - n (88) Int Var v=-4
+stk -4
+
+fn cg_exprs
+223 - x (98) Int** Arg v=8
+stk 0
+
+for
+225 - i (83) Int Var v=-4
+fn tI
+stk -4
+
+fn t1
+226 - s (93) Char* Arg v=8
+stk 0
+
+fn t2
+227 - s (93) Char* Arg v=8
+228 - s2 (570) Char* Arg v=12
+stk 0
+
+fn t3
+228 - s (93) Char* Arg v=8
+229 - s2 (570) Char* Arg v=12
+230 - s3 (571) Char* Arg v=16
+stk 0
+
+fn t_
+229 - r (92) Int Arg v=8
+stk 0
+
+fn tx
+230 - r (92) Int* Arg v=8
+stk 0
+
+block
+236 - t (94) Int Var v=-8
+237 - k (85) Int Var v=-12
+block
+236 - varid (983) Int Var v=-8
+fn px_primary
+235 - r (92) Int* Var v=-4
+stk -12
+
+block
+237 - i (83) Int Var v=-8
+fn pa_integer
+236 - neg (377) Int Var v=-4
+stk -8
+
+fn px_exprs
+237 - r (92) Int* Var v=-4
+238 - first (536) Int* Var v=-8
+239 - last (786) Int* Var v=-12
+stk -12
+
+block
+240 - et (721) Int Var v=-8
+241 - rt (573) Int Var v=-12
+fn px_call_or_index
+238 - e (79) Int* Arg v=8
+239 - r (92) Int* Var v=-4
+stk -12
+
+fn px_postfix
+239 - r (92) Int* Var v=-4
+stk -4
+
+block
+240 - t (94) Int Var v=-4
+241 - e (79) Int* Var v=-8
+block
+243 - et (721) Int Var v=-16
+block
+240 - t (94) Int Var v=-4
+241 - e (79) Int* Var v=-8
+242 - type (638) Int Var v=-12
+fn px_unexpr
+stk -16
+
+fn pa_type
+stk 0
+
+fn pa_stars
+stk 0
+
+block
+243 - t (94) Int Var v=-4
+block
+243 - r (92) Int* Var v=-4
+fn px_term
+stk -4
+
+fn se_calc_binop_type
+243 - op (369) Int Arg v=8
+244 - left (199) Int* Arg v=12
+245 - right (787) Int* Arg v=16
+246 - lt (175) Int Var v=-4
+247 - rt (573) Int Var v=-8
+248 - op_s (24) Char Array v=-12 dim: 2
+249 - op_r (21) Char* Var v=-16
+stk -16
+
+block
+246 - p (90) Int Var v=-8
+247 - t (94) Int Var v=-12
+248 - q (100) Int* Var v=-16
+fn px_expr
+244 - min_prec (620) Int Arg v=8
+245 - r (92) Int* Var v=-4
+stk -16
+
+block
+244 - array_items (485) Int* Var v=-4
+fn pa_arrayinit
+stk -4
+
+for
+255 - x (98) Int* Var v=-24
+block
+254 - n (88) Int Var v=-20
+block
+254 - n (88) Int Var v=-20
+block
+255 - tail (575) Int Var v=-24
+block
+255 - items (19) Int Var v=-24
+256 - i (83) Int Var v=-28
+fn se_add_var
+245 - id (969) Int Arg v=8
+246 - t (94) Int Arg v=12
+247 - dim (472) Int Arg v=16
+248 - init (458) Int Arg v=20
+249 - init_exprs (663) Int* Arg v=24
+250 - k (85) Int Var v=-4
+251 - itemsz (517) Int Var v=-8
+252 - idealsz (513) Int Var v=-12
+253 - varsz (664) Int Var v=-16
+254 - n (88) Int Var v=-20
+stk -28
+
+block
+249 - e (79) Int* Var v=-16
+250 - idx (744) Int Var v=-20
+block
+249 - dim (472) Int Var v=-16
+fn pa_vartail
+246 - t (94) Int Var v=-4
+247 - id (969) Int Var v=-8
+248 - k (85) Int Var v=-12
+stk -20
+
+block
+247 - t (94) Int Var v=-4
+fn pa_morevars
+stk -4
+
+block
+248 - e (79) Int* Var v=-4
+fn pa_vardef_or_expr
+stk -4
+
+fn pa_argdef
+249 - t (94) Int Var v=-4
+stk -4
+
+fn pa_args
+stk 0
+
+block
+251 - block_local_start (268) Int Var v=-4
+252 - block_local_offset (355) Int Var v=-8
+block
+251 - loop_label (454) Int Var v=-4
+block
+251 - e (79) Int* Var v=-4
+block
+251 - c (77) Int* Var v=-4
+252 - loop_label (454) Int Var v=-8
+253 - r (92) Int Var v=-12
+block
+251 - c (77) Int* Var v=-4
+252 - if_label (461) Int Var v=-8
+block
+251 - loop_label (454) Int Var v=-4
+252 - block_local_start (268) Int Var v=-8
+253 - block_local_offset (355) Int Var v=-12
+254 - e2 (658) Int* Var v=-16
+255 - e3 (665) Int* Var v=-20
+256 - rc (554) Int Var v=-24
+fn pa_stmt
+251 - e (79) Int Var v=-4
+stk -24
+
+block
+261 - cmd (407) Char Array v=-68 dim: 32
+262 - number (236) Char* Var v=-72
+263 - nn (300) Int Var v=-76
+block
+259 - block_local_start (268) Int Var v=-32
+260 - block_local_offset (355) Int Var v=-36
+fn pa_func
+252 - redefined (32) Int Var v=-4
+253 - ret0 (641) Int Var v=-8
+254 - id (969) Int Var v=-12
+255 - t (94) Int Var v=-16
+256 - k2 (43) Int Var v=-20
+257 - k (85) Int Var v=-24
+258 - args (138) Char* Var v=-28
+stk -76
+
+fn pa_enumerator
+253 - id (969) Int Var v=-4
+stk -4
+
+fn pa_enumdef
+stk 0
+
+fn pa_decl_or_def
+stk 0
+
+fn pa_program
+256 - rc (554) Int Var v=-4
+stk -4
+
+fn before_exit
+stk 0
+
+for
+261 - i (83) Int Var v=-12
+block
+261 - n (88) Int Var v=-12
+fn main
+257 - ac (441) Int Arg v=8
+258 - av (460) Char** Arg v=12
+259 - filename (935) Char* Var v=-4
+260 - outputfn (133) Char* Var v=-8
+stk -12
+
+** globals **
+enums:
+1 - INTSZ (949) Int Enum v=4
+2 - STR_MAX_SZ (631) Int Enum v=260
+3 - ID_TABLE_DIM (644) Int Enum v=1009
+4 - SL_TABLE_DIM (95) Int Enum v=500
+5 - ST_DIM (473) Int Enum v=500
+6 - RD_BUF (964) Int Enum v=8000
+7 - BF_WRT_SZ (945) Int Enum v=4000
+8 - MAX_INIT_DIM (583) Int Enum v=600
+9 - BSS_ORG (398) Int Enum v=100000
+24 - O_RDONLY (844) Int Enum v=0
+25 - O_WRONLY (328) Int Enum v=1
+26 - O_RDWR (585) Int Enum v=2
+27 - O_APPEND (581) Int Enum v=8
+28 - O_CREAT (922) Int Enum v=512
+29 - O_TRUNC (307) Int Enum v=1024
+30 - O_EXCL (502) Int Enum v=2048
+58 - Err (232) Int Enum v=0
+59 - Eof (22) Int Enum v=1
+60 - Num (278) Int Enum v=2
+61 - Chr (950) Int Enum v=3
+62 - Str (808) Int Enum v=4
+63 - Id (875) Int Enum v=5
+64 - Kw (17) Int Enum v=128
+65 - Void (54) Int Enum v=0
+66 - Char (193) Int Enum v=1
+67 - Int (241) Int Enum v=2
+68 - Enum (699) Int Enum v=3
+69 - If (877) Int Enum v=4
+70 - Else (928) Int Enum v=5
+71 - While (633) Int Enum v=6
+72 - For (354) Int Enum v=7
+73 - Break (375) Int Enum v=8
+74 - Return (684) Int Enum v=9
+75 - NKW (511) Int Enum v=10
+80 - OPS_LEN (785) Int Enum v=17
+120 - T_v (755) Int Enum v=0
+121 - T_c (736) Int Enum v=1
+122 - T_cp (742) Int Enum v=2
+123 - T_cpp (428) Int Enum v=3
+124 - T_i (743) Int Enum v=4
+125 - T_ip (129) Int Enum v=5
+126 - T_ipp (330) Int Enum v=6
+127 - K_enum (356) Int Enum v=0
+128 - K_var (777) Int Enum v=1
+129 - K_array (367) Int Enum v=2
+130 - K_arg (213) Int Enum v=3
+131 - K_fn (550) Int Enum v=4
+159 - BF_LAST (122) Int Enum v=0
+160 - BF_NEXT (586) Int Enum v=1
+161 - BF_DIM (846) Int Enum v=2
+162 - BF_COUNT (368) Int Enum v=3
+163 - BF_HEADSZ (587) Int Enum v=4
+168 - ET_none (118) Int Enum v=0
+169 - ET_num (510) Int Enum v=1
+170 - ET_str (31) Int Enum v=2
+171 - ET_var (746) Int Enum v=3
+172 - ET_fn (612) Int Enum v=4
+173 - ET_call (308) Int Enum v=5
+174 - ET_cast (778) Int Enum v=6
+175 - ET_star (966) Int Enum v=7
+176 - ET_neg (457) Int Enum v=8
+177 - ET_MASK (1002) Int Enum v=255
+178 - ET_T (992) Int Enum v=256
+186 - S_NONE (414) Int Enum v=0
+187 - S_CODE (80) Int Enum v=1
+188 - S_DATA (615) Int Enum v=2
+189 - S_BSS (115) Int Enum v=3
+230 - F (48) Int Enum v=0
+231 - T (62) Int Enum v=1
+69
+vars:
+0 - TITLE (781) Char* Var v=0
+10 - SC_DEBUG (598) Int Var v=100000
+11 - PA_TRACE (918) Int Var v=100004
+12 - IT_DEBUG (861) Int Var v=100008
+13 - IT_DUMP (623) Int Var v=100012
+14 - ST_DUMP (185) Int Var v=100016
+15 - ET_TRACE (18) Int Var v=100020
+16 - CG_LINES (579) Int Var v=4
+40 - str_repr_buf (84) Char Array v=100024 dim: 260
+42 - i2s_buf (829) Char Array v=100284 dim: 12
+76 - KWDS (764) Char* Array v=8 dim: 10
+78 - OPS (148) Char* Var v=48
+79 - PRC (584) Char* Var v=52
+81 - op_prec (591) Int Array v=100296 dim: 128
+83 - rd_buf (416) Char Array v=100808 dim: 8000
+84 - rd_buf_len (792) Int Var v=56
+85 - rd_char_pos (972) Int Var v=108808
+86 - rd_char (240) Int Var v=60
+87 - rd_file (57) Int Var v=64
+88 - rd_line (784) Int Var v=68
+90 - id_table (669) Char** Var v=108812
+91 - id_table_dim (657) Int Var v=108816
+92 - id_count (399) Int Var v=108820
+93 - collisions (849) Int Var v=108824
+98 - sl_table (893) Char** Var v=108828
+99 - sl_count (622) Int Var v=108832
+103 - sc_tkn (655) Int Var v=108836
+104 - sc_text (842) Char Array v=108840 dim: 260
+105 - sc_num (403) Int Var v=109100
+109 - sc_n_tokens (257) Int Var v=109104
+110 - sc_prev_line (434) Int Var v=109108
+112 - st_dim (934) Int Var v=109112
+113 - st_id (463) Int* Var v=109116
+114 - st_type (985) Char* Var v=109120
+115 - st_kind (389) Char* Var v=109124
+116 - st_value (595) Int* Var v=109128
+117 - st_prop (984) Int* Var v=109132
+118 - st_count (730) Int Var v=109136
+119 - st_local (865) Int Var v=109140
+132 - st_type_str (537) Char* Array v=72 dim: 7
+133 - st_kind_str (853) Char* Array v=100 dim: 5
+144 - se_type (260) Int Var v=109144
+145 - se_stars (955) Int Var v=109148
+146 - se_value (679) Int Var v=109152
+147 - se_level (920) Int Var v=109156
+148 - se_enum (131) Int Var v=109160
+149 - se_arg_count (249) Int Var v=109164
+150 - se_lvars (956) Int Var v=109168
+151 - se_gvars (929) Int Var v=109172
+152 - se_items (271) Int Var v=109176
+153 - se_array_items (1005) Int* Var v=109180
+154 - se_last_stmt_ret (0) Int Var v=109184
+155 - se_local_offset (845) Int Var v=109188
+156 - se_max_l_offset (50) Int Var v=109192
+157 - se_data_offset (528) Int Var v=109196
+158 - se_bss_offset (400) Int Var v=109200
+183 - ET_TAG (831) Char* Array v=120 dim: 9
+190 - cg_file (859) Int Var v=109204
+191 - cg_buffer (140) Int* Var v=109208
+192 - cg_section (889) Int Var v=109212
+193 - cg_data_align (44) Int Var v=109216
+194 - cg_bss_align (160) Int Var v=109220
+195 - cg_label (525) Int Var v=109224
+196 - cg_fn_label (111) Int Var v=109228
+197 - cg_loop_label (783) Int Array v=109232 dim: 20
+198 - cg_loop_level (855) Int Var v=109312
+223 - tL (662) Int Var v=109316
+67
+funcs:
+17 - open (413) Int Fn v=0 args: Char* Int Int
+18 - close (173) Int Fn v=0 args: Int
+19 - read (448) Int Fn v=0 args: Int Char* Int
+20 - write (600) Int Fn v=0 args: Int Char* Int
+21 - malloc (352) Char* Fn v=0 args: Int
+22 - free (656) Void Fn v=0 args: Char*
+23 - exit (906) Void Fn v=0 args: Int
+31 - is_abc (64) Int Fn v=1 args: Int
+32 - memcopy (487) Void Fn v=1 args: Char* Char* Int
+33 - memchr (91) Char* Fn v=1 args: Char* Int Int
+34 - strlen (338) Int Fn v=1 args: Char*
+35 - strdup (854) Char* Fn v=1 args: Char*
+36 - strrev (248) Char* Fn v=1 args: Char*
+37 - strcmp (6) Int Fn v=1 args: Char* Char*
+38 - strequ (915) Int Fn v=1 args: Char* Char*
+39 - strrchr (954) Char* Fn v=1 args: Char* Int
+41 - str_repr (862) Char* Fn v=1 args: Char*
+43 - i2s (466) Char* Fn v=1 args: Int
+44 - p1 (371) Void Fn v=1 args: Char*
+45 - p2 (372) Void Fn v=1 args: Char* Char*
+46 - p3 (373) Void Fn v=1 args: Char* Char* Char*
+47 - p4 (374) Void Fn v=1 args: Char* Char* Char* Char*
+48 - p0n (551) Void Fn v=1 args: ()
+49 - p1n (619) Void Fn v=1 args: Char*
+50 - p2n (683) Void Fn v=1 args: Char* Char*
+51 - p3n (749) Void Fn v=1 args: Char* Char* Char*
+52 - before_exit (492) Void Fn v=1 args: ()
+53 - assert (124) Void Fn v=1 args: Int Char*
+54 - p2wLN (481) Void Fn v=1 args: Char* Char*
+55 - warn (965) Void Fn v=1 args: Char*
+56 - err1 (522) Void Fn v=1 args: Char*
+57 - err2 (523) Void Fn v=1 args: Char* Char*
+77 - find_kw (796) Int Fn v=1 args: Char*
+82 - op_set_prec (687) Void Fn v=1 args: ()
+89 - rd_next (41) Void Fn v=1 args: ()
+94 - id_table_create (200) Void Fn v=1 args: Int
+95 - id_hash (7) Int Fn v=1 args: Char*
+96 - id_index (435) Int Fn v=1 args: Char*
+97 - id_table_dump (552) Void Fn v=1 args: ()
+100 - sl_table_create (533) Void Fn v=1 args: Int
+101 - sl_add (864) Int Fn v=1 args: Char*
+102 - sl_table_dump (891) Void Fn v=1 args: ()
+106 - cg_line (577) Void Fn v=1 args: ()
+107 - sc_do_backslash (765) Void Fn v=1 args: ()
+108 - sc_read_next (227) Int Fn v=1 args: ()
+111 - sc_next (247) Void Fn v=1 args: ()
+134 - se_is_int (769) Int Fn v=1 args: Int
+135 - se_is_ptr (376) Int Fn v=1 args: Int
+136 - se_is_ptr4 (142) Int Fn v=1 args: Int
+137 - st_create (733) Void Fn v=1 args: Int
+138 - st_copy_args (102) Char* Fn v=1 args: Int Int
+139 - st_find (734) Int Fn v=1 args: Int
+140 - st_add (645) Int Fn v=1 args: Int Int Int Int Int
+141 - st_count_local_sz (512) Int Fn v=1 args: ()
+142 - print_args (710) Void Fn v=1 args: Char*
+143 - st_dump (624) Int Fn v=1 args: Int Int
+164 - bf_alloc_min (524) Int* Fn v=1 args: Int
+165 - bf_append (218) Void Fn v=1 args: Int* Char* Int
+166 - bf_write (180) Void Fn v=1 args: Int* Int
+167 - bf_free (429) Void Fn v=1 args: Int*
+179 - ET_1 (957) Int* Fn v=1 args: Int Int* Int
+180 - ET_2 (958) Int* Fn v=1 args: Int Int* Int* Int
+181 - ET_I (982) Int* Fn v=1 args: Int Int Int
+182 - ET_P (988) Int* Fn v=1 args: Int*
+184 - et_print (395) Void Fn v=1 args: Int*
+185 - et_print_exprs (107) Void Fn v=1 args: Int**
+199 - cg_new_label (814) Int Fn v=1 args: ()
+200 - cg_new_loop_label (177) Int Fn v=1 args: ()
+201 - cg_current_loop_label (737) Int Fn v=1 args: ()
+202 - cg_pop_loop_label (827) Void Fn v=1 args: ()
+203 - cg_o (993) Void Fn v=1 args: Char*
+204 - cg_n (994) Void Fn v=1 args: Char*
+205 - cg_2 (932) Void Fn v=1 args: Char* Char*
+206 - cg_2n (198) Void Fn v=1 args: Char* Char*
+207 - cg_3 (933) Void Fn v=1 args: Char* Char* Char*
+208 - cg_3n (264) Void Fn v=1 args: Char* Char* Char*
+209 - cg_suspend (188) Void Fn v=1 args: ()
+210 - cg_resume (772) Void Fn v=1 args: Char*
+211 - cg_begin (478) Void Fn v=1 args: Char*
+212 - cg_end (951) Void Fn v=1 args: ()
+213 - cg_fn_begin (67) Void Fn v=1 args: Char*
+214 - cg_fn_end (688) Void Fn v=1 args: Int
+215 - cg_spec_and_nl (719) Void Fn v=1 args: Char* Int
+216 - cg_sl_str (361) Void Fn v=1 args: Int
+217 - cg_sl_table (841) Void Fn v=1 args: ()
+218 - cg_var (501) Char* Fn v=1 args: Int
+219 - cg_var_n (832) Void Fn v=1 args: Int
+220 - cg_exprs_backwards_with_push (590) Int Fn v=1 args: Int**
+221 - cg_expr (960) Void Fn v=1 args: Int*
+222 - cg_exprs (818) Void Fn v=1 args: Int**
+224 - tI (659) Void Fn v=1 args: ()
+225 - t1 (635) Void Fn v=1 args: Char*
+226 - t2 (636) Void Fn v=1 args: Char* Char*
+227 - t3 (637) Void Fn v=1 args: Char* Char* Char*
+228 - t_ (681) Int Fn v=1 args: Int
+229 - tx (706) Int* Fn v=1 args: Int*
+232 - px_expr (616) Int* Fn v=1 args: Int
+233 - px_term (691) Int* Fn v=1 args: ()
+234 - px_primary (459) Int* Fn v=1 args: ()
+235 - pa_integer (167) Int Fn v=1 args: ()
+236 - px_exprs (274) Int* Fn v=1 args: ()
+237 - px_call_or_index (479) Int* Fn v=1 args: Int*
+238 - px_postfix (452) Int* Fn v=1 args: ()
+239 - px_unexpr (245) Int* Fn v=1 args: ()
+240 - pa_type (267) Int Fn v=1 args: ()
+241 - pa_stars (59) Int Fn v=1 args: ()
+242 - se_calc_binop_type (508) Int Fn v=1 args: Int Int* Int*
+243 - pa_arrayinit (978) Int Fn v=1 args: ()
+244 - se_add_var (661) Int Fn v=1 args: Int Int Int Int Int*
+245 - pa_vartail (885) Int Fn v=1 args: ()
+246 - pa_morevars (802) Int Fn v=1 args: ()
+247 - pa_vardef_or_expr (553) Int Fn v=1 args: ()
+248 - pa_argdef (26) Int Fn v=1 args: ()
+249 - pa_args (776) Int Fn v=1 args: ()
+250 - pa_stmt (574) Int Fn v=1 args: ()
+251 - pa_func (833) Int Fn v=1 args: ()
+252 - pa_enumerator (408) Int Fn v=1 args: ()
+253 - pa_enumdef (526) Int Fn v=1 args: ()
+254 - pa_decl_or_def (527) Int Fn v=1 args: ()
+255 - pa_program (711) Int Fn v=1 args: ()
+256 - main (51) Int Fn v=1 args: Int Char**
+121
+data size: 156
+bss size: 9320

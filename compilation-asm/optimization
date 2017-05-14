@@ -1,0 +1,9 @@
+mov eax,...1                    mov ebx,...1
+mov ebx,eax                     mov[sx] eax,...2
+mov[sx] eax,...2
+
+push eax                        mov ebx,eax
+mov eax,...1                    mov eax,...1
+pop ebx
+
+
