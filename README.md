@@ -137,6 +137,6 @@ char s[] = "x:";
 
 will compile to something like
 
-  mov DWORD PTR [ebp-8,0
-  mov DWORD PTR [ebp-4,0
-  mov DWORD PTR [ebp0,0
+    mov DWORD PTR [ebp-8,0
+    mov DWORD PTR [ebp-4,0
+    mov DWORD PTR [ebp0,0

@@ -820,7 +820,7 @@ void cg_sl_table()
 
 char* cg_var( int e1 ) // generate fragment, return name
 {
-  if( st_type[e1]==T_c ) cg_o( "BYTE PTR " ); else cg_o( "DWORD PTR " );
+  if( st_type[e1]==T_c ) cg_o( "byte ptr " ); else cg_o( "dword ptr " );
   if( e1<st_local ) { cg_2( "_", id_table[st_id[e1]] ); return 0; }
   int v = st_value[e1]; // local var
   cg_o( "[ebp" ); if( v>0 ) cg_o( "+" ); cg_2( i2s(v), "]" );
@@ -922,8 +922,8 @@ void cg_expr( int* e )
         cg_expr( (int*)e1[1] ); cg_n( "  push eax" );
         cg_expr( (int*)e[2] );  cg_n( "  pop ebx" );
       }
-      if( e1[0] / ET_T == T_c ) cg_n( "  mov BYTE PTR [ebx],al" );
-      else                      cg_n( "  mov DWORD PTR [ebx],eax" );
+      if( e1[0] / ET_T == T_c ) cg_n( "  mov byte ptr [ebx],al" );
+      else                      cg_n( "  mov dword ptr [ebx],eax" );
     }
     else
       err1( "Wrong expression on left of '='" );
@@ -951,12 +951,12 @@ void cg_expr( int* e )
       int t = e[0] / ET_T; // expr type
       cg_expr( (int*)e1[1] );
       cg_n( "  mov ebx,eax" );
-      if( t==T_c ) cg_n( "  movsx eax,BYTE PTR [ebx]" );
-      else         cg_n( "  mov eax,DWORD PTR [ebx]" );
+      if( t==T_c ) cg_n( "  movsx eax,byte ptr [ebx]" );
+      else         cg_n( "  mov eax,dword ptr [ebx]" );
       if( e0=='i' ) cg_o( "  add eax," ); else cg_o( "  sub eax," );
       if( se_is_ptr4(t) ) cg_n( "4" ); else cg_n( "1" );
-      if( t==T_c ) cg_n( "  mov BYTE PTR [ebx],al" );
-      else         cg_n( "  mov DWORD PTR [ebx],eax" );
+      if( t==T_c ) cg_n( "  mov byte ptr [ebx],al" );
+      else         cg_n( "  mov dword ptr [ebx],eax" );
     }
     else
       err1( "Wrong expr for increment/decrement" );
@@ -965,8 +965,8 @@ void cg_expr( int* e )
   {
     int e0type = e[0] / ET_T; // dereferenced type!
     cg_expr( (int*)e[1] );
-    if( e[0] / ET_T == T_c ) cg_n( "  movsx eax,BYTE PTR [eax]" );
-    else                     cg_n( "  mov eax,DWORD PTR [eax]" );
+    if( e[0] / ET_T == T_c ) cg_n( "  movsx eax,byte ptr [eax]" );
+    else                     cg_n( "  mov eax,dword ptr [eax]" );
   }
   else if( e0==ET_cast )
   {
@@ -1480,7 +1480,7 @@ int se_add_var( int id, int t, int dim, int init, int* init_exprs )
       {
         cg_expr( init_exprs );
         // TODO check type
-        cg_o( "  mov DWORD PTR [ebp" ); cg_o( i2s( se_local_offset ) );
+        cg_o( "  mov dword ptr [ebp" ); cg_o( i2s( se_local_offset ) );
         cg_o( ",eax # init " ); cg_n( id_table[id] );
       }
       else // array
@@ -1489,12 +1489,12 @@ int se_add_var( int id, int t, int dim, int init, int* init_exprs )
         for( int* x=init_exprs; x && n<dim; ++n, x = (int*)x[1] )
         {
           cg_expr( (int*)x[0] );
-          cg_o( "  mov DWORD PTR [ebp" ); cg_o( i2s( se_local_offset+n*INTSZ ) ); // TODO char
+          cg_o( "  mov dword ptr [ebp" ); cg_o( i2s( se_local_offset+n*INTSZ ) ); // TODO char
           if( n!=0 ) cg_n( ",eax" ); else { cg_o( ",eax # init " ); cg_n( id_table[id] ); }
         }
         for( ; n<dim; ++n )
         {
-          cg_o( "  mov DWORD PTR [ebp" ); cg_o( i2s( se_local_offset+n*INTSZ ) ); // TODO char
+          cg_o( "  mov dword ptr [ebp" ); cg_o( i2s( se_local_offset+n*INTSZ ) ); // TODO char
           cg_n( ",0" );
         }
       }
@@ -1583,7 +1583,7 @@ int pa_vartail()
       if( ET_TRACE && e ) { p1("E:var "); et_print( e ); p0n(); }
       int idx = se_add_var( id, t, -1, 0, 0 ); // TODO
       cg_expr( e );
-      cg_o( "  mov DWORD PTR [ebp" ); cg_o( i2s(st_value[idx]) ); cg_o( "],eax # " );
+      cg_o( "  mov dword ptr [ebp" ); cg_o( i2s(st_value[idx]) ); cg_o( "],eax # " );
       cg_n( id_table[id] );
     }
     return t_(T);
