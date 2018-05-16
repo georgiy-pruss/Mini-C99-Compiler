@@ -3,15 +3,16 @@
 ### Description
 
 The input file is compiled with `cc` into assembler file (default name is `a.s`).
-The GNU compiler or rather assembler can compile it into an executable (`gcc a.s -o a.exe`),
-or later `cc` will be able to translate it into an executable file (that's the plan).
+The MinGW-32 GNU compiler or rather assembler can compile it into an executable (`gcc a.s -o a.exe`),
+or later `cc` will be able to translate it into an executable file using an assembly program --
+working on that now.
 
 ### Comments, Preprocessor (#include, #define, #pragma etc)
 
 Comments can be both the C comments (inline and multi-line `/*...*/`) and the C++
 end-of-line comments (`//...`). Any text starting with `#` is also treated as a
 a comment, that is all the preprocessor directives are ignored, although they can be
-present in the program text — that's proably good for includes, but bad for defines.
+present in the program text —- that's proably good for includes, but bad for defines.
 
 ### Number, Character, String literals
 
@@ -96,22 +97,29 @@ Maybe these will be added later.
 
 These functions can be used:
 
-    int open( char* path, int oflag, int cmode );
+    int open( char* path, int oflag );
     int close( int fd );
     int read( int fd, char* buf, int count );
     int write( int fd, char* buf, int count );
+    int lseek( int fd, int offset, int whence );
     char* malloc( int size );
     void free( char* ptr );
     void exit( int status );
 
-In the `open` function, `oflag` is system-dependent. For cygwin-32 it accepts these
-values: `enum { O_RDONLY, O_WRONLY, O_RDWR, O_APPEND=8, O_CREAT=512, O_TRUNC=1024, O_EXCL=2048 };`
+In the `open` function, `oflag` is from this enum:
+`enum { O_RDONLY, O_WRONLY, O_RDWR, O_APPEND=8, O_CREAT=16, O_TRUNC=32, O_EXCL=64 };`
+The `lseek` function `whence` is: `enum { SEEK_SET, SEEK_CUR, SEEK_END };`
 
-Actually, other functions can work too. Even printf :)
+These functions are implemented in`startup.s` file. It was generated from `startup_src.c` and
+some low-level functions were added there. As well as the command line processing and prolog/epilog
+functions. So now the code doesn't depend on any run-time library like msvcrt or cygwin1. The
+interface to the OS is done via the kernel32 functions.
+
+Actually, other external functions can work too. Even printf and MessageBoxA :)
 
     // There's no '...' but we can declare one particular prototype, e.g. this:
     int printf( char* fmt, char* msg );
-    
+
     // Use printf with two strings. Currently there's no argument check at all,
     // but it's going to be implemented soon, so then number and type of arguments
     // of a call must match the declaration
@@ -123,3 +131,12 @@ All the strings and lines are limited to less than 260 characters; No more than 
 in a program, no more than 500 variables in all "active" scopes at any given place. The loops can't
 be nested more than 20 levels. Some other limits may apply.
 
+### Errors
+
+char s[] = "x:";
+
+will compile to something like
+
+  mov DWORD PTR [ebp-8,0
+  mov DWORD PTR [ebp-4,0
+  mov DWORD PTR [ebp0,0

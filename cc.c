@@ -7,7 +7,7 @@
 // TODO number array initializers; local array initializers
 // TODO exprs in vardef_of_expr to allow for( i=1,j=2; ... ) and ++i, f(i), a=b;
 
-char* TITLE = "Georgiy Pruss C99C 0.26149";
+char* TITLE = "Georgiy Pruss C99C 0.261497";
 
 // Parameters ------------------------------------------------------------------
 
@@ -31,17 +31,27 @@ int CG_LINES=1; // -L - omit output of line numbers; -L => CG_LINES=0
 
 // stdlib ----------------------------------------------------------------------
 
-int open( char* path, int oflag, int cmode ); // >0 if ok; mode: rwx(u)rwx(g)rwx(others)
+#ifdef WIN32 // MinGW-32 (or __MINGW32__), maybe also MSVC; My compiler ignores preproc
+int _open( char* path, int oflag, int pmode );
+#define open(path,oflag) _open(path,oflag,0666)
+#define O_RDONLY 0
+#define O_WRONLY 32769 // actually WRONLY+BINARY
+#define O_CREAT 256
+#define O_TRUNC 512
+#else // Mine
+int open( char* path, int oflag ); // >0 if ok; flags below - own flags!
+enum { O_RDONLY, O_WRONLY, O_RDWR, O_APPEND=8, O_CREAT=16, O_TRUNC=32, O_EXCL=64 };
+#endif
 int close( int fd );                          // 0 if ok
 int read( int fd, char* buf, int count );     // fd=0 - stdin
 int write( int fd, char* buf, int count );    // fd=1 - stdout, fd=2 - stderr
+int lseek( int fd, int offset, int whence ); // if bad: -1, if std: 0
+enum { SEEK_SET, SEEK_CUR, SEEK_END };
 char* malloc( int size );
 void free( char* ptr );
 void exit( int status );
 
-enum { O_RDONLY, O_WRONLY, O_RDWR, O_APPEND=8, O_CREAT=512, O_TRUNC=1024, O_EXCL=2048 };
-// enum { O_RDONLY, O_WRONLY, O_RDWR, O_APPEND=8, O_CREAT=256, O_TRUNC=512, O_EXCL=1024,
-//   O_TEXT=16384, O_BINARY=32768 }; // Windows
+// helper fns ------------------------------------------------------------------
 
 int is_abc( int c ) { return c>='a' && c<='z' || c>='A' && c<='Z' || c=='_'; }
 
@@ -744,21 +754,17 @@ void cg_begin( char* fn )
 {
   cg_3n( "  .file \"", fn, "\"" );
   cg_n( "  .intel_syntax noprefix\n" );
+  cg_n( "  .include \"startup.s\"\n" );
 }
 
 void cg_end()
 {
   // http://www.trilithium.com/johan/2004/12/gcc-ident-strings/
   cg_3n( "\n  .ident  \"", TITLE, "\"\n" );
-  // dump declarations of all undefined functions
-  for( int i=0; i<st_count; ++i )
-    if( st_kind[i]==K_fn && st_value[i]==0 )
-      cg_3n( "  .def _", id_table[st_id[i]], "; .scl 2; .type 32; .endef" );
 }
 
 void cg_fn_begin( char* name )
 {
-  if( strequ( name, "main" ) ) cg_n( "  .def ___main; .scl 2; .type 32; .endef" );
   if( cg_section != S_CODE ) { cg_section = S_CODE; cg_n( "  .text" ); }
   cg_2n( "  .globl _", name );
   cg_3n( "  .def _", name, "; .scl 2; .type 32; .endef" );
@@ -1893,7 +1899,6 @@ int pa_func()
     cg_fn_label = cg_new_label();
     cg_fn_begin( id_table[id] );
     cg_suspend(); // resume until we know local scope size on stack
-    if( strequ( id_table[id], "main" ) ) cg_n( "  call ___main\n" );
     se_local_offset = 0;
     se_max_l_offset = 0;
     int block_local_start = st_count;         // in ST
@@ -2025,7 +2030,7 @@ int main( int ac, char** av )
     }
 
   if( !filename ) { p1( "No input file\n" ); exit(1); }
-  rd_file = open( filename, O_RDONLY, 0 );
+  rd_file = open( filename, O_RDONLY );
   if( rd_file<=0 ) { p3( "Can't open input file '", filename, "'\n" ); exit(1); }
   // initialization
   op_set_prec();
@@ -2033,7 +2038,7 @@ int main( int ac, char** av )
   id_table_create( ID_TABLE_DIM );
   sl_table_create( SL_TABLE_DIM );
   if( !outputfn ) outputfn = "a.s";
-  cg_file = open( outputfn, O_CREAT|O_TRUNC|O_WRONLY, 0666 );
+  cg_file = open( outputfn, O_CREAT|O_TRUNC|O_WRONLY );
   if( cg_file<0 ) { p3( "Can't create file '", outputfn, "'\n" ); exit(1); }
   cg_begin( filename );
   if( !pa_program( filename ) ) err1( "wrong syntax" );
