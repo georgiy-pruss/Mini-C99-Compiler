@@ -113,7 +113,7 @@ strlen_eax_ecx:
 malloc_eax:
     push  eax
     push  0
-    move  eax,dword ptr hHeap
+    mov   eax,dword ptr hHeap
     push  eax
     call  _HeapAlloc@12
     ret
@@ -121,7 +121,7 @@ malloc_eax:
 free_eax:
     push  eax
     push  0
-    move  eax,dword ptr hHeap
+    mov   eax,dword ptr hHeap
     push  eax
     call  _HeapFree@12
     ret
