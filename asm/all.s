@@ -272,28 +272,34 @@ strdup_eax:
   lea eax,[esp-12]
   lea eax,[eax+4*ebx]
   lea eax,[ebx+4*eax]
+  # ops with eax,memory
+  imul eax,dword ptr [ebp-4] # v
+  imul eax,dword ptr [ebp-8] # itemsz
+  imul eax,dword ptr [ebp-888]
+  imul eax,dword ptr [ebp+8] # n
+  add eax,dword ptr [ebp-12] # i
+  add eax,dword ptr [ebp+12] # nargs
+  cmp eax,dword ptr [ebp-12] # e
+  cmp eax,dword ptr [ebp+8] # id
+  sub eax,dword ptr [ebp-24] # items
+  # binop memory,immed
+  cmp dword ptr [ebp-12],0
+  cmp dword ptr [ebp+16],2
+  cmp dword ptr [ebp+8],2
+  cmp dword ptr [ebp+400],2
+  cmp dword ptr [ebp+8],2222
+  cmp dword ptr [ebp+400],2222
+  add dword ptr [ebp+8],3 # not used probably but let's see
+  sub dword ptr [ebp+8],3
+  sub dword ptr [ebp+444],3
+  sub dword ptr [ebp+8],3333
+  sub dword ptr [ebp+444],3333
 
 #------------------- TODO INDEX MEMORY
 
   nop
   nop
 
-  # ops
-  imul eax,dword ptr [ebp-4] # v
-  imul eax,dword ptr [ebp-8] # itemsz
-  imul eax,dword ptr [ebp-888]
-  imul eax,dword ptr [ebp+8] # n
-
-  add eax,dword ptr [ebp-12] # i
-  add eax,dword ptr [ebp+12] # nargs
-
-  cmp eax,dword ptr [ebp-12] # e
-  cmp eax,dword ptr [ebp+8] # id
-  sub eax,dword ptr [ebp-24] # items
-  cmp dword ptr [ebp-12],0
-  cmp dword ptr [ebp+16],2
-  cmp dword ptr [ebp+8],2
-  sub dword ptr [ebp+8],3
 
 #------------------- TODO SYMBOLIC MEMORY
 

@@ -71,7 +71,8 @@ REGS = {'eax':0,'ecx':1,'edx':2,'ebx':3,'esp':4,'ebp':5,'esi':6,'edi':7}
 SETOPS = {'sete':0x94,'setz':0x94,'setne':0x95,'setnz':0x95,
           'setl':0x9c,'setg':0x9f,'setle':0x9e,'setge':0x9d}
 BINOPS = {'add':0x00,'or':0x08,'and':0x20,'sub':0x28,'xor':0x30,'cmp':0x38}
-BINOPS2 = {'add':0xc0,'or':0xc8,'and':0xe0,'sub':0xe8,'xor':0xf0,'cmp':0xf8}
+JMPS = {'je':0x74,'jz':0x74,'jne':0x75,'jnz':0x75,'js':0x78,'jns':0x79,
+        'jl':0x7c,'jge':0x7d,'jle':0x7e,'jg':0x7f}
 
 def immediate( s ):
   if s.startswith('0x'):    n = int(s[2:],16)
@@ -141,16 +142,14 @@ def process_command( l:str ):
       else:           Y( 0x68 ); Y4( imm )
     else: print( '%d: ??? '%l_no+w+' '+a+' - not reg or number' )
   elif w=='neg' or w=='not':
-    op = {'neg':0xd8,'not':0xd0}[w]
-    if a in REGS: Y( 0xf7 ); Y( op+REGS[a] )
+    if a in REGS: Y( 0xf7 ); Y( {'neg':0xd8,'not':0xd0}[w] + REGS[a] )
     else: print( '%d: ??? '%l_no+w+' '+a+' - not reg' )
   elif w=='repne' and a=='scasb':
     Y( 0xf2 ); Y( 0xae )
   elif w=='rep' and a=='movsb':
     Y( 0xf3 ); Y( 0xa4 )
-  elif w in SETOPS:
-    if a=='al': Y( 0x0f ); Y( SETOPS[w] ); Y( 0xc0 )
-    else: print( '%d: ??? '%l_no+w+' '+a )
+  elif w in SETOPS and a=='al':
+    Y( 0x0f ); Y( SETOPS[w] ); Y( 0xc0 )
   elif w=='idiv':
     if a in REGS: Y( 0xf7 ); Y( 0xf8+REGS[a] )
     else: print( '%d: ??? '%l_no+w+' '+a )
@@ -160,6 +159,11 @@ def process_command( l:str ):
       if len(imm)==2:  Y( 0x6b ); Y( 0xc0 ); Y1( imm )
       else:            Y( 0x69 ); Y( 0xc0 ); Y4( imm )
     elif a=='eax,ebx': Y( 0x0f ); Y( 0xaf ); Y( 0xc3 )
+    elif a.startswith('eax,dword ptr [ebp') and a[-1]==']':
+      reg = REGS['ebp']
+      ofs = immediate(a[18:-1])
+      if len(ofs)==2: Y( 0x0f ); Y( 0xaf ); Y( 0x40|reg ); Y1( ofs )
+      else:           Y( 0x0f ); Y( 0xaf ); Y( 0x80|reg ); Y4( ofs )
     else: print( '%d: ??? '%l_no+w+' '+a )
   elif w=='movzx' and a=='eax,al':
     Y( 0x0f ); Y( 0xb6 ); Y( 0xc0 )
@@ -169,25 +173,38 @@ def process_command( l:str ):
     if a=='eax,eax': Y( 0x85 ); Y( 0xc0 )
     elif a=='al,al': Y( 0x84 ); Y( 0xc0 )
     else: print( '%d: ??? '%l_no+w+' '+a )
-  elif w in BINOPS2 and a[3]==',' and a[:3] in REGS and a[4] in '-+0123456789': # binop reg,imm
-    reg = REGS[a[:3]]
-    imm = immediate(a[4:])
-    if len(imm)==2: Y( 0x83 ); Y( BINOPS2[w]|reg ); Y1( imm )
-    elif reg==0:    Y( BINOPS[w]+5 ); Y4( imm )
-    else:           print( '%d: ??? '%l_no+w+' '+a+' - binop not impl' )
-  elif w in BINOPS and a[3]==',' and a[:3] in REGS and a[4:] in REGS: # binop reg,reg
-    reg1 = REGS[a[:3]]
-    reg2 = REGS[a[4:]]
-    Y( BINOPS[w]+1 ); Y( 0xC0|(reg2<<3)|reg1 )
-  elif w=='cmp' and a.startswith('al,'):
-    imm = immediate1(a[3:])
-    Y( 0x3c ); Y1( imm )
-  elif w=='movsx' and a[:14]=='eax,byte ptr [' and a[17] in '+-' and a[-1]==']':
-    # movsx eax,byte ptr [reg+ofs]
-    reg = REGS[a[14:17]]
-    ofs = immediate(a[17:-1])
-    if len(ofs)==2: Y( 0x0f ); Y( 0xbe ); Y( 0x40|reg ); YY( reg==4, 0x24 ); Y1( ofs )
-    else:           Y( 0x0f ); Y( 0xbe ); Y( 0x80|reg ); YY( reg==4, 0x24 ); Y4( ofs )
+  # binops
+  elif w in BINOPS:
+    if w=='cmp' and a.startswith('al,'):
+      imm = immediate1(a[3:])
+      Y( 0x3c ); Y1( imm )
+    elif a[3]==',' and a[:3] in REGS and a[4] in '-+0123456789': # binop reg,imm
+      reg = REGS[a[:3]]
+      imm = immediate(a[4:])
+      if len(imm)==2: Y( 0x83 ); Y( 0xc0|BINOPS[w]|reg ); Y1( imm )
+      elif reg==0:    Y( BINOPS[w]+5 ); Y4( imm )
+      else:           print( '%d: ??? '%l_no+w+' '+a+' - binop not impl' ) # probably 0x81 etc
+    elif a[3]==',' and a[:3] in REGS and a[4:] in REGS: # binop reg,reg
+      reg1 = REGS[a[:3]]
+      reg2 = REGS[a[4:]]
+      Y( BINOPS[w]+1 ); Y( 0xC0|(reg2<<3)|reg1 )
+    elif a.startswith('eax,dword ptr [ebp') and a[-1]==']': # binop eax,dword ptr [ebp+ofs]
+      reg = REGS['ebp'] # maybe add other regs here, but then need to check for esp...
+      ofs = immediate(a[18:-1])
+      if len(ofs)==2: Y( BINOPS[w]+3 ); Y( 0x40|reg ); Y1( ofs )
+      else:           Y( BINOPS[w]+3 ); Y( 0x80|reg ); Y4( ofs )
+    elif a.startswith('dword ptr [ebp'): # cmp dword ptr [ebp+ofs],imm
+      reg = REGS['ebp']
+      sep = a.find('],')
+      ofs = immediate(a[14:sep])
+      imm = immediate(a[sep+2:])
+      if len(imm)==2:
+        if len(ofs)==2: Y( 0x83 ); Y( BINOPS[w]|0x40|reg ); Y1( ofs ); Y1( imm )
+        else:           Y( 0x83 ); Y( BINOPS[w]|0x80|reg ); Y4( ofs ); Y1( imm )
+      else:
+        if len(ofs)==2: Y( 0x81 ); Y( BINOPS[w]|0x40|reg ); Y1( ofs ); Y4( imm )
+        else:           Y( 0x81 ); Y( BINOPS[w]|0x80|reg ); Y4( ofs ); Y4( imm )
+    else: print( '%d: ??? '%l_no+w+' '+a+' - binop' )
   # mov
   elif w=='mov':
     if a[3]==',' and a[:3] in REGS and a[4:] in REGS: # mov reg,reg
@@ -249,7 +266,7 @@ def process_command( l:str ):
       imm = immediate1(a[15:])
       Y( 0xc6 ); Y( reg ); Y1( imm )
     elif a[:11]=='dword ptr [' and a[14] in '+-' and a[a.find('],')+2:][0] in '-+0123456789':
-      # mov dword ptr [reg+ofs],immed
+      # mov dword ptr [reg+ofs],immed (immed is always 4 bytes)
       sep = a.find('],')
       reg = REGS[a[11:14]]
       ofs = immediate(a[14:sep])
@@ -258,6 +275,12 @@ def process_command( l:str ):
       else:           Y( 0xc7 ); Y( 0x80|reg ); YY( reg==4, 0x24 ); Y4( ofs ); Y4( imm )
     else:
       print( '%d: ... '%l_no+w+' '+a+' - not implemented' )
+  elif w=='movsx' and a[:14]=='eax,byte ptr [' and a[17] in '+-' and a[-1]==']':
+    # movsx eax,byte ptr [reg+ofs]
+    reg = REGS[a[14:17]]
+    ofs = immediate(a[17:-1])
+    if len(ofs)==2: Y( 0x0f ); Y( 0xbe ); Y( 0x40|reg ); YY( reg==4, 0x24 ); Y1( ofs )
+    else:           Y( 0x0f ); Y( 0xbe ); Y( 0x80|reg ); YY( reg==4, 0x24 ); Y4( ofs )
   elif w=='lea' and a=='eax,[eax+4*ebx]':
     Y( 0x8d ); Y( 0x04 ); Y( 0x98 )
   elif w=='lea' and a=='eax,[ebx+4*eax]':
@@ -276,14 +299,14 @@ def process_command( l:str ):
 
   # TODO
 
-  # data refs!
-
+  elif w in JMPS:
+    Y( JMPS[w] ); Y( 0x00 )
   elif w=='jmp':
-    pass
+    Y( 0xeb ); Y( 0x00 )
   elif w=='call':
-    pass
-  elif w in ('je','jz','jne','jnz','jl','jle','jg','jge','js','jns'):
-    pass
+    Y( 0xe8 ); Y4( '00 00 00 00' )
+
+  # data refs!
 
   else: print( '%d: ... '%l_no+w+' '+a )
 
