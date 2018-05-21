@@ -1,14 +1,15 @@
+	.file	"startup.s"
+	.intel_syntax noprefix
 # stdlib for C99C - must be included before other code
 
     .bss
     .align 4
 hHeap: .space 4        # memory heap, from _GetProcessHeap
 hStdf: .space 3*4      # standard handles: stdin, stdout, stderr
-cmdline: .space 4        # as returned from _GetCommandLineA
-cmdlinecopy: .space 4    # a copy with modifications
-    .equ maxargs,15 # 15 args is enough for simple programs
+cmdline: .space 4      # as returned from _GetCommandLineA
+cmdlinecopy: .space 4  # a copy with modifications
 argc: .space 4
-argv: .space 4*maxargs
+argv: .space 60        # 4*maxargs, maxargs=15 -- don't want to implement .equ
 
     .text
     .globl entrypoint
@@ -37,13 +38,13 @@ prepare_main:
     call  _GetCommandLineA@0           # get command line as string
     mov   dword ptr cmdline,eax
     call  strdup_eax                   # allocate copy, will be split with '\0'
-    mov   dword ptr cmdlinecopy,eax # and argv[i] will point inside it
+    mov   dword ptr cmdlinecopy,eax    # and argv[i] will point inside it
     mov   dword ptr argc,0
     mov   ecx,offset flat:argv
     mov   edx,dword ptr cmdlinecopy
-    dec   edx
+    sub   edx,1
 SKP:
-    inc   edx
+    add   edx,1
     mov   al,byte ptr [edx]
     cmp   al,32
     je    SKP
@@ -52,14 +53,14 @@ SKP:
     test  al,al
     jz    DNE
     mov   ebx,dword ptr argc
-    cmp   ebx,maxargs
+    cmp   ebx,15                       # maxargs
     je    DNE
-    inc   ebx
+    add   ebx,1
     mov   dword ptr argc,ebx
     mov   dword ptr [ecx],edx
     add   ecx,4
 LAR:
-    inc   edx
+    add   edx,1
     mov   al,byte ptr [edx]
     test  al,al
     jz    DNE
@@ -107,7 +108,7 @@ strlen_eax_ecx:
     cld
     repne scasb
     not   ecx
-    dec   ecx
+    sub   ecx,1
     ret
 
 malloc_eax:
@@ -244,7 +245,7 @@ M13:
     add   eax,3
     jmp   M14
 M15:
-    mov   eax,0
+    xor   eax,eax
 M14:
     leave
     ret
@@ -358,7 +359,7 @@ M30:
     sub   esp,4
     test  eax,eax
     je    M32
-    mov   eax,0
+    xor   eax,eax
     jmp   M31
 M32:
     mov   eax,-1
@@ -379,7 +380,7 @@ _lseek: # lseek( int fd, int offset, int whence )
     sub   esp,40
     cmp   dword ptr [ebp+8],2
     jg    M35
-    mov   eax,0
+    xor   eax,eax
     jmp   M36
 M35:
     sub   dword ptr [ebp+8],3
