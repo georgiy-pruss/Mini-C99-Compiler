@@ -1,4 +1,4 @@
-# gcc -c all.s -o all.o && objdump -d all.o
+# gcc -c all.s -o all.o && objdump -M intel --insn-width=11 -d all.o | untab.py >all.pp
 
   # blah blah blah
   .file "cc.c" # <---------------------------- TODO all pseudocommands
@@ -36,10 +36,10 @@ argv:
   # 1:1
 strdup_eax:
 #------------------- done
-  ret
   cdq
   cld
   leave
+  ret
   rep   movsb
   repne scasb
   # stack
@@ -48,6 +48,7 @@ strdup_eax:
   push  100
   push  12345678
   push  -123456789
+  nop
   push  eax # save, will goto esi
   push  ecx
   push  ebp
@@ -182,8 +183,6 @@ strdup_eax:
   mov edi,-11
   mov edx,0x1234567
   mov edx,0x87654321
-  # mov*
-  movsx eax,byte ptr [eax]
   # mov al,memory
   mov al,byte ptr [eax]
   mov al,byte ptr [ecx]
@@ -191,6 +190,17 @@ strdup_eax:
   mov al,byte ptr [ebx]
   mov al,byte ptr [esp] # special cases esp (+24) ebp (+00)
   mov al,byte ptr [ebp]
+  # mov al,memory
+  mov al,byte ptr [ebp-16]   #    8a 45 f0
+  mov al,byte ptr [ebx-16]   #    ...
+  mov al,byte ptr [esp-16]   #    ...
+  # mov*
+  movsx eax,byte ptr [eax]   # only eax,[eax]
+  # movsz
+  movsx eax,byte ptr [ebp-16]  # 0f be 45 f0
+  movsx eax,byte ptr [esp-16]
+  movsx eax,byte ptr [edx+12]
+  movsx eax,byte ptr [edi+12]
   # mov reg,memory
   mov eax,dword ptr [eax]
   mov ecx,dword ptr [eax]
@@ -205,6 +215,9 @@ strdup_eax:
   mov eax,dword ptr [ebx+666]
   mov ebx,dword ptr [esp+4]    # special case esp
   mov esi,dword ptr [esp+8888]
+  # mov byte,al
+  mov byte ptr [edx],al
+  mov byte ptr [ebx],al
   # move memory,reg
   mov dword ptr [eax],eax
   mov dword ptr [edx],eax
@@ -216,8 +229,9 @@ strdup_eax:
   mov dword ptr [ebp],ecx
   mov dword ptr [eax],edx
   mov dword ptr [ecx],edx
-  # move memory,reg
+  # mov memory,reg
   mov dword ptr [edx+4],eax
+  mov dword ptr [edx+4],ecx
   mov dword ptr [ebp-12],eax
   mov dword ptr [ebp+8],eax
   mov dword ptr [esp+12],eax
@@ -229,41 +243,40 @@ strdup_eax:
   mov dword ptr [esp-8000],eax
   mov dword ptr [ebx+8000],eax
   mov dword ptr [ebx-8000],eax
-
-#------------------- TODO INDEX MEMORY
-
-  nop
-  nop
-
-  mov byte ptr [edx],al
-  mov byte ptr [ebx],al
-  # movsz
-  mov   eax,byte ptr [ebp-16] #    8a 45 f0
-  movsx eax,byte ptr [ebp-16] # 0f be 45 f0
-  # mov memory,immed
+  # mov bytememory,immed (no mov byte ptr [reg+ofs],immed)
   mov byte ptr [eax],0
   mov byte ptr [edx],0
   mov byte ptr [edx],120
   mov byte ptr [edx],-120
   mov byte ptr [edx],0xff
-
+  # mov memory,immed (no mov dword ptr [reg],immed)
+  mov dword ptr [edx+8],0
   mov dword ptr [esp+8],0
   mov dword ptr [esp+20],128
+  mov dword ptr [esp+222],128
   mov dword ptr [ebp-8],15
   mov dword ptr [ebp-12],-2147483648
   mov dword ptr [ebp-12],1073741824
+  mov dword ptr [ebp-1220],1073741824
   # lea
   lea eax,[ecx]
-  lea eax,byte ptr [ecx+1]
+  lea eax,[ecx+1]
   lea eax,[ebp]
   lea eax,[ebp+8]
+  lea eax,[ebp+448]
   lea eax,[ebp-16]
   lea eax,[ebp-68] # cmd
   lea eax,[esp]
   lea eax,[esp+8]
+  lea eax,[esp+888]
   lea eax,[esp-12]
   lea eax,[eax+4*ebx]
-  lea eax,[eax+4*ebx]
+  lea eax,[ebx+4*eax]
+
+#------------------- TODO INDEX MEMORY
+
+  nop
+  nop
 
   # ops
   imul eax,dword ptr [ebp-4] # v
@@ -301,28 +314,38 @@ strdup_eax:
 
   # spec ops
   idiv dword ptr argc
+  nop
+  nop
+  nop
 
   # long jums
-  jmp FAR
+  jmp FAR # e9 0x00010210
   nop
-  je  FAR
-  nop
-  jl  FAR
+  je  FAR # 0f 84 xxxxxxxx
+  jne FAR #    85
+  js  FAR #    88
+  jns FAR #    89
+  jl  FAR #    8c
+  jge FAR #    8d
+  jle FAR #    8e
+  jg  FAR #    8f
   nop
   # jump, call
-  je  M0
+  jmp M0 # eb 16
+  nop
+  je  M0 # 74 xx
   jz  M0
-  js  M0
-  jl  M0
-  jg  M0
-  jne M0
+  jne M0 # 75
   jnz M0
-  jge M0
-  jle M0
-  jns M0
-  jmp M0
+  js  M0 # 78
+  jns M0 # 79
+  jl  M0 # 7c
+  jge M0 # 7d
+  jle M0 # 7e
+  jg  M0 # 7f
+  nop
 M0:
-  call strdup_eax                   # allocate copy, will be split with '\0'
+  call strdup_eax       # e8 xx xx xx xx - relative address
   call _CloseHandle@4
   call _assert
 
