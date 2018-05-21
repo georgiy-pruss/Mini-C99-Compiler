@@ -303,38 +303,42 @@ strdup_eax:
 
 #------------------- TODO SYMBOLIC MEMORY
 
-  mov eax,dword ptr argc
-  mov edx,dword ptr argc
-  mov ebx,dword ptr argc
-  mov eax,OFFSET FLAT:S1
-  mov eax,offset flat:argv
-  mov ecx,offset flat:argv
+ #mov eax,dword ptr argc
+ #mov edx,dword ptr argc
+ #mov ebx,dword ptr argc
+ #mov eax,OFFSET FLAT:S1
+ #mov eax,offset flat:argv
+ #mov ecx,offset flat:argv
   # store
-  mov dword ptr argc,0
-  mov dword ptr argc,eax
-  mov dword ptr hStdf+4,eax
-  mov dword ptr argc,ebx
+ #mov dword ptr argc,0
+ #mov dword ptr argc,eax
+ #mov dword ptr hStdf+4,eax
+ #mov dword ptr argc,ebx
 
-  add eax,dword ptr _ZX
-  cmp eax,dword ptr _tL
+ #add eax,dword ptr _ZX
+ #cmp eax,dword ptr _tL
 
   # spec ops
-  idiv dword ptr argc
-  nop
+ #idiv dword ptr argc
   nop
   nop
 
-  # long jums
-  jmp FAR # e9 0x00010210
+  call strdup_eax       # e8 xx xx xx xx - relative address
+  call _CloseHandle@4
+  call _assert
   nop
-  je  FAR # 0f 84 xxxxxxxx
-  jne FAR #    85
-  js  FAR #    88
-  jns FAR #    89
-  jl  FAR #    8c
-  jge FAR #    8d
-  jle FAR #    8e
-  jg  FAR #    8f
+
+  # long jumps
+  jmp MFAR # e9 0x00010210
+  nop
+  je  MFAR # 0f 84 xxxxxxxx
+  jne MFAR #    85
+  js  MFAR #    88
+  jns MFAR #    89
+  jl  MFAR #    8c
+  jge MFAR #    8d
+  jle MFAR #    8e
+  jg  MFAR #    8f
   nop
   # jump, call
   jmp M0 # eb 16
@@ -349,14 +353,28 @@ strdup_eax:
   jge M0 # 7d
   jle M0 # 7e
   jg  M0 # 7f
-  nop
-M0:
-  call strdup_eax       # e8 xx xx xx xx - relative address
-  call _CloseHandle@4
-  call _assert
 
-  .space 200
-FAR:
+M0:
+  nop
+  mov eax,1 # 5 bytes each
+  mov eax,2
+  mov eax,3
+  mov eax,4
+  mov eax,5
+  mov eax,6
+  mov eax,7
+  mov eax,8
+  mov eax,9
+  mov eax,10
+  mov eax,11
+  mov eax,12
+  mov eax,13
+  mov eax,14
+  mov eax,15
+  mov eax,16
+  mov eax,17
+
+MFAR:
   ret
 
   .ident  "Georgiy Pruss C99C 0.261497"

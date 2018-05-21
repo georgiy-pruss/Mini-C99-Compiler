@@ -8,7 +8,6 @@ b = open( "o.bin", "wb" )
 l_no = 0 # number of current line
 
 prep = True # two passes - preparation and final
-prep = False #.......................................dbg
 
 s_data_len = 0  # for prep. pass
 s_data = b''    # for final pass
@@ -24,11 +23,22 @@ c_data = 0  # current address in data
 c_rdata = 0 # current address in rdata
 c_bss = 0   # current address in bss
 
+labels = [] # ('name',addr)
+jumps = [] # ('jcc',addr,'target')
+
+def find_label( s:str ):
+  for n,a in labels:
+    if n==s: return a
+  return -1
+
 def NL():
   if prep:
     pass
   else:
-    print( "\n%4x:  " % c_code, end='', file=o ) # if listing
+    if c_sec == 'code':
+      print( "\n%4x:  " % c_code, end='', file=o ) # if listing
+    else:
+      print( "\n%4x:  " % 0, end='', file=o ) # if listing
 
 def Y( b:int ):
   global c_code
@@ -64,8 +74,11 @@ def Y4( b:str ): # yielding 4-byte immediate; will be for ints
   c_code += 4
 
 def process_label( l:str ):
-  # print( l+': '+str(text_addr) )
-  pass
+  if prep:
+    if c_sec == 'code':
+      labels.append( (l,c_code) )
+  else:
+    pass
 
 REGS = {'eax':0,'ecx':1,'edx':2,'ebx':3,'esp':4,'ebp':5,'esi':6,'edi':7}
 SETOPS = {'sete':0x94,'setz':0x94,'setne':0x95,'setnz':0x95,
@@ -119,6 +132,7 @@ def process_command( l:str ):
       Y( 0xc3 )
       nops = (4-c_code%4)%4
       if nops>0:
+        print( "\n####   - - - - - - - - - - - - - - - "+'nop', end='', file=o )
         for i in range(nops):
           NL(); Y( 0x90 )
     else: print( '%d: !!! '%l_no+l )
@@ -299,10 +313,22 @@ def process_command( l:str ):
 
   # TODO
 
-  elif w in JMPS:
-    Y( JMPS[w] ); Y( 0x00 )
-  elif w=='jmp':
-    Y( 0xeb ); Y( 0x00 )
+  elif w in JMPS or w=='jmp':
+    if w=='jmp': op = 0xeb
+    else: op = JMPS[w]
+    if prep:
+      Y( op ); Y( 0x00 )
+      jumps.append( (w,c_code,a) )
+    else:
+      target = find_label( a )
+      if target<0:
+        print( '%d: ... '%l_no+w+' '+a+' - label not found' )
+        target = 0
+      diff = target - (c_code + 2)
+      if -128<=diff<=127:
+        if diff<0: diff += 256
+        Y( op ); Y( diff )
+
   elif w=='call':
     Y( 0xe8 ); Y4( '00 00 00 00' )
 
@@ -311,7 +337,7 @@ def process_command( l:str ):
   else: print( '%d: ... '%l_no+w+' '+a )
 
 def process_pseudocommand( l:str ):
-  global c_seg
+  global c_sec
   if l=='.text':
     c_sec = 'code'
   elif l=='.bss':
@@ -354,6 +380,15 @@ def asm( t:str ):
     else:
       process_command( t )
 
+# two passes
+prep = True
+c_code = 0
+with open( "all.s", "rt" ) as f:
+  t = f.read()
+  asm(t)
+s_code_len = c_code
+c_code = 0
+prep = False
 with open( "all.s", "rt" ) as f:
   t = f.read()
   asm(t)
@@ -370,4 +405,11 @@ with open( "o.pp", "wt" ) as o:
       elif c:
         s = l.rstrip()
         print( "%-44s%s" % (s,c), file=o )
-
+print('--')
+mn = 0
+for n,_ in labels:
+  if len(n)>mn: mn=len(n)
+for n,a in labels:
+  print( ('%-'+('%d'%(mn+1))+'s 0x%03x') % (n+':',a) )
+print('--')
+print(jumps)
