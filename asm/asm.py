@@ -78,7 +78,11 @@ def process_label( l:str ):
     if c_sec == 'code':
       labels.append( (l,c_code) )
   else:
-    pass
+    if c_sec == 'code':
+      addr = find_label( l )
+      if addr != c_code:
+        print( '$$$',addr,c_code )
+      print( '\n%08x <%s>:' % (addr,l), end='', file=o )
 
 REGS = {'eax':0,'ecx':1,'edx':2,'ebx':3,'esp':4,'ebp':5,'esi':6,'edi':7}
 SETOPS = {'sete':0x94,'setz':0x94,'setne':0x95,'setnz':0x95,
@@ -130,12 +134,12 @@ def process_command( l:str ):
     elif l=='leave': Y( 0xc9 )
     elif l=='ret':
       Y( 0xc3 )
-      nops = (4-c_code%4)%4
-      if nops>0:
-        print( "\n####   - - - - - - - - - - - - - - - "+'nop', end='', file=o )
-        for i in range(nops):
-          NL(); Y( 0x90 )
-    else: print( '%d: !!! '%l_no+l )
+      #nops = (4-c_code%4)%4
+      #if nops>0:
+      #  print( "\n####   - - - - - - - - - - - - - - - "+'nop', end='', file=o )
+      #  for i in range(nops):
+      #    NL(); Y( 0x90 )
+    else: print( '%d: !!! '%l_no+l+' - unknown cmd' )
     return
   k = b+1
   while k<len(l) and l[k]==' ': k+=1
@@ -166,7 +170,9 @@ def process_command( l:str ):
     Y( 0x0f ); Y( SETOPS[w] ); Y( 0xc0 )
   elif w=='idiv':
     if a in REGS: Y( 0xf7 ); Y( 0xf8+REGS[a] )
-    else: print( '%d: ??? '%l_no+w+' '+a )
+    else:
+      print( '%d: /// '%l_no+w+' '+a )
+      Y( 0x90 )
   elif w=='imul':
     if a.startswith( 'eax,eax,' ):
       imm = immediate( a[8:] )
@@ -218,7 +224,9 @@ def process_command( l:str ):
       else:
         if len(ofs)==2: Y( 0x81 ); Y( BINOPS[w]|0x40|reg ); Y1( ofs ); Y4( imm )
         else:           Y( 0x81 ); Y( BINOPS[w]|0x80|reg ); Y4( ofs ); Y4( imm )
-    else: print( '%d: ??? '%l_no+w+' '+a+' - binop' )
+    else:
+      print( '%d: ??? '%l_no+w+' '+a+' - binop' ) # e.g. add var,eax or cmp eax,var
+      Y( 0x90 )
   # mov
   elif w=='mov':
     if a[3]==',' and a[:3] in REGS and a[4:] in REGS: # mov reg,reg
@@ -289,6 +297,7 @@ def process_command( l:str ):
       else:           Y( 0xc7 ); Y( 0x80|reg ); YY( reg==4, 0x24 ); Y4( ofs ); Y4( imm )
     else:
       print( '%d: ... '%l_no+w+' '+a+' - not implemented' )
+      Y( 0x90 )
   elif w=='movsx' and a[:14]=='eax,byte ptr [' and a[17] in '+-' and a[-1]==']':
     # movsx eax,byte ptr [reg+ofs]
     reg = REGS[a[14:17]]
@@ -325,9 +334,13 @@ def process_command( l:str ):
         print( '%d: ... '%l_no+w+' '+a+' - label not found' )
         target = 0
       diff = target - (c_code + 2)
+      print( w, a, 'c_code %x  target %x  diff %x' % (c_code,target,diff) )
       if -128<=diff<=127:
         if diff<0: diff += 256
         Y( op ); Y( diff )
+      else:
+        print( '%d: !!! '%l_no+w+' '+a+' - too long jump '+str(diff) )
+        Y( op ); Y( 0 ) # some fake value
 
   elif w=='call':
     Y( 0xe8 ); Y4( '00 00 00 00' )
@@ -387,6 +400,15 @@ with open( "all.s", "rt" ) as f:
   t = f.read()
   asm(t)
 s_code_len = c_code
+
+print('--')
+mn = 0
+for n,_ in labels:
+  if len(n)>mn: mn=len(n)
+for n,a in labels:
+  print( ('%-'+('%d'%(mn+1))+'s 0x%03x') % (n+':',a) )
+print('--')
+
 c_code = 0
 prep = False
 with open( "all.s", "rt" ) as f:
@@ -403,8 +425,10 @@ with open( "o.pp", "wt" ) as o:
       if l.startswith('####   '):
         c = l[37:].rstrip()
       elif c:
-        s = l.rstrip()
-        print( "%-44s%s" % (s,c), file=o )
+        if l.startswith('0000'): # label
+          print( l.rstrip(), file=o )
+        else:
+          print( "%-44s%s" % (l.rstrip(),c), file=o )
 print('--')
 mn = 0
 for n,_ in labels:

@@ -323,12 +323,14 @@ strdup_eax:
   nop
   nop
 
+  # calls
   call strdup_eax       # e8 xx xx xx xx - relative address
   call _CloseHandle@4
   call _assert
-  nop
 
+JUMPS:
   # long jumps
+  nop
   jmp MFAR # e9 0x00010210
   nop
   je  MFAR # 0f 84 xxxxxxxx
@@ -340,7 +342,7 @@ strdup_eax:
   jle MFAR #    8e
   jg  MFAR #    8f
   nop
-  # jump, call
+  # short jumps
   jmp M0 # eb 16
   nop
   je  M0 # 74 xx
@@ -356,6 +358,11 @@ strdup_eax:
 
 M0:
   nop
+  jmp M0 # near, back
+  je  M0
+  jne M0
+  jl  M0
+  jg  M0
   mov eax,1 # 5 bytes each
   mov eax,2
   mov eax,3
@@ -370,9 +377,8 @@ M0:
   mov eax,12
   mov eax,13
   mov eax,14
-  mov eax,15
-  mov eax,16
-  mov eax,17
+  jmp M0
+  js  M0
 
 MFAR:
   ret
