@@ -31,7 +31,7 @@ int CG_LINES=1; // -L - omit output of line numbers; -L => CG_LINES=0
 
 // stdlib ----------------------------------------------------------------------
 
-int open( char* path, int oflag ); // >0 if ok; flags below - own flags!
+//int open( char* path, int oflag ); // >0 if ok; flags below - own flags!
 int close( int fd );                          // 0 if ok
 int read( int fd, char* buf, int count );     // fd=0 - stdin
 int write( int fd, char* buf, int count );    // fd=1 - stdout, fd=2 - stderr
@@ -39,8 +39,12 @@ int lseek( int fd, int offset, int whence ); // if bad: -1, if std: 0
 char* malloc( int size );
 void free( char* ptr );
 void exit( int status );
-enum { O_RDONLY, O_WRONLY, O_RDWR, O_APPEND=8, O_CREAT=16, O_TRUNC=32, O_EXCL=64 };
+//enum { O_RDONLY, O_WRONLY, O_RDWR, O_APPEND=8, O_CREAT=16, O_TRUNC=32, O_EXCL=64 };
 enum { SEEK_SET, SEEK_CUR, SEEK_END };
+
+enum { O_RDONLY, O_WRONLY, O_RDWR, O_APPEND=8, O_CREAT=256, O_TRUNC=512, O_EXCL=1024,
+   O_TEXT=16384, O_BINARY=32768 }; // Windows
+int open( char* path, int oflag, int mode ); // Windows
 
 // helper fns ------------------------------------------------------------------
 
@@ -2029,7 +2033,7 @@ int main( int ac, char** av )
     }
 
   if( !filename ) { p1( "No input file\n" ); exit(1); }
-  rd_file = open( filename, O_RDONLY );
+  rd_file = open( filename, O_RDONLY, 0666 );
   if( rd_file<=0 ) { p3( "Can't open input file '", filename, "'\n" ); exit(1); }
   // initialization
   op_set_prec();
@@ -2037,7 +2041,7 @@ int main( int ac, char** av )
   id_table_create( ID_TABLE_DIM );
   sl_table_create( SL_TABLE_DIM );
   if( !outputfn ) outputfn = "a.s";
-  cg_file = open( outputfn, O_CREAT|O_TRUNC|O_WRONLY );
+  cg_file = open( outputfn, O_CREAT|O_TRUNC|O_WRONLY, 0666 );
   if( cg_file<0 ) { p3( "Can't create file '", outputfn, "'\n" ); exit(1); }
   cg_begin( filename );
   if( !pa_program( filename ) ) err1( "wrong syntax" );
