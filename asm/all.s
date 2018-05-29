@@ -341,6 +341,7 @@ JUMPS:
   jge MFAR #    8d
   jle MFAR #    8e
   jg  MFAR #    8f
+  jg  MFAR #    8f this one is near
   nop
   # short jumps
   jmp M0 # eb 16
@@ -371,21 +372,21 @@ M0:
   mov dword ptr [ebp+256],50
   mov dword ptr [ebp+256],60
   mov dword ptr [ebp+256],70
-  mov eax,1 # !!!!!!!!!!!!!!!!!!!
-  je M0
-  je MFAR
-MFAR:
-  jmp M0
-  mov eax,15
-  mov eax,16
-  mov eax,17
-  mov eax,18
-  mov eax,19
-  mov eax,20
-  mov eax,22
+  ###
+  mov dword ptr [ebp+256],80
+  lea eax,[esp]
+  lea eax,[esp]
   nop
+  je M0   # near, back
+  je MFAR # near, forth
+MFAR:
+  jmp M0  # near, back
+  mov dword ptr [ebp+256],-10
+  mov dword ptr [ebp+256],-20
+  nop
+  js  M0  # near
+  js  M0  # far
   jmp M0
-  js  M0
 
   .ident  "Georgiy Pruss C99C 0.261497"
 

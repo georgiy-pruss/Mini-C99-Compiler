@@ -72,7 +72,6 @@ def end_proc_jt():
         sz = 5
       else: # jcc
         sz = 6
-      print('fixing jump at %x; diff=%d' % (a, diff), 'j',j, 'jt[j]', jt[j] )
       jt[j] = (a,is_jmp,False,lx) # change is_short
       shift = sz-2 # insert 3 or 4 bytes
       assert prep
@@ -80,20 +79,17 @@ def end_proc_jt():
       # shift jumps with bigger addresses
       for j1 in range( j+1, len( jt ) ):
         (a1,is_jmp1,is_short1,lx1) = jt[j1] # change address only
-        print( 'shifting jump at %x'% a1,'by',shift )
         a1 += shift
         jt[j1] = (a1,is_jmp1,is_short1,lx1)
       # shift all labels with address > a
       for l1 in range(len(code_labels)):
         (nm1,adr1) = code_labels[l1]
         if adr1 > a:
-          print( 'correcting label',nm1,adr1,'->',adr1+shift )
           code_labels[l1] = (nm1, adr1 + shift)
       shifted = True
       break
     if not shifted: # all is resolved
       break
-
   proc_jt_done = True
 
 def process_label( lbl:str ):
@@ -523,9 +519,8 @@ for n,_ in code_labels:
   if len(n)>mn: mn=len(n)
 for n,a in code_labels:
   print( ('%-'+('%d'%(mn+1))+'s 0x%03x') % (n+':',a) )
-
 print('--')
-for j in jt:
-  (a,jmp,sht,l) = j
-  (nm,tgt) = code_labels[l]
-  print("%3x: %s %s #%d: %3x %s" % (a,'-j'[jmp],'-s'[sht],l,tgt,nm) )
+#for j in jt:
+#  (a,jmp,sht,l) = j
+#  (nm,tgt) = code_labels[l]
+#  print("%3x: %s %s #%d: %3x %s" % (a,'-j'[jmp],'-s'[sht],l,tgt,nm) )
