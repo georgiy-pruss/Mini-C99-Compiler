@@ -364,20 +364,14 @@ M0:
   jl  M0
   jg  M0
   nop
-  mov eax,1 # 5 bytes each
-  mov eax,2
-  mov eax,3
-  mov eax,4
-  mov eax,5
-  mov eax,6
-  mov eax,7
-  mov eax,8
-  mov eax,9
-  mov eax,10
-  mov eax,11
-  mov eax,12
-  mov eax,13
-  mov eax,14
+  mov dword ptr [ebp+256],10 # 10 bytes each
+  mov dword ptr [ebp+256],20
+  mov dword ptr [ebp+256],30
+  mov dword ptr [ebp+256],40
+  mov dword ptr [ebp+256],50
+  mov dword ptr [ebp+256],60
+  mov dword ptr [ebp+256],70
+  mov eax,1 # !!!!!!!!!!!!!!!!!!!
   je M0
   je MFAR
 MFAR:

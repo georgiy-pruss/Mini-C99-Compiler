@@ -56,23 +56,44 @@ def start_proc_jt( start:int ):
   jt_proc_done = False
 
 def end_proc_jt():
-  # resolve all jumps in the last proc
+  # resolve all jumps in the latest proc
   global c_code # can change code len!
-  for j in range( jt_proc_start, len( jt ) ):
-    (a,is_jmp,is_short,lx) = jt[j]
-    if not is_short: # already long
-      continue
-    (_,target_addr) = code_labels[lx]
-    diff = target_addr - (a + 2)
-    if -128<=diff<=127:
-      pass # all ok, leave as is
-    else:
-      if is_jmp: # unconditional jmp -- sz 5
+  for i in range( jt_proc_start, len( jt ) ): # can't do that more then this times
+    shifted = False
+    for j in range( jt_proc_start, len( jt ) ):
+      (a,is_jmp,is_short,lx) = jt[j]
+      if not is_short: # already long
+        continue
+      (_,target_addr) = code_labels[lx]
+      diff = target_addr - (a + 2)
+      if -128<=diff<=127:
+        continue # all ok, leave as is
+      if is_jmp: # unconditional jmp
         sz = 5
-      else: # jcc -- sz 6
+      else: # jcc
         sz = 6
+      print('fixing jump at %x; diff=%d' % (a, diff), 'j',j, 'jt[j]', jt[j] )
       jt[j] = (a,is_jmp,False,lx) # change is_short
-      # TODO shift labels; shift jumps
+      shift = sz-2 # insert 3 or 4 bytes
+      assert prep
+      c_code += shift
+      # shift jumps with bigger addresses
+      for j1 in range( j+1, len( jt ) ):
+        (a1,is_jmp1,is_short1,lx1) = jt[j1] # change address only
+        print( 'shifting jump at %x'% a1,'by',shift )
+        a1 += shift
+        jt[j1] = (a1,is_jmp1,is_short1,lx1)
+      # shift all labels with address > a
+      for l1 in range(len(code_labels)):
+        (nm1,adr1) = code_labels[l1]
+        if adr1 > a:
+          print( 'correcting label',nm1,adr1,'->',adr1+shift )
+          code_labels[l1] = (nm1, adr1 + shift)
+      shifted = True
+      break
+    if not shifted: # all is resolved
+      break
+
   proc_jt_done = True
 
 def process_label( lbl:str ):
