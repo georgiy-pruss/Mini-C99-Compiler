@@ -1091,7 +1091,7 @@ void cg_expr( int* e )
       if( e0=='+' )
       {
         if( mixed==1 )      cg_n( "  lea eax,[eax+4*ebx]" ); // Tp + i
-        else if( mixed==2 ) cg_n( "  lea eax,[4*eax+ebx]" ); // i + Tp
+        else if( mixed==2 ) cg_n( "  lea eax,[ebx+4*eax]" ); // i + Tp
       }
       else if( e0=='-' && mixed==3 )
       {
@@ -1105,7 +1105,7 @@ void cg_expr( int* e )
       if( e0=='+' )
       {
         if( mixed==1 )      cg_n( "  lea eax,[eax+4*ebx]" ); // Tp + i
-        else if( mixed==2 ) cg_n( "  lea eax,[4*eax+ebx]" ); // i + Tp
+        else if( mixed==2 ) cg_n( "  lea eax,[ebx+4*eax]" ); // i + Tp
         else                cg_n( "  add eax,ebx" );
       }
       else if( e0=='-' )
