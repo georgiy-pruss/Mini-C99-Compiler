@@ -39,8 +39,13 @@ int lseek( int fd, int offset, int whence ); // if bad: -1, if std: 0
 char* malloc( int size );
 void free( char* ptr );
 void exit( int status );
-enum { O_RDONLY, O_WRONLY, O_RDWR, O_APPEND=8, O_CREAT=16, O_TRUNC=32, O_EXCL=64 };
+//enum { O_RDONLY, O_WRONLY, O_RDWR, O_APPEND=8, O_CREAT=16, O_TRUNC=32, O_EXCL=64 };
 enum { SEEK_SET, SEEK_CUR, SEEK_END };
+enum { O_RDONLY, O_WRONLY, O_RDWR, O_APPEND=8, O_CREAT=256, O_TRUNC=512, O_EXCL=1024,
+   O_TEXT=16384, O_BINARY=32768 }; // Windows
+
+
+// helper fns ------------------------------------------------------------------
 
 int is_abc( int c ) { return c>='a' && c<='z' || c>='A' && c<='Z' || c=='_'; }
 
@@ -743,21 +748,24 @@ void cg_begin( char* fn )
 {
   cg_3n( "  .file \"", fn, "\"" );
   cg_n( "  .intel_syntax noprefix\n" );
+  cg_n( "  .include \"startup.inc\"\n" );
 }
 
 void cg_end()
 {
   // http://www.trilithium.com/johan/2004/12/gcc-ident-strings/
   cg_3n( "\n  .ident  \"", TITLE, "\"\n" );
+  /*
   // dump declarations of all undefined functions
   for( int i=0; i<st_count; ++i )
     if( st_kind[i]==K_fn && st_value[i]==0 )
       cg_3n( "  .def _", id_table[st_id[i]], "; .scl 2; .type 32; .endef" );
+  */
 }
 
 void cg_fn_begin( char* name )
 {
-  if( strequ( name, "main" ) ) cg_n( "  .def ___main; .scl 2; .type 32; .endef" );
+  // if( strequ( name, "main" ) ) cg_n( "  .def ___main; .scl 2; .type 32; .endef" );
   if( cg_section != S_CODE ) { cg_section = S_CODE; cg_n( "  .text" ); }
   cg_2n( "  .globl _", name );
   cg_3n( "  .def _", name, "; .scl 2; .type 32; .endef" );
@@ -1892,7 +1900,7 @@ int pa_func()
     cg_fn_label = cg_new_label();
     cg_fn_begin( id_table[id] );
     cg_suspend(); // resume until we know local scope size on stack
-    if( strequ( id_table[id], "main" ) ) cg_n( "  call ___main\n" );
+    //if( strequ( id_table[id], "main" ) ) cg_n( "  call ___main\n" );
     se_local_offset = 0;
     se_max_l_offset = 0;
     int block_local_start = st_count;         // in ST
@@ -2053,6 +2061,8 @@ int main( int ac, char** av )
   return 0;
 }
 
+/*
+
 // stdlib
 
 #define DWORD                    int
@@ -2097,7 +2107,7 @@ int open( char *path, int oflag )
   int f,x;
   if( oflag & O_WRONLY ) { f = GENERIC_WRITE; x = OPEN_ALWAYS; }
   else if( oflag & O_RDWR ) f = GENERIC_READ | GENERIC_WRITE;
-  else /* O_RDONLY */ { f = GENERIC_READ; x = OPEN_EXISTING; /*assert f==O_RDONLY;*/ }
+  else / * O_RDONLY * / { f = GENERIC_READ; x = OPEN_EXISTING; / *assert f==O_RDONLY;* / }
 
   if( f & (O_CREAT|O_EXCL) ) x = OPEN_ALWAYS;
   if( oflag & O_APPEND )
@@ -2154,3 +2164,4 @@ char* malloc( int size ) { return HeapAlloc( hHeap, 0, size ); }
 void free( char* ptr ) { HeapFree( hHeap, 0, ptr ); }
 void exit( int status ) { ExitProcess( status ); }
 
+*/
