@@ -5,18 +5,13 @@
 // gcc -nostdlib test.s -lkernel32 -o test.exe
 // test.exe a1 arg2 arg_3
 
+// cc2.exe test.c -o test.s
+// gcc -nostdlib test.s -lkernel32 -o test.exe
+// test xxx yyy zzz
 
-int open( char* path, int oflag ); // >0 if ok; flags below - own flags!
-int close( int fd );                          // 0 if ok
-int read( int fd, char* buf, int count );     // fd=0 - stdin
-int write( int fd, char* buf, int count );    // fd=1 - stdout, fd=2 - stderr
-int lseek( int fd, int offset, int whence ); // if bad: -1, if std: 0
-char* malloc( int size );
-void free( char* ptr );
-void exit( int status );
-enum { O_RDONLY, O_WRONLY, O_RDWR, O_APPEND=8, O_CREAT=16, O_TRUNC=32, O_EXCL=64 };
-enum { SEEK_SET, SEEK_CUR, SEEK_END };
-
+int open(char*p,int f);enum{O_RDONLY,O_WRONLY,O_RDWR,O_APPEND=8,O_CREAT=16,O_TRUNC=32,O_EXCL=64};
+int lseek(int f,int o,int w);enum{SEEK_SET,SEEK_CUR,SEEK_END};char*malloc(int n);void free(char*a);
+int close(int f);int read(int f,char*b,int c);int write(int f,char*b,int c);void exit(int s);
 
 int strlen( char* s ) { char* b=s; while( *s ) ++s; return s-b; }
 
