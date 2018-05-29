@@ -1,13 +1,27 @@
-# asm.py - shows what's not recognized
-# o.lst - listing; converted to pretty-print o.pp
-# o.bin - binary output
+import sys
 
-o = open( "o.lst", "wt" )
-b = open( "o.bin", "wb" )
+if len(sys.argv)<2:
+  print( "run with argument, e.g. program.s" )
+  sys.exit(0)
+if not sys.argv[1].endswith(".s"):
+  print( "file name must end with .s" )
+  sys.exit(0)
+input_name = sys.argv[1]
+output_bin = input_name[:-2]+".bin"
+output_lst = input_name[:-2]+".lst"
+output_prt = input_name[:-2]+".prt" # pretty-print
+
+o = open( output_lst, "wt" )
+b = open( output_bin, "wb" )
 
 l_no = 0 # number of current line
 
 prep = True # two passes - preparation and final
+
+CODE_ORIGIN = 0 # will be 0x10000 or so
+DATA_ORIGIN = 0
+RDATA_ORIGIN = 0
+BSS_ORIGIN = 0
 
 s_data_len = 0  # for prep. pass
 s_data = b''    # for final pass
@@ -24,10 +38,11 @@ c_rdata = 0 # current address in rdata
 c_bss = 0   # current address in bss
 
 data_labels = []
-code_labels = [] # ('name',addr)
-jt = [] # (addr,is_jmp:bool,is_short:bool,label_index,target_addr)
+code_labels = [] # ('name',addr) addr -1 if not yet defined
+jt = [] # jump table: (addr,is_jmp:bool,is_short:bool,label_index)
 jt_proc_start = 0 # index of next (vacant place) jump in jump table at proc start
 jt_proc_done = False
+ct = [] # call table: (addr,label_index)
 
 def find_code_label( s:str )->int: # return index in code_labels
   for i,c in enumerate(code_labels):
@@ -38,10 +53,14 @@ def add_code_label( s:str, a:int )->int: # return index in code_labels
   code_labels.append( (s,a) )
   return len(code_labels)-1
 
-def add_jump( addr:int, is_jmp:bool, label_name:str ):
-  idx = find_code_label( label_name )
+def find_add_code_label( s:str )->int: # find or add label
+  idx = find_code_label( s )
   if idx<0:
-    idx = add_code_label( label_name, -1 )
+    idx = add_code_label( s, -1 )
+  return idx
+
+def add_jump( addr:int, is_jmp:bool, label_name:str ):
+  idx = find_add_code_label( label_name )
   jt.append( (addr,is_jmp,True,idx) )
 
 def find_jump( addr:int )->int:
@@ -74,7 +93,6 @@ def end_proc_jt():
         sz = 6
       jt[j] = (a,is_jmp,False,lx) # change is_short
       shift = sz-2 # insert 3 or 4 bytes
-      assert prep
       c_code += shift
       # shift jumps with bigger addresses
       for j1 in range( j+1, len( jt ) ):
@@ -114,50 +132,54 @@ def NL():
     else:
       print( "\n%4x:  " % 0, end='', file=o ) # if listing
 
-def Y( b:int ):
+def Y( x:int ):
   global c_code
   if prep:
     pass
   else:
-    print( ' %02x' % b, end='', file=o )
+    print( ' %02x' % x, end='', file=o )
   c_code += 1
 
-def YY( c:bool, b:int ): # conditional yield
+def YY( c:bool, x:int ): # conditional yield
   global c_code
   if c:
     if prep:
       pass
     else:
-      print( ' %02x' % b, end='', file=o )
+      print( ' %02x' % x, end='', file=o )
     c_code += 1
 
-def Y1( b:str ): # yielding 1-byte immediate; will be for ints
+def Y1( x:str ): # yielding 1-byte immediate; will be for ints
   global c_code
   if prep:
     pass
   else:
-    print( ' '+b, end='', file=o )
+    print( ' '+x, end='', file=o )
   c_code += 1
 
-def Y4( b:str ): # yielding 4-byte immediate; will be for ints
+def Y4( x:str ): # yielding 4-byte immediate; will be for ints
   global c_code
   if prep:
     pass
   else:
-    print( ' '+b, end='', file=o )
+    print( ' '+x, end='', file=o )
   c_code += 4
 
-REGS = {'eax':0,'ecx':1,'edx':2,'ebx':3,'esp':4,'ebp':5,'esi':6,'edi':7}
+REGS =   {'eax':0,'ecx':1,'edx':2,'ebx':3,'esp':4,'ebp':5,'esi':6,'edi':7}
 SETOPS = {'sete':0x94,'setz':0x94,'setne':0x95,'setnz':0x95,
           'setl':0x9c,'setg':0x9f,'setle':0x9e,'setge':0x9d}
 BINOPS = {'add':0x00,'or':0x08,'and':0x20,'sub':0x28,'xor':0x30,'cmp':0x38}
-JMPS = {'je':0x74,'jz':0x74,'jne':0x75,'jnz':0x75,'js':0x78,'jns':0x79,
-        'jl':0x7c,'jge':0x7d,'jle':0x7e,'jg':0x7f,'jmp':0xeb}
+JMPS =   {'je':0x74,'jz':0x74,'jne':0x75,'jnz':0x75,'js':0x78,'jns':0x79,
+          'jl':0x7c,'jge':0x7d,'jle':0x7e,'jg':0x7f,'jmp':0xeb}
+
+def read_int( s:str )->int:
+  if s.startswith('0x'):    return int(s[2:],16)
+  elif s.startswith('+0x'): return int(s[3:],16)
+  elif s.startswith('-0x'): return -int(s[3:],16)
+  else:                     return int(s)
 
 def immediate( s ):
-  if s.startswith('0x'):    n = int(s[2:],16)
-  elif s.startswith('-0x'): n = -int(s[3:],16)
-  else:                     n = int(s)
+  n = read_int(s)
   if 0<=n<=127:     imm = '%02x'%n
   elif -128<=n<=-1: imm = '%02x'%(256+n)
   elif n>0:               imm = '%02x %02x %02x %02x' % ((n&255),((n>>8)&255),((n>>16)&255),(n>>24))
@@ -165,17 +187,13 @@ def immediate( s ):
   return imm
 
 def immediate4( s ):
-  if s.startswith('0x'):    n = int(s[2:],16)
-  elif s.startswith('-0x'): n = -int(s[3:],16)
-  else:                     n = int(s)
+  n = read_int(s)
   if n>=0:                imm = '%02x %02x %02x %02x' % ((n&255),((n>>8)&255),((n>>16)&255),(n>>24))
   else: n += 0x100000000; imm = '%02x %02x %02x %02x' % ((n&255),((n>>8)&255),((n>>16)&255),(n>>24))
   return imm
 
 def immediate1( s ): # accept -127..255
-  if s.startswith('0x'):    n = int(s[2:],16)
-  elif s.startswith('-0x'): n = -int(s[3:],16)
-  else:                     n = int(s)
+  n = read_int(s)
   if 0<=n<=255:   return '%02x'%n
   if -128<=n<=-1: return '%02x'%(256+n)
   print( '%d: *** '%l_no+s+' - const too big' )
@@ -186,7 +204,7 @@ def mod_reg_rm( mod, reg, rm ): # hmmm not used
   return '%02x' % b
 
 def process_command( l:str ):
-  global text_addr
+  global c_code
   b = l.find(' ')
   if b<0:
     print( "\n####   ==-==------------------------ "+l, end='', file=o )
@@ -379,7 +397,7 @@ def process_command( l:str ):
   elif w in JMPS:
     if prep:
       add_jump( c_code, w=='jmp', a )
-      Y( 0x00 ); Y( 0x00 ) # fake values to advance c_code
+      c_code += 2 # advance c_code - space for short jump
     else: # second pass, all jumps are resolved
       op = JMPS[w]
       idx = find_jump( c_code )
@@ -391,6 +409,7 @@ def process_command( l:str ):
         if diff<0: diff += 256
         Y( op ); Y( diff )
       elif is_jmp:
+        ## Y5
         diff = tgt - (c_code+5)
         if diff<0: diff += 0x100000000
         Y( 0xe9 ); Y( diff&255 ); Y( (diff>>8)&255 ); Y( (diff>>16)&255 ); Y( diff>>24 )
@@ -398,13 +417,29 @@ def process_command( l:str ):
         diff = tgt - (c_code+6)
         if diff<0: diff += 0x100000000
         Y( 0x0f ); Y( 0x10+op ); Y( diff&255 ); Y( (diff>>8)&255 ); Y( (diff>>16)&255 ); Y( diff>>24 )
-
-  # TODO
-
   elif w=='call':
-    Y( 0xe8 ); Y4( '00 00 00 00' )
+    if prep:
+      find_add_code_label( a )
+      c_code += 5 # advance c_code 0xe8 xx xx xx xx
+    else:
+      idx = find_code_label( a )
+      if idx<0: print('%d: !!! '%l_no+'code label not found '+a)
+      tgt = code_labels[idx][1]
+      if tgt<0: print('%d: !!! '%l_no+'label not defined '+a)
+      ## Y5
+      diff = tgt - (c_code+5)
+      if diff<0: diff += 0x100000000
+      Y( 0xe8 ); Y( diff&255 ); Y( (diff>>8)&255 ); Y( (diff>>16)&255 ); Y( diff>>24 )
+    # TODO - calls to external fns like _CloseHandle@4
 
   # data refs!
+  # TODO
+  #mov eax/dx/bx,dword ptr arg[+4]
+  #mov eax,offset flat:argv
+  #mov dword ptr argc,0
+  #mov dword ptr argc[+4],eax/ebx
+  #add/cmp eax,dword ptr _var
+  #idiv dword ptr argc
 
   else: print( '%d: ... '%l_no+w+' '+a )
 
@@ -420,25 +455,32 @@ def process_pseudocommand( l:str ): # TODO
     c_sec = 'rdata';
   elif l=='.cfi_startproc':
     # prepare code labels and jump table; also do this at the very code start
-    start_proc_jt( c_code )
+    if prep:
+      start_proc_jt( c_code )
   elif l=='.cfi_endproc':
     # resolve jumps in the proc; also do this at the very end if no such command
-    end_proc_jt()
+    if prep:
+      end_proc_jt()
   elif l.startswith('.align '): # + immed value
-    pass
-    #nops = (4-c_code%4)%4
-    #if nops>0:
-    #  print( "\n####   - - - - - - - - - - - - - - - "+'nop', end='', file=o )
-    #  for i in range(nops):
-    #    NL(); Y( 0x90 )
-  elif l.startswith('.include '): # + filename in ""
-    pass
+    if c_sec == 'code':
+      av = read_int( l[7:] )
+      nops = (av - c_code%av) % av
+      if nops>0:
+        print( "\n####   - - - - - - - - - - - - - - - "+'nop', end='', file=o )
+        for i in range(nops):
+          NL(); Y( 0x90 )
   elif l.startswith('.long '): # + immed value or data label
-    pass
+    if l[6] in '-+0123456789':
+      n = read_int( l[6:] )
+    else:
+      pass # TODO value of label
   elif l.startswith('.ascii '): # + string in "". maybe strings and ints by ','
-    pass
+    s = l[7:]
+    if s[0]!='"' or s[-1]!='"':
+      print("@@@["+s+"]")
+    s = s[1:-1]
   elif l.startswith('.space '): # + immed value
-    pass
+    n = read_int( l[7:] )
   elif l.startswith('.globl '): # + label
     pass
   elif l.startswith('.def '): # + label; ...etc - always '.scl 2; type 32; .endef'
@@ -455,9 +497,20 @@ if "todo"=="print canonical form":
 
 def asm( t:str ):
   global l_no
+  in_include = False
+  saved_lines = []
+  saved_l_no = 0
   lines = t.replace('\r','').replace('\t',' ').split('\n')
-  for l in lines:
-    l_no += 1
+  l_no = 0
+  while l_no < len(lines) or in_include:
+    if l_no == len(lines): # i.e. in_include
+      # return to main file
+      lines = saved_lines
+      l_no = saved_l_no
+      in_include = False
+    l = lines[l_no]
+    l_no += 1 # show 1-based line
+    #print(">",l_no,">",l,file=o)
     if len(l)==0 or l[0]=='#': continue
     if l[0]!=' ': # label
       c = l.index(':')
@@ -470,9 +523,22 @@ def asm( t:str ):
     if k==len(l) or l[k]=='#': continue
     t = l[k:] # lstrip
     comment = t.find(' # ')    # comment: ' # '
-    if comment>=0:
+    if comment>=0 and not t.startswith(".ascii"):
       t = t[:comment].rstrip()
-    if t[0]=='.':
+    if t.startswith('.include '): # + filename in ""
+      # special treatment of include
+      if in_include:
+        print("No recursive .include")
+        return
+      with open( t[10:-1], "rt" ) as f2:
+        saved_lines = lines
+        saved_l_no = l_no
+        t2 = f2.read()
+        lines = t2.replace('\r','').replace('\t',' ').split('\n')
+        l_no = 0
+        in_include = True
+        continue
+    elif t[0]=='.':
       process_pseudocommand( t )
     else:
       process_command( t )
@@ -481,7 +547,7 @@ def asm( t:str ):
 prep = True
 c_code = 0
 start_proc_jt( c_code )
-with open( "all.s", "rt" ) as f:
+with open( input_name, "rt" ) as f:
   l_no = 0
   t = f.read()
   asm(t)
@@ -493,16 +559,17 @@ if not jt_proc_done:
 prep = False
 c_code = 0
 start_proc_jt( c_code )
-with open( "all.s", "rt" ) as f:
+with open( input_name, "rt" ) as f:
   l_no = 0
   t = f.read()
   asm(t)
 
-o.close()
+b.close() # close binary file
+o.close() # close listing file
 
-# reformat closer to objdump -d
-with open( "o.pp", "wt" ) as o:
-  with open( "o.lst", "rt" ) as f:
+# reformat output closer to objdump -d format
+with open( output_prt, "wt" ) as o:
+  with open( output_lst, "rt" ) as f:
     c = ''
     for l in f:
       if l.startswith('####   '):

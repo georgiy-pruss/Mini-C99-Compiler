@@ -1,4 +1,4 @@
-# gcc -c all.s -o all.o && objdump -M intel --insn-width=11 -d all.o | untab.py >all.pp
+# gcc -c all.s -o all.o && objdump -M intel --insn-width=11 -d all.o | untab.py >all.gnu
 
   # blah blah blah
   .file "cc.c" # <---------------------------- TODO all pseudocommands
@@ -17,7 +17,6 @@ Z96: .ascii "--help\0"
   .ascii "-2147483648\0"
   .ascii "z\0"
   .bss
-_assert:
 _lseek: # label with comment
 hStdf: .space 12    # standard handles: stdin, stdout, stderr
 argc: .space 4
@@ -42,6 +41,7 @@ strdup_eax:
   ret
   rep   movsb
   repne scasb
+_assert:
   # stack
   push  -10
   push  0
@@ -325,10 +325,14 @@ strdup_eax:
 
   # calls
   call strdup_eax       # e8 xx xx xx xx - relative address
-  call _CloseHandle@4
+  call _CloseHandle@4   # not defined yet - 00 00 00 00
   call _assert
+  call _assert
+  call JUMPS
+  call JUMPS
 
 JUMPS:
+  call JUMPS
   # long jumps
   nop
   jmp MFAR # e9 0x00010210
@@ -387,6 +391,8 @@ MFAR:
   js  M0  # near
   js  M0  # far
   jmp M0
+
+  .align 4 # gnu adds it to the end of section
 
   .ident  "Georgiy Pruss C99C 0.261497"
 
