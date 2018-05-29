@@ -303,23 +303,30 @@ _assert:
 
 #------------------- TODO SYMBOLIC MEMORY
 
- #mov eax,dword ptr argc
- #mov edx,dword ptr argc
- #mov ebx,dword ptr argc
- #mov eax,OFFSET FLAT:S1
- #mov eax,offset flat:argv
- #mov ecx,offset flat:argv
-  # store
- #mov dword ptr argc,0
- #mov dword ptr argc,eax
- #mov dword ptr hStdf+4,eax
- #mov dword ptr argc,ebx
-
- #add eax,dword ptr _ZX
- #cmp eax,dword ptr _tL
-
-  # spec ops
- #idiv dword ptr argc
+  mov eax,dword ptr argc
+  mov ecx,dword ptr argc
+  mov edx,dword ptr argc
+  mov ebx,dword ptr argc
+  mov esi,dword ptr argc
+  mov edi,dword ptr argc
+  mov eax,offset flat:S1
+  mov eax,offset flat:argv
+  mov ecx,offset flat:argv
+  nop
+  mov dword ptr argc,eax
+  mov dword ptr argc,ecx
+  mov dword ptr argc,ebx
+  mov dword ptr argc+4,eax
+  mov dword ptr argc+4,ecx
+  mov dword ptr argc,0
+  mov dword ptr argc,500
+  nop
+  add eax,dword ptr argc
+  sub eax,dword ptr argc
+  cmp eax,dword ptr argv
+  cmp ecx,dword ptr argv
+  nop
+  idiv dword ptr argc
   nop
   nop
 

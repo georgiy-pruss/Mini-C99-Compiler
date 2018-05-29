@@ -9,7 +9,7 @@ if not sys.argv[1].endswith(".s"):
 input_name = sys.argv[1]
 output_bin = input_name[:-2]+".bin"
 output_lst = input_name[:-2]+".lst"
-output_prt = input_name[:-2]+".prt" # pretty-print
+output_prt = input_name[:-2]+".prt" # for pretty-print
 
 o = open( output_lst, "wt" )
 b = open( output_bin, "wb" )
@@ -19,17 +19,18 @@ l_no = 0 # number of current line
 prep = True # two passes - preparation and final
 
 CODE_ORIGIN = 0 # will be 0x10000 or so
-DATA_ORIGIN = 0
+DATA_ORIGIN = 0 # will be...?
 RDATA_ORIGIN = 0
 BSS_ORIGIN = 0
 
-s_data_len = 0  # for prep. pass
-s_data = b''    # for final pass
+s_data_len = 0  # for prep. pass (or rather after it ends)
 s_rdata_len = 0 # for prep. pass
-s_rdata = b''   # for final pass
 s_code_len = 0  # for prep. pass -- let's call it code instead of text
-s_code = b''    # for final pass
 s_bss_len = 0
+
+s_data = b''    # for final pass
+s_rdata = b''   # for final pass
+s_code = b''    # for final pass
 
 c_sec = 'code' # current section: code, data, rdata, bss
 c_code = 0  # current address in code
@@ -37,7 +38,7 @@ c_data = 0  # current address in data
 c_rdata = 0 # current address in rdata
 c_bss = 0   # current address in bss
 
-data_labels = []
+data_labels = [] # ('name','sec',addr)
 code_labels = [] # ('name',addr) addr -1 if not yet defined
 jt = [] # jump table: (addr,is_jmp:bool,is_short:bool,label_index)
 jt_proc_start = 0 # index of next (vacant place) jump in jump table at proc start
@@ -109,6 +110,12 @@ def end_proc_jt():
     if not shifted: # all is resolved
       break
   proc_jt_done = True
+
+def add_data_label( lbl:str ):
+  print('+label',lbl)
+  # will be like
+  #idx = find_add_code_label( label_name )
+  #jt.append( (addr,is_jmp,True,idx) )
 
 def process_label( lbl:str ):
   if c_sec == 'code':
@@ -245,9 +252,13 @@ def process_command( l:str ):
     Y( 0x0f ); Y( SETOPS[w] ); Y( 0xc0 )
   elif w=='idiv':
     if a in REGS: Y( 0xf7 ); Y( 0xf8+REGS[a] )
-    else:
-      print( '%d: /// '%l_no+w+' '+a )
-      Y( 0x90 )
+    elif a.startswith( 'dword ptr ' ):
+      if prep:
+        add_data_label( a[10:] )
+        c_code += 6
+      else:
+        Y( 0xf7 ); Y( 0x3d ); Y4( '00 00 00 00' )
+    else: print( '%d: ??? '%l_no+w+' '+a+' - unkn idiv' )
   elif w=='imul':
     if a.startswith( 'eax,eax,' ):
       imm = immediate( a[8:] )
@@ -260,10 +271,6 @@ def process_command( l:str ):
       if len(ofs)==2: Y( 0x0f ); Y( 0xaf ); Y( 0x40|reg ); Y1( ofs )
       else:           Y( 0x0f ); Y( 0xaf ); Y( 0x80|reg ); Y4( ofs )
     else: print( '%d: ??? '%l_no+w+' '+a )
-  elif w=='movzx' and a=='eax,al':
-    Y( 0x0f ); Y( 0xb6 ); Y( 0xc0 )
-  elif w=='movsx' and a=='eax,byte ptr [eax]':
-    Y( 0x0f ); Y( 0xbe ); Y( 0x00 )
   elif w=='test':
     if a=='eax,eax': Y( 0x85 ); Y( 0xc0 )
     elif a=='al,al': Y( 0x84 ); Y( 0xc0 )
@@ -288,6 +295,14 @@ def process_command( l:str ):
       ofs = immediate(a[18:-1])
       if len(ofs)==2: Y( BINOPS[w]+3 ); Y( 0x40|reg ); Y1( ofs )
       else:           Y( BINOPS[w]+3 ); Y( 0x80|reg ); Y4( ofs )
+    elif a[:3] in REGS and a[3:14]==',dword ptr ': # binop reg,dword ptr var
+      reg = REGS[a[:3]]
+      if prep:
+        add_data_label( a[14:] )
+        c_code += 6
+      else:
+        # fake TODO
+        Y( BINOPS[w]+3 ); Y( (reg<<3)|0x05 ); Y4( '00 00 00 00' )
     elif a.startswith('dword ptr [ebp'): # cmp dword ptr [ebp+ofs],imm
       reg = REGS['ebp']
       sep = a.find('],')
@@ -312,6 +327,13 @@ def process_command( l:str ):
       reg = REGS[a[:3]]
       imm = immediate4(a[4:])
       Y( 0xb8+reg ); Y4( imm )
+    elif a[3]==',' and a[:3] in REGS and a[4:16]=='offset flat:': # mov reg,offset flat:var
+      reg = REGS[a[:3]]
+      if prep:
+        add_data_label( a[16:] )
+        c_code += 5
+      else:
+        Y( 0xb8+reg ); Y4( '00 00 00 00' ) # fake TODO
     elif a.startswith('al,byte ptr [') and a[16]==']':
       reg = REGS[a[13:16]]
       if reg==4: Y( 0x8a ); Y( reg ); Y( 0x24 ) # esp -- different command
@@ -324,13 +346,6 @@ def process_command( l:str ):
       if reg2==4: Y( 0x8b ); Y( (reg1<<3)|reg2 ); Y( 0x24 )
       elif reg2==5: Y( 0x8b ); Y( 0x40|(reg1<<3)|reg2 ); Y( 0x00 )
       else: Y( 0x8b ); Y( (reg1<<3)|reg2 )
-    elif a[:11]=='dword ptr [' and a[14:16]=='],' and a[16:] in REGS:
-      # mov dword ptr [reg],reg
-      reg1 = REGS[a[11:14]]
-      reg2 = REGS[a[16:]]
-      if reg1==4: Y( 0x89 ); Y( (reg2<<3)|reg1 ); Y( 0x24 )
-      elif reg1==5: Y( 0x89 ); Y( 0x40|(reg2<<3)|reg1 ); Y( 0x00 )
-      else: Y( 0x89 ); Y( (reg2<<3)|reg1 )
     elif a[3:15]==',dword ptr [' and a[18] in '+-' and a[-1]==']':
       # mov reg,dword ptr [reg+ofs]
       reg1 = REGS[a[:3]]
@@ -338,6 +353,28 @@ def process_command( l:str ):
       ofs = immediate(a[18:-1])
       if len(ofs)==2: Y( 0x8b ); Y( 0x40|(reg1<<3)|reg2 ); YY( reg2==4, 0x24 ); Y1( ofs )
       else:           Y( 0x8b ); Y( 0x80|(reg1<<3)|reg2 ); YY( reg2==4, 0x24 ); Y4( ofs )
+    elif a[3:14]==',dword ptr ':
+      # mov reg,dword ptr var
+      reg = REGS[a[:3]]
+      if prep:
+        add_data_label( a[14:] )
+        if reg==0: # eax
+          c_code += 5
+        else:
+          c_code += 6
+      else:
+        if reg==0: # eax
+          Y( 0xa1 ); Y4( '00 00 00 00' ) # fake for now TODO
+        else:
+          # fake for now, TODO
+          Y( 0x8b ); Y( 0x05|(reg<<3) ); Y4( '00 00 00 00' )
+    elif a[:11]=='dword ptr [' and a[14:16]=='],' and a[16:] in REGS:
+      # mov dword ptr [reg],reg
+      reg1 = REGS[a[11:14]]
+      reg2 = REGS[a[16:]]
+      if reg1==4: Y( 0x89 ); Y( (reg2<<3)|reg1 ); Y( 0x24 )
+      elif reg1==5: Y( 0x89 ); Y( 0x40|(reg2<<3)|reg1 ); Y( 0x00 )
+      else: Y( 0x89 ); Y( (reg2<<3)|reg1 )
     elif a[:11]=='dword ptr [' and a[14] in '+-' and a[a.find('],')+2:] in REGS:
       # mov dword ptr [reg+ofs],reg
       sep = a.find('],')
@@ -370,9 +407,33 @@ def process_command( l:str ):
       imm = immediate4(a[sep+2:])
       if len(ofs)==2: Y( 0xc7 ); Y( 0x40|reg ); YY( reg==4, 0x24 ); Y1( ofs ); Y4( imm )
       else:           Y( 0xc7 ); Y( 0x80|reg ); YY( reg==4, 0x24 ); Y4( ofs ); Y4( imm )
+    elif a[:10]=='dword ptr ':
+      # mov dword ptr var,reg OR mov dword ptr var,imm
+      sep = a.find(',')
+      if a[sep+1] in '-+0123456789':
+        imm = immediate4(a[sep+1:])
+        # fake data addr
+        Y( 0xc7 ); Y( 0x05 ); Y4( '00 00 00 00' ); Y4( imm )
+      else:
+        reg = REGS[a[sep+1:]]
+        if prep:
+          add_data_label( a[10:sep] )
+          if reg==0: # eax
+            c_code += 5
+          else:
+            c_code += 6
+        else:
+          if reg==0: # eax
+            Y( 0xa3 ); Y4( '00 00 00 00' ) # TODO
+          else:
+            Y( 0x89 ); Y( (reg<<3)|0x05 ); Y4( '00 00 00 00' ) # TODO
     else:
-      print( '%d: ... '%l_no+w+' '+a+' - not implemented' )
+      print( '%d: ... '%l_no+w+' '+a+' - mov not implemented' )
       Y( 0x90 )
+  elif w=='movzx' and a=='eax,al':
+    Y( 0x0f ); Y( 0xb6 ); Y( 0xc0 )
+  elif w=='movsx' and a=='eax,byte ptr [eax]':
+    Y( 0x0f ); Y( 0xbe ); Y( 0x00 )
   elif w=='movsx' and a[:14]=='eax,byte ptr [' and a[17] in '+-' and a[-1]==']':
     # movsx eax,byte ptr [reg+ofs]
     reg = REGS[a[14:17]]
@@ -434,11 +495,6 @@ def process_command( l:str ):
 
   # data refs!
   # TODO
-  #mov eax/dx/bx,dword ptr arg[+4]
-  #mov eax,offset flat:argv
-  #mov dword ptr argc,0
-  #mov dword ptr argc[+4],eax/ebx
-  #add/cmp eax,dword ptr _var
   #idiv dword ptr argc
 
   else: print( '%d: ... '%l_no+w+' '+a )
