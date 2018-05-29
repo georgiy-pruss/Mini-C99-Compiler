@@ -23,11 +23,56 @@ c_data = 0  # current address in data
 c_rdata = 0 # current address in rdata
 c_bss = 0   # current address in bss
 
-labels = [] # ('name',addr)
-jumps = [] # ('jcc',addr,'target')
+data_labels = []
+code_labels = [] # ('name',addr) -- only local for the current function!
+jumps = [] # (addr,is_cond,kind,'target',offset)
+           # is_cond -- jcc or jmp
+           # kind -- -2 -1 0 1 2 -- long back, short back, unknown, short fwd, long fwd
+           # offset -- target - addr (not next command address!)
+proc_start = 0 # index of next (vacant place) jump in jump table
+proc_jt_done = False
 
-def find_label( s:str ):
-  for n,a in labels:
+def add_jump( addr, cond, target ):
+  jumps.append( (addr, cond, 0, target, 0) )
+
+def start_proc_jt():
+  # prepare jumps/labels for new proc
+  code_labels = []
+  proc_start = len(jumps)
+  proc_jt_done = False
+
+def end_proc_jt():
+  # resolve all jumps in the last proc
+  global c_code # can change code len!
+  for j in range( proc_start, len( jumps ) ):
+    #print( j, jumps[j] )
+    a,c,k,t,o = jumps[j]
+    # assert k==0
+    target_addr = find_code_label( t )
+    if target_addr<0:
+      print( '[%x] ... '%a + t + ' - jump label not found' )
+      target_addr = 0
+    diff = target_addr - (a + 2) # if k in (-1,0,1)
+    # print( a, 'c_code %x  target %x  diff %x' % (c_code,target,diff) )
+    if -128<=diff<=127:
+      o = diff + 2
+      if diff<=0: k=-1
+      else: k=+1
+      jumps[j] = (a,c,k,t,o)
+    else:
+      o = diff + 2
+      if diff<=0: k=-2
+      else: k=+2
+      jumps[j] = (a,c,k,t,o)
+  proc_jt_done = True
+
+def find_jt( a:int ):
+  for i in range(len(jumps)):
+    if jumps[i][0]==a: return i
+  return -1
+
+def find_code_label( s:str ):
+  for n,a in code_labels:
     if n==s: return a
   return -1
 
@@ -76,10 +121,10 @@ def Y4( b:str ): # yielding 4-byte immediate; will be for ints
 def process_label( l:str ):
   if prep:
     if c_sec == 'code':
-      labels.append( (l,c_code) )
+      code_labels.append( (l,c_code) )
   else:
     if c_sec == 'code':
-      addr = find_label( l )
+      addr = find_code_label( l )
       if addr != c_code:
         print( '$$$',addr,c_code )
       print( '\n%08x <%s>:' % (addr,l), end='', file=o )
@@ -323,24 +368,23 @@ def process_command( l:str ):
   # TODO
 
   elif w in JMPS or w=='jmp':
-    if w=='jmp': op = 0xeb
-    else: op = JMPS[w]
     if prep:
-      Y( op ); Y( 0x00 )
-      jumps.append( (w,c_code,a) )
+      add_jump( c_code, w!='jmp', a )
+      Y( 0x00 ); Y( 0x00 ) # fake values
     else:
-      target = find_label( a )
-      if target<0:
-        print( '%d: ... '%l_no+w+' '+a+' - label not found' )
-        target = 0
-      diff = target - (c_code + 2)
-      print( w, a, 'c_code %x  target %x  diff %x' % (c_code,target,diff) )
-      if -128<=diff<=127:
+      if w=='jmp': op = 0xeb
+      else: op = JMPS[w]
+      i = find_jt( c_code )
+      j = jumps[i] # jump properties: a,c,k,t,o
+      if j[2] in (-1,1):
+        diff = j[4]-2
         if diff<0: diff += 256
         Y( op ); Y( diff )
-      else:
-        print( '%d: !!! '%l_no+w+' '+a+' - too long jump '+str(diff) )
-        Y( op ); Y( 0 ) # some fake value
+      else: # 2,-2
+        # TODO long jump
+        diff = j[4]-2
+        if diff<0: diff += 256
+        Y( op ); Y( diff % 256 )
 
   elif w=='call':
     Y( 0xe8 ); Y4( '00 00 00 00' )
@@ -361,6 +405,12 @@ def process_pseudocommand( l:str ):
     c_sec = 'rdata';
   elif l.startswith('.file ') or l.startswith('.intel_syntax ') or l.startswith('.ident '):
     pass
+  elif l=='.cfi_startproc':
+    # prepare code labels and jump table; also do this at the very code start
+    start_proc_jt()
+  elif l=='.cfi_endproc':
+    # resolve jumps in the proc; also do this at the very end if no such command
+    end_proc_jt()
   else:
     print( '%d: ps: '%l_no+l )
 
@@ -401,11 +451,13 @@ with open( "all.s", "rt" ) as f:
   asm(t)
 s_code_len = c_code
 
+if not proc_jt_done: end_proc_jt()
+
 print('--')
 mn = 0
-for n,_ in labels:
+for n,_ in code_labels:
   if len(n)>mn: mn=len(n)
-for n,a in labels:
+for n,a in code_labels:
   print( ('%-'+('%d'%(mn+1))+'s 0x%03x') % (n+':',a) )
 print('--')
 
@@ -431,9 +483,10 @@ with open( "o.pp", "wt" ) as o:
           print( "%-44s%s" % (l.rstrip(),c), file=o )
 print('--')
 mn = 0
-for n,_ in labels:
+for n,_ in code_labels:
   if len(n)>mn: mn=len(n)
-for n,a in labels:
+for n,a in code_labels:
   print( ('%-'+('%d'%(mn+1))+'s 0x%03x') % (n+':',a) )
 print('--')
-print(jumps)
+for j in jumps:
+  print("%3x: %s %d %s %x"%j)

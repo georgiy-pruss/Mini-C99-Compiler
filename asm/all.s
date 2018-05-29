@@ -357,12 +357,13 @@ JUMPS:
   jg  M0 # 7f
 
 M0:
-  nop
   jmp M0 # near, back
+  nop
   je  M0
   jne M0
   jl  M0
   jg  M0
+  nop
   mov eax,1 # 5 bytes each
   mov eax,2
   mov eax,3
@@ -377,11 +378,20 @@ M0:
   mov eax,12
   mov eax,13
   mov eax,14
+  je M0
+  je MFAR
+MFAR:
+  jmp M0
+  mov eax,15
+  mov eax,16
+  mov eax,17
+  mov eax,18
+  mov eax,19
+  mov eax,20
+  mov eax,22
+  nop
   jmp M0
   js  M0
-
-MFAR:
-  ret
 
   .ident  "Georgiy Pruss C99C 0.261497"
 
