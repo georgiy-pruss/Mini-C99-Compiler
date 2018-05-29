@@ -1,0 +1,90 @@
+vars.exe:     file format pei-i386
+
+Disassembly of section .text:
+
+00401000 <_main>:
+  401000:       55                                      push   ebp
+  401001:       89 e5                                   mov    ebp,esp
+  401003:       83 e4 f0                                and    esp,0xfffffff0
+
+  401006:       a1 00 20 40 00                          mov    eax,ds:0x402000
+  40100b:       a3 48 50 40 00                          mov    ds:0x405048,eax
+  401010:       c7 05 00 20 40 00 0a 00 00 00           mov    DWORD PTR ds:0x402000,0xa
+  40101a:       0f b6 05 04 20 40 00                    movzx  eax,BYTE PTR ds:0x402004
+  401021:       a2 00 50 40 00                          mov    ds:0x405000,al
+  401026:       c6 05 04 20 40 00 6f                    mov    BYTE PTR ds:0x402004,0x6f
+  40102d:       a1 20 20 40 00                          mov    eax,ds:0x402020
+  401032:       a3 20 50 40 00                          mov    ds:0x405020,eax
+  401037:       0f b6 05 48 20 40 00                    movzx  eax,BYTE PTR ds:0x402048
+  40103e:       a2 04 50 40 00                          mov    ds:0x405004,al
+  401043:       a1 54 20 40 00                          mov    eax,ds:0x402054
+  401048:       a3 4c 50 40 00                          mov    ds:0x40504c,eax
+  40104d:       c7 05 54 20 40 00 04 30 40 00           mov    DWORD PTR ds:0x402054,0x403004
+
+  401057:       a1 00 20 40 00                          mov    eax,ds:0x402000
+  40105c:       c9                                      leave
+  40105d:       c3                                      ret
+  40105e:       90                                      nop
+  40105f:       90                                      nop
+
+00401060 <__CTOR_LIST__>:
+  401060:       ff ff ff ff 00 00 00 00
+
+00401068 <__DTOR_LIST__>:
+  401068:       ff ff ff ff 00 00 00 00
+
+Disassembly of section .data:
+
+00402000 <__data_start__>:
+  402000:       21 00 ...
+
+00402004 <_c>:
+  402004:       22 00 ...
+
+00402020 <_i10>:
+  402020:       64 00 00 00 65 00 00 00 66 00 00 ...
+
+00402048 <_c10>:
+  402048:       61 62 63 00 ...
+
+00402054 <_p>:
+  402054:       00 30 40 00            # addr 403000
+
+Disassembly of section .rdata:
+
+00403000 <.rdata>:
+  403000:       78 79 7a 00
+  403004:       30 31 32 33 34 35 00 ...
+
+0040300c <.rdata$zzz>:
+  40300c:       'GCC: ...'
+
+Disassembly of section .eh_fram:
+
+00404000 <.eh_frame>:
+  404000:       ...
+
+Disassembly of section .bss:
+
+00405000 <__bss_start__>:
+  405000:       00 00
+        ...
+
+00405004 <_c10u>:
+        ...
+
+00405020 <_i10u>:
+        ...
+
+00405048 <_iu>:
+  405048:       00 00
+        ...
+
+0040504c <_pu>:
+  40504c:       00 00
+        ...
+
+Disassembly of section .idata:
+
+00406000 <__IAT_end__-0x14>:
+        ...

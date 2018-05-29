@@ -1,0 +1,71 @@
+
+vars.o:     file format pe-i386
+
+
+Disassembly of section .text:
+
+00000000 <_main>:
+   0:   55                                      push   ebp
+   1:   89 e5                                   mov    ebp,esp
+   3:   83 e4 f0                                and    esp,0xfffffff0
+   6:   e8 00 00 00 00                          call   b <_main+0xb> # __main; removed
+
+   b:   a1 00 00 00 00                          mov    eax,ds:0x0
+  10:   a3 00 00 00 00                          mov    ds:0x0,eax
+  15:   c7 05 00 00 00 00 0a 00 00 00           mov    DWORD PTR ds:0x0,0xa
+  1f:   0f b6 05 04 00 00 00                    movzx  eax,BYTE PTR ds:0x4
+  26:   a2 00 00 00 00                          mov    ds:0x0,al
+  2b:   c6 05 04 00 00 00 6f                    mov    BYTE PTR ds:0x4,0x6f
+  32:   a1 20 00 00 00                          mov    eax,ds:0x20
+  37:   a3 00 00 00 00                          mov    ds:0x0,eax
+  3c:   0f b6 05 48 00 00 00                    movzx  eax,BYTE PTR ds:0x48
+  43:   a2 00 00 00 00                          mov    ds:0x0,al
+  48:   a1 54 00 00 00                          mov    eax,ds:0x54
+  4d:   a3 00 00 00 00                          mov    ds:0x0,eax
+  52:   c7 05 54 00 00 00 04 00 00 00           mov    DWORD PTR ds:0x54,0x4
+
+  5c:   a1 00 00 00 00                          mov    eax,ds:0x0
+  61:   c9                                      leave
+  62:   c3                                      ret
+  63:   90                                      nop
+
+Disassembly of section .data:
+
+00000000 <_i>:
+   0:   21 00 00 00
+00000004 <_c>:
+   4:   22 00 00 00
+
+00000020 <_i10>:
+  20:   64 00 00 00
+  24:   65 00 00 00
+  28:   66 00 00 00
+        ...
+
+00000048 <_c10>:
+  48:   61 62 63 00
+        ...
+
+00000054 <_p>:
+  54:   ...
+
+Disassembly of section .drectve:
+
+00000000 <.drectve>:
+   0:   20 2d 61 6c 69 67 6e 63 6f 6d ...
+
+Disassembly of section .rdata:
+
+00000000 <.rdata>:
+   0:   78 79 7a 00
+   4:   30 31 32 33 34 35 ...
+
+Disassembly of section .rdata$zzz:
+
+00000000 <.rdata$zzz>:
+   0:   ...
+
+Disassembly of section .eh_frame:
+
+00000000 <.eh_frame>:
+   0:   14 00 ...

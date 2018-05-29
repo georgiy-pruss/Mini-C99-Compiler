@@ -1,0 +1,357 @@
+
+vars.exe:     file format pei-i386
+
+
+Disassembly of section .text:
+
+00401000 <.text>:
+  401000:       83 ec 1c                                sub    esp,0x1c
+  ...
+  4010d8:       e8 ab 29 00 00                          call   403a88 <_signal>
+  ...
+  40115e:       e8 1d 0f 00 00                          call   402080 <_fesetenv>
+  ...
+  4011dc:       c7 04 24 00 10 40 00                    mov    DWORD PTR [esp],0x401000
+  4011e3:       e8 48 29 00 00                          call   403b30 <_SetUnhandledExceptionFilter@4>
+  ...
+  4011eb:       e8 80 06 00 00                          call   401870 <___cpu_features_init>
+  ...
+  4011fd:       e8 ce 02 00 00                          call   4014d0 <__setargv>
+  ...
+  401220:       e8 b3 28 00 00                          call   403ad8 <__setmode>
+  ...
+  40125a:       e8 21 0c 00 00                          call   401e80 <__pei386_runtime_relocator>
+  40125f:       83 e4 f0                                and    esp,0xfffffff0
+  401262:       e8 99 07 00 00                          call   401a00 <___main>
+  401267:       e8 9c 28 00 00                          call   403b08 <___p__environ>
+  ...
+  40126c:       8b 00                                   mov    eax,DWORD PTR [eax]
+  40126e:       89 44 24 08                             mov    DWORD PTR [esp+0x8],eax  # env
+  401272:       a1 00 70 40 00                          mov    eax,ds:0x407000
+  401277:       89 44 24 04                             mov    DWORD PTR [esp+0x4],eax  # argv
+  40127b:       a1 04 70 40 00                          mov    eax,ds:0x407004
+  401280:       89 04 24                                mov    DWORD PTR [esp],eax      # argc
+  401283:       e8 d8 01 00 00                          call   401460 <_main>
+  401288:       89 c3                                   mov    ebx,eax
+  40128a:       e8 69 28 00 00                          call   403af8 <__cexit>
+  40128f:       89 1c 24                                mov    DWORD PTR [esp],ebx
+  401292:       e8 f9 28 00 00                          call   403b90 <_ExitProcess@4>
+  ...
+004012a0 <__mingw32_init_mainargs>:
+  4012a0:       83 ec 3c                                sub    esp,0x3c
+  4012a3:       8d 44 24 2c                             lea    eax,[esp+0x2c]
+  4012a7:       c7 44 24 04 00 70 40 00                 mov    DWORD PTR [esp+0x4],0x407000
+  4012af:       c7 04 24 04 70 40 00                    mov    DWORD PTR [esp],0x407004
+  4012b6:       c7 44 24 2c 00 00 00 00                 mov    DWORD PTR [esp+0x2c],0x0
+  4012be:       89 44 24 10                             mov    DWORD PTR [esp+0x10],eax
+  4012c2:       a1 80 40 40 00                          mov    eax,ds:0x404080
+  4012c7:       83 e0 01                                and    eax,0x1
+  4012ca:       89 44 24 0c                             mov    DWORD PTR [esp+0xc],eax
+  4012ce:       8d 44 24 28                             lea    eax,[esp+0x28]
+  4012d2:       89 44 24 08                             mov    DWORD PTR [esp+0x8],eax
+  4012d6:       e8 35 28 00 00                          call   403b10 <___getmainargs>
+  4012db:       83 c4 3c                                add    esp,0x3c
+  4012de:       c3                                      ret
+  4012df:       90                                      nop
+
+004012e0 <_mainCRTStartup>:
+  4012e0:       83 ec 1c                                sub    esp,0x1c
+  4012e3:       c7 04 24 01 00 00 00                    mov    DWORD PTR [esp],0x1
+  4012ea:       ff 15 8c 81 40 00                       call   DWORD PTR ds:0x40818c
+  4012f0:       e8 bb fe ff ff                          call   4011b0 <.text+0x1b0>
+  4012f5:       8d 74 26 00                             lea    esi,[esi+eiz*1+0x0]
+  4012f9:       8d bc 27 00 00 00 00                    lea    edi,[edi+eiz*1+0x0]
+
+00401300 <_WinMainCRTStartup>:
+  401300:       83 ec 1c                                sub    esp,0x1c
+  401303:       c7 04 24 02 00 00 00                    mov    DWORD PTR [esp],0x2
+  40130a:       ff 15 8c 81 40 00                       call   DWORD PTR ds:0x40818c
+  401310:       e8 9b fe ff ff                          call   4011b0 <.text+0x1b0>
+  401315:       8d 74 26 00                             lea    esi,[esi+eiz*1+0x0]
+  401319:       8d bc 27 00 00 00 00                    lea    edi,[edi+eiz*1+0x0]
+
+00401320 <_atexit>:
+  401320:       ff 25 b8 81 40 00                       jmp    DWORD PTR ds:0x4081b8
+  401326:       8d 76 00                                lea    esi,[esi+0x0]
+  401329:       8d bc 27 00 00 00 00                    lea    edi,[edi+eiz*1+0x0]
+
+00401330 <__onexit>:
+  401330:       ff 25 a8 81 40 00                       jmp    DWORD PTR ds:0x4081a8
+  401336:       90                                      nop
+  401337:       90                                      nop
+  401338:       90                                      nop
+  401339:       90                                      nop
+  40133a:       90                                      nop
+  40133b:       90                                      nop
+  40133c:       90                                      nop
+  40133d:       90                                      nop
+  40133e:       90                                      nop
+  40133f:       90                                      nop
+
+00401340 <___gcc_register_frame>:
+  ...
+00401430 <___gcc_deregister_frame>:
+  ...
+
+00401460 <_main>:
+  401460:       55                                      push   ebp
+  401461:       89 e5                                   mov    ebp,esp
+  401463:       83 e4 f0                                and    esp,0xfffffff0
+  401466:       e8 95 05 00 00                          call   401a00 <___main>
+
+  40146b:       a1 20 40 40 00                          mov    eax,ds:0x404020
+  401470:       a3 c8 70 40 00                          mov    ds:0x4070c8,eax
+  401475:       c7 05 20 40 40 00 0a 00 00 00           mov    DWORD PTR ds:0x404020,0xa
+  40147f:       0f b6 05 24 40 40 00                    movzx  eax,BYTE PTR ds:0x404024
+  401486:       a2 80 70 40 00                          mov    ds:0x407080,al
+  40148b:       c6 05 24 40 40 00 6f                    mov    BYTE PTR ds:0x404024,0x6f
+  401492:       a1 40 40 40 00                          mov    eax,ds:0x404040
+  401497:       a3 a0 70 40 00                          mov    ds:0x4070a0,eax
+  40149c:       0f b6 05 68 40 40 00                    movzx  eax,BYTE PTR ds:0x404068
+  4014a3:       a2 84 70 40 00                          mov    ds:0x407084,al
+  4014a8:       a1 74 40 40 00                          mov    eax,ds:0x404074
+  4014ad:       a3 cc 70 40 00                          mov    ds:0x4070cc,eax
+  4014b2:       c7 05 74 40 40 00 68 50 40 00           mov    DWORD PTR ds:0x404074,0x405068
+
+  4014bc:       a1 20 40 40 00                          mov    eax,ds:0x404020
+  4014c1:       c9                                      leave
+  4014c2:       c3                                      ret
+  4014c3:       90                                      nop
+  4014c4:       66 90                                   xchg   ax,ax
+  ...
+
+004014d0 <__setargv>:
+  4014d0:       55                                      push   ebp
+  4014d1:       89 e5                                   mov    ebp,esp
+  4014d3:       57                                      push   edi
+  4014d4:       56                                      push   esi
+  4014d5:       53                                      push   ebx
+  4014d6:       83 ec 4c                                sub    esp,0x4c
+  4014d9:       f6 05 80 40 40 00 02                    test   BYTE PTR ds:0x404080,0x2
+  4014e0:       0f 84 ea 02 00 00                       je     4017d0 <__setargv+0x300>
+  4014e6:       e8 7d 26 00 00                          call   403b68 <_GetCommandLineA@0>
+  4014eb:       89 65 c4                                mov    DWORD PTR [ebp-0x3c],esp
+  4014ee:       89 04 24                                mov    DWORD PTR [esp],eax
+  4014f1:       89 c6                                   mov    esi,eax
+  4014f3:       e8 80 25 00 00                          call   403a78 <_strlen>
+  ...
+  4017d0:       e8 cb fa ff ff                          call   4012a0 <__mingw32_init_mainargs>
+  ...
+
+00401870 <___cpu_features_init>:
+  ...
+00401980 <___do_global_dtors>:
+  ...
+004019b0 <___do_global_ctors>:
+  ...
+
+00401a00 <___main>:
+  401a00:       a1 28 70 40 00                          mov    eax,ds:0x407028
+  401a05:       85 c0                                   test   eax,eax
+  401a07:       74 07                                   je     401a10 <___main+0x10>
+  401a09:       f3 c3                                   repz ret
+  401a0b:       90                                      nop
+  401a0c:       8d 74 26 00                             lea    esi,[esi+eiz*1+0x0]
+  401a10:       c7 05 28 70 40 00 01 00 00 00           mov    DWORD PTR ds:0x407028,0x1
+  401a1a:       eb 94                                   jmp    4019b0 <___do_global_ctors>
+  401a1c:       90                                      nop
+  ...
+
+  401dce:       89 7c 24 08                             mov    DWORD PTR [esp+0x8],edi
+  401dd2:       89 74 24 04                             mov    DWORD PTR [esp+0x4],esi
+  401dd6:       89 1c 24                                mov    DWORD PTR [esp],ebx
+  401dd9:       e8 c2 1c 00 00                          call   403aa0 <_memcpy>
+  ...
+
+00402080 <_fesetenv>:
+  ...
+  40228e:       89 2c 24                                mov    DWORD PTR [esp],ebp
+  402291:       88 54 24 24                             mov    BYTE PTR [esp+0x24],dl
+  402295:       e8 d6 17 00 00                          call   403a70 <_tolower>
+  40229a:       89 c6                                   mov    esi,eax
+  ...
+  4023f9:       8d bc 27 00 00 00 00                    lea    edi,[edi+eiz*1+0x0] # eiz
+  ...
+  402a29:       89 0c 24                                mov    DWORD PTR [esp],ecx
+  402a2c:       e8 7f 11 00 00                          call   403bb0 <_strdup>
+  ...
+  402df7:       89 04 24                                mov    DWORD PTR [esp],eax
+  402dfa:       e8 c1 0c 00 00                          call   403ac0 <_free>
+  ...
+  402f15:       c7 04 24 0c 00 00 00                    mov    DWORD PTR [esp],0xc
+  402f1c:       e8 8f 0b 00 00                          call   403ab0 <_malloc>
+  ...
+
+00403a70 <_tolower>:
+  403a70:       ff 25 e8 81 40 00                       jmp    DWORD PTR ds:0x4081e8
+  403a76:       90                                      nop
+  403a77:       90                                      nop
+00403a78 <_strlen>:
+  403a78:       ff 25 e4 81 40 00                       jmp    DWORD PTR ds:0x4081e4
+  403a7e:       90                                      nop
+  403a7f:       90                                      nop
+00403a80 <_strcoll>:
+  403a80:       ff 25 e0 81 40 00                       jmp    DWORD PTR ds:0x4081e0
+  403a86:       90                                      nop
+  403a87:       90                                      nop
+00403a88 <_signal>:
+  403a88:       ff 25 dc 81 40 00                       jmp    DWORD PTR ds:0x4081dc
+  403a8e:       90                                      nop
+  403a8f:       90                                      nop
+00403a90 <_setlocale>:
+  403a90:       ff 25 d8 81 40 00                       jmp    DWORD PTR ds:0x4081d8
+  403a96:       90                                      nop
+  403a97:       90                                      nop
+00403a98 <_realloc>:
+  403a98:       ff 25 d4 81 40 00                       jmp    DWORD PTR ds:0x4081d4
+  403a9e:       90                                      nop
+  403a9f:       90                                      nop
+00403aa0 <_memcpy>:
+  403aa0:       ff 25 d0 81 40 00                       jmp    DWORD PTR ds:0x4081d0
+  403aa6:       90                                      nop
+  403aa7:       90                                      nop
+  ...
+00403ab0 <_malloc>:
+  403ab0:       ff 25 c8 81 40 00                       jmp    DWORD PTR ds:0x4081c8
+  403ab6:       90                                      nop
+  403ab7:       90                                      nop
+  ...
+00403ac0 <_free>:
+  403ac0:       ff 25 c0 81 40 00                       jmp    DWORD PTR ds:0x4081c0
+  403ac6:       90                                      nop
+  403ac7:       90                                      nop
+  ...
+
+00403b68 <_GetCommandLineA@0>:
+  403b68:       ff 25 40 81 40 00                       jmp    DWORD PTR ds:0x408140
+  403b6e:       90                                      nop
+  403b6f:       90                                      nop
+  ...
+00403b90 <_ExitProcess@4>:
+  403b90:       ff 25 2c 81 40 00                       jmp    DWORD PTR ds:0x40812c
+  403b96:       90                                      nop
+  403b97:       90                                      nop
+  ...
+00403bb0 <_strdup>:
+  403bb0:       ff 25 70 81 40 00                       jmp    DWORD PTR ds:0x408170
+  403bb6:       90                                      nop
+  403bb7:       90                                      nop
+  ...
+
+Disassembly of section .data:
+
+00404000 <__data_start__>:
+        ...
+
+00404020 <_i>:
+  404020:       21 00 ...
+00404024 <_c>:
+  404024:       22 00 ...
+00404040 <_i10>:
+  404040:       64 00 00 00 65 00 00 00 66 00 00 ...
+00404068 <_c10>:
+  404068:       61 62 63 00 ...
+00404074 <_p>:
+  404074:       64 50 40 00 ...
+  ...
+00404094 <___JCR_END__>:
+  404094:       00 00 ...
+
+Disassembly of section .rdata:
+
+00405000 <.rdata>:
+  405000:       6c 69 62 67 63 63 5f 73 5f
+  405009:       64 77 32 2d 31 2e 64 6c 6c
+  ...
+
+00405064 <.rdata>:
+  405064:       78 79 7a 00
+  405068:       30 31 32 33 34 35 ...
+
+00405074 <.rdata>:
+  405074:       4d 69 6e 67 77 20 72 75 6e 74 69 ...
+
+00405150 <.rdata$zzz>:
+  405150:       47 43 43 3a 20  'GCC: '
+  ...
+
+Disassembly of section .bss:
+
+00407000 <__argv>:
+  407000:       00 00                                   add    BYTE PTR [eax],al
+        ...
+
+00407004 <__argc>:
+  407004:       00 00                                   add    BYTE PTR [eax],al
+        ...
+
+00407080 <_cu>:
+  407080:       00 00                                   add    BYTE PTR [eax],al
+        ...
+
+00407084 <_c10u>:
+        ...
+
+004070a0 <_i10u>:
+        ...
+
+004070c8 <_iu>:
+  4070c8:       00 00                                   add    BYTE PTR [eax],al
+        ...
+
+004070cc <_pu>:
+  4070cc:       00 00                                   add    BYTE PTR [eax],al
+        ...
+
+Disassembly of section .idata:
+
+00408000 <__head_libkernel32_a>:
+  408000:       50                                      push   eax
+  408001:       80 00 00                                add    BYTE PTR [eax],0x0
+        ...
+
+0040812c <__imp__ExitProcess@4>:
+  40812c:       28 82 00 00 36 82                       sub    BYTE PTR [edx-0x7dca0000],al
+  ...
+
+00408140 <__imp__GetCommandLineA@0>:
+  408140:       72 82                                   jb     4080c4 <.idata$4+0x1c>
+
+00408170 <__imp__strdup>:
+  408170:       4c 83 00 00
+  ...
+
+00408184 <__imp____p__environ>:
+  408184:       82 83 00 00 92 83 00                    add    BYTE PTR [ebx-0x7c6e0000],0x0
+
+
+004081c0 <__imp__free>:
+  4081c0:       2e 84 00 00
+        ...
+
+004081c8 <__imp__malloc>:
+  4081c8:       40 84 00 00
+        ...
+
+004081d0 <__imp__memcpy>:
+  4081d0:       56 84 00 00
+        ...
+
+004081e4 <__imp__strlen>:
+  4081e4:       8a 84 00 00 94 84 00                    mov    al,BYTE PTR [eax+eax*1+0x849400]
+
+004081e8 <__imp__tolower>:
+  4081e8:       94 ...
+
+Disassembly of section .CRT:
+
+00409000:
+  ...
+
+Disassembly of section .tls:
+
+0040a000 <___tls_start__>:
+  ...
+
+Disassembly of section ... debug etc
+        ...
