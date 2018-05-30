@@ -518,13 +518,20 @@ def process_pseudocommand( l:str ): # TODO
     if prep:
       end_proc_jt()
   elif l.startswith('.align '): # + immed value
-    if c_sec == 'code':
-      av = read_int( l[7:] )
-      nops = (av - c_code%av) % av
-      if nops>0:
-        print( "\n####   - - - - - - - - - - - - - - - "+'nop', end='', file=o )
-        for i in range(nops):
-          NL(); Y( 0x90 )
+    av = read_int( l[7:] )
+    val = (c_sec == 'code') and 0x90 or 0x00
+    mne = (c_sec == 'code') and "nop" or ".space 1"
+    nn = (av - c_code%av) % av
+    # 90   66 90 (xchg ax,ax)
+    # 3   8d 76 00 (lea esi,[esi+0x0])
+    # 4   8d 74 26 00                         lea    esi,[esi+eiz*1+0x0]
+    # 5   nop+4
+    # 6   8d b6 00 00 00 00                   lea    esi,[esi+0x0]
+    # 7   8d b4 26 00 00 00 00                lea    esi,[esi+eiz*1+0x0]
+    if nn>0:
+      print( "\n####   - - - - - - - - - - - - - - - "+mne, end='', file=o )
+      for i in range(nn):
+        NL(); Y( val )
   elif l.startswith('.long '): # + immed value or data label
     if l[6] in '-+0123456789':
       n = read_int( l[6:] )

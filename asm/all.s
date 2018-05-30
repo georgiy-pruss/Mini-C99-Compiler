@@ -9,7 +9,7 @@ _tL:
   .long -1
   .long S9 # address of S9
   .section .rdata,"dr"
-  .align 4
+  #.align 4
 _ZX:
 S9:
   .ascii "'\12\0"
@@ -399,7 +399,16 @@ MFAR:
   js  M0  # far
   jmp M0
 
-  .align 4 # gnu adds it to the end of section
+  nop
+  nop
+  nop
+  nop
+  .align 8 # gnu adds it to the end of section
+  ret
+
+  .data
+  nop
+  .align 4
 
   .ident  "Georgiy Pruss C99C 0.261497"
 
