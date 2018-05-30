@@ -24,6 +24,7 @@ label:                        # alone or with command
   .long imm                   # maybe also .byte?
   .long var                   # can have var name
   .space imm
+  .align imm
 
   .def label; .scl 2; .type 32; .endef   # ignored
   .globl label                           # ignored
@@ -36,13 +37,18 @@ label:                        # alone or with command
   rep movsb
   repne scasb
 
+  push reg
+  push imm
+  pop reg
+
   neg/not reg
 
-  add/sub/or/and/xor/cmp reg,imm
+  add/sub/or/and/xor/cmp reg,imm1
+  add/sub/or/and/xor/cmp eax,imm4
   add/sub/or/and/xor/cmp reg,reg
   add/sub/or/and/xor/cmp reg,dword ptr var
-  add/sub/or/and/xor/cmp eax,dword ptr [reg+ofs]
-  add/sub/or/and/xor/cmp dword ptr [reg+ofs],imm
+  add/sub/or/and/xor/cmp eax,dword ptr [ebp+ofs]
+  add/sub/or/and/xor/cmp dword ptr [ebp+ofs],imm
 
   cmp al,imm1
   test al,al
@@ -50,11 +56,11 @@ label:                        # alone or with command
 
   sete/setz/setne/setnz/setl/setle/setg/setge al
 
-  imul eax,reg
+  imul eax,ebx
   imul eax,eax,imm
-  imul eax,dword ptr [reg+ofs]
-  idiv ebx                         ### reg?
-  idiv dword ptr argc
+  imul eax,dword ptr [ebp+ofs]
+  idiv reg
+  idiv dword ptr var
 
   movzx eax,al
   movsx eax,byte ptr [eax]
@@ -73,21 +79,18 @@ label:                        # alone or with command
   mov reg,dword ptr [reg+ofs]
   mov dword ptr var,reg
   mov dword ptr var,imm
-  mov dword ptr [reg],reg      ### eax?
-  mov dword ptr [reg+ofs],reg  ### eax?
+  mov dword ptr [reg],reg
+  mov dword ptr [reg+ofs],reg
   mov dword ptr [reg+ofs],imm
 
   lea eax,[reg]
   lea eax,[reg+ofs]
-  lea eax,[reg+4*reg]
+  lea eax,[eax+4*ebx]
+  lea eax,[ebx+4*eax]
 
   call proc
-  call _CloseHandle@4
+  call _WinProc@Stk
 
   jmp lbl
   je/jne/js/jns/jl/jge/jle/jg lbl
-
-  push reg
-  push imm
-  pop reg
 
