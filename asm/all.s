@@ -4,24 +4,6 @@
   .file "cc.c" # <---------------------------- TODO all pseudocommands
   .intel_syntax noprefix
   .include "null.s"
-  .data
-_tL:
-  .long -1
-  .long S9 # address of S9
-  .section .rdata,"dr"
-  #.align 4
-_ZX:
-S9:
-  .ascii "'\12\0"
-Z96: .ascii "--help\0"
-  .ascii "-2147483648\0"
-  .ascii "z\0"
-  .bss
-_lseek: # label with comment
-hStdf: .space 12    # standard handles: stdin, stdout, stderr
-argc: .space 4
-argv:
-      .space 60
   .globl _assert
   .def  _assert; .scl 2; .type 32; .endef
   #.cfi_def_cfa 4,4 <---------------------------- TODO all pseudocommands
@@ -399,16 +381,33 @@ MFAR:
   js  M0  # far
   jmp M0
 
-  nop
-  nop
-  nop
-  nop
-  .align 8 # gnu adds it to the end of section
-  ret
+  .align 4 # gnu adds it to the end of section
 
   .data
-  nop
-  .align 4
+  .long 0
+  .long 123
+  .long -123
+  .long 65537
+  .long -1
+  .align 8
+  .data
+_tL:
+  .long -1
+  .long S9 # address of S9
+  .section .rdata,"dr"
+  #.align 4
+_ZX:
+S9:
+  .ascii "'\12\0"
+Z96: .ascii "--help\0"
+  .ascii "-2147483648\0"
+  .ascii "z\0"
+  .bss
+_lseek: # label with comment
+hStdf: .space 12    # standard handles: stdin, stdout, stderr
+argc: .space 4
+argv:
+      .space 60
 
   .ident  "Georgiy Pruss C99C 0.261497"
 

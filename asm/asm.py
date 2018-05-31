@@ -408,20 +408,17 @@ def process_command( l:str ):
       if len(ofs)==2: Y( 0xc7 ); Y( 0x40|reg ); YY( reg==4, 0x24 ); Y1( ofs ); Y4( imm )
       else:           Y( 0xc7 ); Y( 0x80|reg ); YY( reg==4, 0x24 ); Y4( ofs ); Y4( imm )
     elif a[:10]=='dword ptr ':
-      # mov dword ptr var,reg OR mov dword ptr var,imm
       sep = a.find(',')
-      if a[sep+1] in '-+0123456789':
+      if a[sep+1] in '-+0123456789': # mov dword ptr var,imm
         imm = immediate4(a[sep+1:])
-        # fake data addr
+        # fake data addr TODO
         Y( 0xc7 ); Y( 0x05 ); Y4( '00 00 00 00' ); Y4( imm )
-      else:
+      else: # mov dword ptr var,reg
         reg = REGS[a[sep+1:]]
         if prep:
           add_data_label( a[10:sep] )
-          if reg==0: # eax
-            c_code += 5
-          else:
-            c_code += 6
+          if reg==0: c_code += 5 # eax
+          else:      c_code += 6
         else:
           if reg==0: # eax
             Y( 0xa3 ); Y4( '00 00 00 00' ) # TODO
@@ -495,7 +492,6 @@ def process_command( l:str ):
 
   # data refs!
   # TODO
-  #idiv dword ptr argc
 
   else: print( '%d: ... '%l_no+w+' '+a )
 
@@ -517,24 +513,37 @@ def process_pseudocommand( l:str ): # TODO
     # resolve jumps in the proc; also do this at the very end if no such command
     if prep:
       end_proc_jt()
-  elif l.startswith('.align '): # + immed value
+  elif l.startswith('.align ') or l.startswith('.space '): # + immed value
     av = read_int( l[7:] )
     val = (c_sec == 'code') and 0x90 or 0x00
-    mne = (c_sec == 'code') and "nop" or ".space 1"
-    nn = (av - c_code%av) % av
-    # 90   66 90 (xchg ax,ax)
-    # 3   8d 76 00 (lea esi,[esi+0x0])
-    # 4   8d 74 26 00                         lea    esi,[esi+eiz*1+0x0]
-    # 5   nop+4
-    # 6   8d b6 00 00 00 00                   lea    esi,[esi+0x0]
-    # 7   8d b4 26 00 00 00 00                lea    esi,[esi+eiz*1+0x0]
-    if nn>0:
-      print( "\n####   - - - - - - - - - - - - - - - "+mne, end='', file=o )
-      for i in range(nn):
-        NL(); Y( val )
+    cmd = (c_sec == 'code') and "nop" or ".space 1"
+    if l.startswith('.space '): # only in data or rdata section; bss - just count TODO
+      nn = av
+      while nn>10:
+        print( "\n####   - - - - - - - - - - - - - - - .space 10", end='', file=o )
+        NL(); Y4( '00 00 00 00' ); Y4( '00 00 00 00' ); Y( 0x00 ); Y( 0x00 ); nn -= 10
+      print( "\n####   - - - - - - - - - - - - - - - .space "+str(nn), end='', file=o )
+      NL()
+      for i in range(nn): Y( 0x00 )
+    else: # align - only a few bytes
+      nn = (av - c_code%av) % av # not c_code but for section TODO
+      if c_sec == 'code':
+        while nn>=2:
+          print( "\n####   - - - - - - - - - - - - - - - xchg ax,ax", end='', file=o )
+          NL(); Y( 0x66 ); Y( 0x90 ); nn -= 2
+        if nn>0:
+          print( "\n####   - - - - - - - - - - - - - - - nop", end='', file=o )
+          NL(); Y( 0x90 )
+      else:
+        for i in range(nn):
+          print( "\n####   - - - - - - - - - - - - - - - "+cmd, end='', file=o )
+          NL(); Y( val )
   elif l.startswith('.long '): # + immed value or data label
     if l[6] in '-+0123456789':
-      n = read_int( l[6:] )
+      print( "\n####   - - - - - - - - - - - - - - - "+l, end='', file=o )
+      imm = immediate4(l[6:]) # n = read_int( l[6:] )
+      print(l,'==>',imm)
+      NL(); Y4( imm )
     else:
       pass # TODO value of label
   elif l.startswith('.ascii '): # + string in "". maybe strings and ints by ','
@@ -542,8 +551,6 @@ def process_pseudocommand( l:str ): # TODO
     if s[0]!='"' or s[-1]!='"':
       print("@@@["+s+"]")
     s = s[1:-1]
-  elif l.startswith('.space '): # + immed value
-    n = read_int( l[7:] )
   elif l.startswith('.globl '): # + label
     pass
   elif l.startswith('.def '): # + label; ...etc - always '.scl 2; type 32; .endef'
